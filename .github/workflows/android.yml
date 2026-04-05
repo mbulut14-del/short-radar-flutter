@@ -19,7 +19,7 @@ jobs:
           flutter-version: '3.22.0'
 
       - name: Flutter app iskeletini oluştur
-        run: flutter create .
+        run: flutter create . --project-name short_radar_flutter
 
       - name: Paketleri yükle
         run: flutter pub get
