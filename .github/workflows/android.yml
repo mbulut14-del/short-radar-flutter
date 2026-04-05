@@ -18,6 +18,9 @@ jobs:
         with:
           flutter-version: '3.22.0'
 
+      - name: Flutter app iskeletini oluştur
+        run: flutter create .
+
       - name: Paketleri yükle
         run: flutter pub get
 
