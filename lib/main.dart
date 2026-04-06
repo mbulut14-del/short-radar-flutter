@@ -16,7 +16,6 @@ class MyApp extends StatelessWidget {
   }
 }
 
-/// 🔹 ANA SAYFA
 class HomePage extends StatelessWidget {
   const HomePage({super.key});
 
@@ -28,9 +27,9 @@ class HomePage extends StatelessWidget {
     {"name": "TRU_USDT", "change": "+28.90%"},
     {"name": "DOGE_USDT", "change": "+25.61%"},
     {"name": "SOL_USDT", "change": "+22.10%"},
-    {"name": "ETH_USDT", "change": "+19.40%"},
-    {"name": "BTC_USDT", "change": "+17.80%"},
-    {"name": "XRP_USDT", "change": "+15.20%"},
+    {"name": "ETH_USDT", "change": "+19.85%"},
+    {"name": "BTC_USDT", "change": "+17.40%"},
+    {"name": "XRP_USDT", "change": "+15.12%"},
   ];
 
   @override
@@ -39,69 +38,130 @@ class HomePage extends StatelessWidget {
       body: Stack(
         children: [
           Positioned.fill(
-            child: Image.asset('assets/bg.png', fit: BoxFit.cover),
+            child: Image.asset(
+              'assets/bg.png',
+              fit: BoxFit.cover,
+            ),
           ),
           SafeArea(
             child: ListView(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.all(12),
               children: [
-                /// 🔥 ÜST KART (PNG)
                 ClipRRect(
                   borderRadius: BorderRadius.circular(20),
-                  child: Image.asset('assets/hero.png'),
+                  child: Image.asset(
+                    'assets/hero.png',
+                    width: double.infinity,
+                    height: 200,
+                    fit: BoxFit.cover,
+                  ),
                 ),
-
-                const SizedBox(height: 20),
-
-                /// 🔹 COIN LİSTESİ (10 ADET)
+                const SizedBox(height: 12),
                 ...coins.asMap().entries.map((entry) {
-                  int index = entry.key + 1;
-                  var coin = entry.value;
+                  final index = entry.key + 1;
+                  final coin = entry.value;
 
-                  return GestureDetector(
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => DetailPage(
-                            coin: coin["name"]!,
-                            change: coin["change"]!,
-                          ),
-                        ),
-                      );
-                    },
-                    child: Container(
-                      margin: const EdgeInsets.only(bottom: 12),
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 16, vertical: 18),
-                      decoration: BoxDecoration(
-                        color: Colors.blueGrey.withOpacity(0.6),
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(color: Colors.blueAccent),
-                      ),
-                      child: Row(
-                        children: [
-                          CircleAvatar(
-                            radius: 20,
-                            backgroundColor: Colors.blue,
-                            child: Text("$index"),
-                          ),
-                          const SizedBox(width: 16),
-                          Expanded(
-                            child: Text(
-                              coin["name"]!,
-                              style: const TextStyle(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.bold),
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 10),
+                    child: GestureDetector(
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => DetailPage(
+                              coin: coin["name"]!,
+                              change: coin["change"]!,
                             ),
                           ),
-                          Text(
-                            coin["change"]!,
-                            style: const TextStyle(
-                                color: Colors.green,
-                                fontWeight: FontWeight.bold),
+                        );
+                      },
+                      child: Container(
+                        height: 78,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(22),
+                          gradient: const LinearGradient(
+                            begin: Alignment.centerLeft,
+                            end: Alignment.centerRight,
+                            colors: [
+                              Color(0xFF07122A),
+                              Color(0xFF091933),
+                              Color(0xFF07122A),
+                            ],
                           ),
-                        ],
+                          border: Border.all(
+                            color: Color(0xFF3EA6FF),
+                            width: 1.4,
+                          ),
+                          boxShadow: const [
+                            BoxShadow(
+                              color: Color(0x663EA6FF),
+                              blurRadius: 10,
+                              spreadRadius: 1,
+                            ),
+                            BoxShadow(
+                              color: Color(0x3300FFFF),
+                              blurRadius: 18,
+                              spreadRadius: 1,
+                            ),
+                          ],
+                        ),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 14),
+                          child: Row(
+                            children: [
+                              Container(
+                                width: 40,
+                                height: 40,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: const Color(0xFF123D9B),
+                                  border: Border.all(
+                                    color: const Color(0xFF5AA8FF),
+                                    width: 1.6,
+                                  ),
+                                  boxShadow: const [
+                                    BoxShadow(
+                                      color: Color(0x663EA6FF),
+                                      blurRadius: 8,
+                                      spreadRadius: 1,
+                                    ),
+                                  ],
+                                ),
+                                alignment: Alignment.center,
+                                child: Text(
+                                  "$index",
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 19,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 14),
+                              Expanded(
+                                child: Text(
+                                  coin["name"]!,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 17,
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Text(
+                                coin["change"]!,
+                                style: const TextStyle(
+                                  color: Color(0xFF3CFFB2),
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
                       ),
                     ),
                   );
@@ -115,12 +175,15 @@ class HomePage extends StatelessWidget {
   }
 }
 
-/// 🔥 DETAY SAYFASI (FULL)
 class DetailPage extends StatelessWidget {
   final String coin;
   final String change;
 
-  const DetailPage({super.key, required this.coin, required this.change});
+  const DetailPage({
+    super.key,
+    required this.coin,
+    required this.change,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -128,119 +191,148 @@ class DetailPage extends StatelessWidget {
       body: Stack(
         children: [
           Positioned.fill(
-            child: Image.asset('assets/bg.png', fit: BoxFit.cover),
+            child: Image.asset(
+              'assets/bg.png',
+              fit: BoxFit.cover,
+            ),
           ),
           SafeArea(
             child: SingleChildScrollView(
               padding: const EdgeInsets.all(16),
               child: Column(
                 children: [
-                  /// 🔙 GERİ
                   Row(
                     children: [
                       IconButton(
-                        icon: const Icon(Icons.arrow_back,
-                            color: Colors.white),
+                        icon: const Icon(Icons.arrow_back, color: Colors.white),
                         onPressed: () => Navigator.pop(context),
                       ),
                     ],
                   ),
-
-                  /// 🔥 HERO KART
+                  const SizedBox(height: 8),
                   ClipRRect(
                     borderRadius: BorderRadius.circular(20),
-                    child: Image.asset('assets/hero.png'),
+                    child: Image.asset(
+                      'assets/hero.png',
+                      width: double.infinity,
+                      fit: BoxFit.cover,
+                    ),
                   ),
-
                   const SizedBox(height: 20),
-
-                  /// 📊 LONG SHORT
                   Container(
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
-                      color: Colors.black.withOpacity(0.4),
+                      color: Colors.black.withOpacity(0.35),
                       borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: Colors.redAccent.withOpacity(0.4)),
                     ),
                     child: Column(
                       children: [
                         Row(
-                          mainAxisAlignment:
-                              MainAxisAlignment.spaceBetween,
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: const [
-                            Text("Long / Short",
-                                style: TextStyle(color: Colors.white)),
-                            Text("73%",
-                                style: TextStyle(
-                                    color: Colors.red,
-                                    fontWeight: FontWeight.bold)),
+                            Text(
+                              "Long / Short",
+                              style: TextStyle(color: Colors.white, fontSize: 18),
+                            ),
+                            Text(
+                              "73%",
+                              style: TextStyle(
+                                color: Colors.redAccent,
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
                           ],
                         ),
                         const SizedBox(height: 10),
-                        Stack(
-                          children: [
-                            Container(
-                              height: 10,
-                              decoration: BoxDecoration(
-                                color: Colors.green,
-                                borderRadius:
-                                    BorderRadius.circular(10),
+                        Container(
+                          height: 14,
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.08),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                flex: 27,
+                                child: Container(
+                                  decoration: BoxDecoration(
+                                    color: Colors.green.withOpacity(0.7),
+                                    borderRadius: const BorderRadius.only(
+                                      topLeft: Radius.circular(10),
+                                      bottomLeft: Radius.circular(10),
+                                    ),
+                                  ),
+                                ),
                               ),
-                            ),
-                            Container(
-                              height: 10,
-                              width: 250,
-                              decoration: BoxDecoration(
-                                color: Colors.red,
-                                borderRadius:
-                                    BorderRadius.circular(10),
+                              Expanded(
+                                flex: 73,
+                                child: Container(
+                                  decoration: BoxDecoration(
+                                    color: Colors.redAccent.withOpacity(0.85),
+                                    borderRadius: const BorderRadius.only(
+                                      topRight: Radius.circular(10),
+                                      bottomRight: Radius.circular(10),
+                                    ),
+                                  ),
+                                ),
                               ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
                       ],
                     ),
                   ),
-
                   const SizedBox(height: 20),
-
-                  /// 📉 GRAFİK
                   Container(
-                    height: 180,
+                    height: 190,
                     decoration: BoxDecoration(
-                      color: Colors.black.withOpacity(0.5),
+                      color: Colors.black.withOpacity(0.35),
                       borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: Colors.orangeAccent.withOpacity(0.4)),
                     ),
                     child: CustomPaint(
                       painter: ChartPainter(),
+                      child: const Center(
+                        child: Text(
+                          "24H",
+                          style: TextStyle(color: Colors.white54, fontSize: 16),
+                        ),
+                      ),
                     ),
                   ),
-
                   const SizedBox(height: 20),
-
-                  /// ⚠️ SİNYAL
                   Container(
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
-                      color: Colors.red.withOpacity(0.2),
+                      color: Colors.red.withOpacity(0.15),
                       borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: Colors.red),
+                      border: Border.all(color: Colors.redAccent.withOpacity(0.6)),
                     ),
-                    child: Column(
-                      children: const [
+                    child: const Column(
+                      children: [
                         Text(
                           "SHORT İÇİN GÜÇLÜ SİNYAL!",
                           style: TextStyle(
-                              color: Colors.red,
-                              fontWeight: FontWeight.bold),
+                            color: Colors.orangeAccent,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 20,
+                          ),
                         ),
-                        SizedBox(height: 8),
+                        SizedBox(height: 10),
                         Text(
-                          "RSI yüksek, satış baskısı bekleniyor.",
-                          style: TextStyle(color: Colors.white),
+                          "RSI yüksek, funding pozitif.\nSatış baskısı bekleniyor.",
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: Colors.white70,
+                            fontSize: 16,
+                          ),
                         ),
                       ],
                     ),
                   ),
+                  const SizedBox(height: 24),
                 ],
               ),
             ),
@@ -251,24 +343,45 @@ class DetailPage extends StatelessWidget {
   }
 }
 
-/// 📉 FAKE GRAFİK
 class ChartPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = Colors.red
-      ..strokeWidth = 2
-      ..style = PaintingStyle.stroke;
+    final gridPaint = Paint()
+      ..color = Colors.white.withOpacity(0.08)
+      ..strokeWidth = 1;
 
-    final path = Path();
-    path.moveTo(0, size.height * 0.3);
-
-    for (double i = 0; i < size.width; i += 20) {
-      double y = size.height * (0.3 + (i / size.width) * 0.5);
-      path.lineTo(i, y);
+    for (double i = 0; i <= size.width; i += size.width / 6) {
+      canvas.drawLine(Offset(i, 0), Offset(i, size.height), gridPaint);
+    }
+    for (double i = 0; i <= size.height; i += size.height / 4) {
+      canvas.drawLine(Offset(0, i), Offset(size.width, i), gridPaint);
     }
 
-    canvas.drawPath(path, paint);
+    final linePaint = Paint()
+      ..color = Colors.redAccent
+      ..strokeWidth = 3
+      ..style = PaintingStyle.stroke;
+
+    final glowPaint = Paint()
+      ..color = Colors.orangeAccent.withOpacity(0.35)
+      ..strokeWidth = 8
+      ..style = PaintingStyle.stroke
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8);
+
+    final path = Path();
+    path.moveTo(0, size.height * 0.20);
+    path.lineTo(size.width * 0.10, size.height * 0.24);
+    path.lineTo(size.width * 0.18, size.height * 0.30);
+    path.lineTo(size.width * 0.28, size.height * 0.34);
+    path.lineTo(size.width * 0.38, size.height * 0.46);
+    path.lineTo(size.width * 0.50, size.height * 0.52);
+    path.lineTo(size.width * 0.63, size.height * 0.60);
+    path.lineTo(size.width * 0.75, size.height * 0.67);
+    path.lineTo(size.width * 0.87, size.height * 0.76);
+    path.lineTo(size.width, size.height * 0.88);
+
+    canvas.drawPath(path, glowPaint);
+    canvas.drawPath(path, linePaint);
   }
 
   @override
