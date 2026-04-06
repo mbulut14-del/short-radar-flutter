@@ -27,6 +27,11 @@ class HomePage extends StatelessWidget {
       {"name": "PLAY_USDT", "change": "+34.27%"},
       {"name": "APR_USDT", "change": "+31.12%"},
       {"name": "TRU_USDT", "change": "+28.90%"},
+      {"name": "DOGE_USDT", "change": "+25.61%"},
+      {"name": "PEPE_USDT", "change": "+23.47%"},
+      {"name": "WIF_USDT", "change": "+21.35%"},
+      {"name": "FLOKI_USDT", "change": "+19.82%"},
+      {"name": "BONK_USDT", "change": "+18.44%"},
     ];
 
     return Scaffold(
@@ -41,11 +46,12 @@ class HomePage extends StatelessWidget {
           SafeArea(
             child: Column(
               children: [
-                const SizedBox(height: 10),
+                const SizedBox(height: 8),
+
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
                   child: SizedBox(
-                    height: 190,
+                    height: 220,
                     width: double.infinity,
                     child: Image.asset(
                       'assets/hero.png',
@@ -53,14 +59,16 @@ class HomePage extends StatelessWidget {
                     ),
                   ),
                 ),
+
                 const SizedBox(height: 6),
+
                 Expanded(
                   child: ListView.builder(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
                     itemCount: coins.length,
                     itemBuilder: (context, index) {
                       return Padding(
-                        padding: const EdgeInsets.only(bottom: 8),
+                        padding: const EdgeInsets.only(bottom: 10),
                         child: CoinCard(
                           index: index + 1,
                           name: coins[index]["name"]!,
@@ -94,7 +102,7 @@ class CoinCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: 82,
+      height: 78,
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(22),
         gradient: const LinearGradient(
@@ -128,8 +136,8 @@ class CoinCard extends StatelessWidget {
         child: Row(
           children: [
             Container(
-              width: 42,
-              height: 42,
+              width: 40,
+              height: 40,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 color: const Color(0xFF123D9B),
@@ -150,7 +158,7 @@ class CoinCard extends StatelessWidget {
                 "$index",
                 style: const TextStyle(
                   color: Colors.white,
-                  fontSize: 20,
+                  fontSize: 19,
                   fontWeight: FontWeight.bold,
                 ),
               ),
@@ -163,7 +171,7 @@ class CoinCard extends StatelessWidget {
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(
                   color: Colors.white,
-                  fontSize: 18,
+                  fontSize: 17,
                   fontWeight: FontWeight.w800,
                 ),
               ),
@@ -173,7 +181,7 @@ class CoinCard extends StatelessWidget {
               change,
               style: const TextStyle(
                 color: Color(0xFF3CFFB2),
-                fontSize: 17,
+                fontSize: 16,
                 fontWeight: FontWeight.w800,
               ),
             ),
