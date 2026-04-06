@@ -42,16 +42,21 @@ class HomePage extends StatelessWidget {
             child: Column(
               children: [
                 const SizedBox(height: 12),
+
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: Image.asset(
-                    'assets/hero.png',
+                  child: SizedBox(
                     height: 190,
                     width: double.infinity,
-                    fit: BoxFit.contain,
+                    child: Image.asset(
+                      'assets/hero.png',
+                      fit: BoxFit.contain,
+                    ),
                   ),
                 ),
-                const SizedBox(height: 12),
+
+                const SizedBox(height: 14),
+
                 Expanded(
                   child: ListView.builder(
                     padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -88,31 +93,54 @@ class _CoinCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      height: 86,
+      height: 88,
       width: double.infinity,
       child: Stack(
         children: [
+          // list.png içindeki siyah dış alanları kırp
           Positioned.fill(
-            child: ClipRect(
-              child: Align(
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(18),
+              child: FittedBox(
+                fit: BoxFit.cover,
                 alignment: Alignment.center,
-                heightFactor: 0.18,
-                child: Image.asset(
-                  'assets/list.png',
-                  width: MediaQuery.of(context).size.width - 32,
-                  fit: BoxFit.fitWidth,
-                ),
+                child: Image.asset('assets/list.png'),
               ),
             ),
           ),
+
+          // Eski gömülü coin adını kapat
+          Positioned(
+            left: 88,
+            top: 22,
+            child: Container(
+              width: 210,
+              height: 28,
+              color: const Color(0xFF081126),
+            ),
+          ),
+
+          // Eski gömülü yüzdeyi kapat
+          Positioned(
+            right: 26,
+            top: 22,
+            child: Container(
+              width: 120,
+              height: 28,
+              color: const Color(0xFF081126),
+            ),
+          ),
+
+          // Yeni coin adı
           Positioned(
             left: 92,
-            top: 22,
+            top: 20,
             right: 150,
             child: Text(
               name,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.left,
               style: const TextStyle(
                 color: Colors.white,
                 fontSize: 18,
@@ -120,11 +148,14 @@ class _CoinCard extends StatelessWidget {
               ),
             ),
           ),
+
+          // Yeni yüzde
           Positioned(
             right: 30,
-            top: 22,
+            top: 20,
             child: Text(
               change,
+              textAlign: TextAlign.right,
               style: const TextStyle(
                 color: Color(0xFF3CFFB2),
                 fontSize: 18,
