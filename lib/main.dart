@@ -41,8 +41,7 @@ class HomePage extends StatelessWidget {
           SafeArea(
             child: Column(
               children: [
-                const SizedBox(height: 12),
-
+                const SizedBox(height: 10),
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
                   child: SizedBox(
@@ -54,17 +53,16 @@ class HomePage extends StatelessWidget {
                     ),
                   ),
                 ),
-
-                const SizedBox(height: 14),
-
+                const SizedBox(height: 6),
                 Expanded(
                   child: ListView.builder(
                     padding: const EdgeInsets.symmetric(horizontal: 16),
                     itemCount: coins.length,
                     itemBuilder: (context, index) {
                       return Padding(
-                        padding: const EdgeInsets.only(bottom: 14),
-                        child: _CoinCard(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: CoinCard(
+                          index: index + 1,
                           name: coins[index]["name"]!,
                           change: coins[index]["change"]!,
                         ),
@@ -81,89 +79,106 @@ class HomePage extends StatelessWidget {
   }
 }
 
-class _CoinCard extends StatelessWidget {
+class CoinCard extends StatelessWidget {
+  final int index;
   final String name;
   final String change;
 
-  const _CoinCard({
+  const CoinCard({
+    super.key,
+    required this.index,
     required this.name,
     required this.change,
   });
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      height: 88,
-      width: double.infinity,
-      child: Stack(
-        children: [
-          // list.png içindeki siyah dış alanları kırp
-          Positioned.fill(
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(18),
-              child: FittedBox(
-                fit: BoxFit.cover,
-                alignment: Alignment.center,
-                child: Image.asset('assets/list.png'),
-              ),
-            ),
+    return Container(
+      height: 82,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(22),
+        gradient: const LinearGradient(
+          begin: Alignment.centerLeft,
+          end: Alignment.centerRight,
+          colors: [
+            Color(0xFF07122A),
+            Color(0xFF091933),
+            Color(0xFF07122A),
+          ],
+        ),
+        border: Border.all(
+          color: const Color(0xFF3EA6FF),
+          width: 1.4,
+        ),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x663EA6FF),
+            blurRadius: 10,
+            spreadRadius: 1,
           ),
-
-          // Eski gömülü coin adını kapat
-          Positioned(
-            left: 88,
-            top: 22,
-            child: Container(
-              width: 210,
-              height: 28,
-              color: const Color(0xFF081126),
-            ),
-          ),
-
-          // Eski gömülü yüzdeyi kapat
-          Positioned(
-            right: 26,
-            top: 22,
-            child: Container(
-              width: 120,
-              height: 28,
-              color: const Color(0xFF081126),
-            ),
-          ),
-
-          // Yeni coin adı
-          Positioned(
-            left: 92,
-            top: 20,
-            right: 150,
-            child: Text(
-              name,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              textAlign: TextAlign.left,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ),
-
-          // Yeni yüzde
-          Positioned(
-            right: 30,
-            top: 20,
-            child: Text(
-              change,
-              textAlign: TextAlign.right,
-              style: const TextStyle(
-                color: Color(0xFF3CFFB2),
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
+          BoxShadow(
+            color: Color(0x3300FFFF),
+            blurRadius: 18,
+            spreadRadius: 1,
           ),
         ],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 14),
+        child: Row(
+          children: [
+            Container(
+              width: 42,
+              height: 42,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: const Color(0xFF123D9B),
+                border: Border.all(
+                  color: const Color(0xFF5AA8FF),
+                  width: 1.6,
+                ),
+                boxShadow: const [
+                  BoxShadow(
+                    color: Color(0x663EA6FF),
+                    blurRadius: 8,
+                    spreadRadius: 1,
+                  ),
+                ],
+              ),
+              alignment: Alignment.center,
+              child: Text(
+                "$index",
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Text(
+                name,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Text(
+              change,
+              style: const TextStyle(
+                color: Color(0xFF3CFFB2),
+                fontSize: 17,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
