@@ -42,7 +42,6 @@ class HomePage extends StatelessWidget {
             child: Column(
               children: [
                 const SizedBox(height: 12),
-
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
                   child: SizedBox(
@@ -54,9 +53,7 @@ class HomePage extends StatelessWidget {
                     ),
                   ),
                 ),
-
                 const SizedBox(height: 14),
-
                 Expanded(
                   child: ListView.builder(
                     padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -65,7 +62,6 @@ class HomePage extends StatelessWidget {
                       return Padding(
                         padding: const EdgeInsets.only(bottom: 14),
                         child: _CoinCard(
-                          index: index + 1,
                           name: coins[index]["name"]!,
                           change: coins[index]["change"]!,
                         ),
@@ -83,12 +79,10 @@ class HomePage extends StatelessWidget {
 }
 
 class _CoinCard extends StatelessWidget {
-  final int index;
   final String name;
   final String change;
 
   const _CoinCard({
-    required this.index,
     required this.name,
     required this.change,
   });
@@ -100,12 +94,10 @@ class _CoinCard extends StatelessWidget {
       width: double.infinity,
       child: Stack(
         children: [
-          // Siyah kutuyu kırp
           Positioned.fill(
             child: ClipRect(
               child: Align(
                 alignment: Alignment.center,
-                widthFactor: 1.0,
                 heightFactor: 0.24,
                 child: Image.asset(
                   'assets/list.png',
@@ -115,52 +107,10 @@ class _CoinCard extends StatelessWidget {
               ),
             ),
           ),
-
-          // Eski gömülü adı kapat
           Positioned(
-            left: 88,
-            top: 24,
-            child: Container(
-              width: 190,
-              height: 26,
-              color: const Color(0xFF081126),
-            ),
-          ),
-
-          // Eski gömülü yüzdeliği kapat
-          Positioned(
-            right: 26,
-            top: 24,
-            child: Container(
-              width: 120,
-              height: 26,
-              color: const Color(0xFF081126),
-            ),
-          ),
-
-          // Sol sıra numarası
-          Positioned(
-            left: 22,
+            left: 112,
             top: 22,
-            child: SizedBox(
-              width: 26,
-              child: Text(
-                "$index",
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ),
-          ),
-
-          // Coin adı sola hizalı
-          Positioned(
-            left: 92,
-            top: 22,
-            right: 140,
+            right: 150,
             child: Text(
               name,
               textAlign: TextAlign.left,
@@ -169,21 +119,32 @@ class _CoinCard extends StatelessWidget {
                 color: Colors.white,
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
+                shadows: [
+                  Shadow(
+                    blurRadius: 4,
+                    color: Colors.black54,
+                    offset: Offset(0, 1),
+                  ),
+                ],
               ),
             ),
           ),
-
-          // Yüzde sağda
           Positioned(
-            right: 34,
+            right: 30,
             top: 22,
             child: Text(
               change,
-              textAlign: TextAlign.right,
               style: const TextStyle(
                 color: Color(0xFF3CFFB2),
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
+                shadows: [
+                  Shadow(
+                    blurRadius: 4,
+                    color: Colors.black54,
+                    offset: Offset(0, 1),
+                  ),
+                ],
               ),
             ),
           ),
