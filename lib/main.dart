@@ -24,70 +24,53 @@ class HomePage extends StatelessWidget {
     return Scaffold(
       body: Stack(
         children: [
+          // ARKA PLAN
           Positioned.fill(
             child: Image.asset(
               'assets/bg.png',
               fit: BoxFit.cover,
             ),
           ),
-          SafeArea(
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                final screenHeight = constraints.maxHeight;
-                final heroHeight = screenHeight * 0.24;
-                final listHeight = screenHeight * 0.10;
 
-                return SingleChildScrollView(
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
-                    child: Column(
-                      children: [
-                        Image.asset(
-                          'assets/hero.png',
-                          width: double.infinity,
-                          height: heroHeight,
-                          fit: BoxFit.contain,
-                        ),
-                        const SizedBox(height: 24),
-                        Image.asset(
-                          'assets/list.png',
-                          width: double.infinity,
-                          height: listHeight,
-                          fit: BoxFit.contain,
-                        ),
-                        const SizedBox(height: 14),
-                        Image.asset(
-                          'assets/list.png',
-                          width: double.infinity,
-                          height: listHeight,
-                          fit: BoxFit.contain,
-                        ),
-                        const SizedBox(height: 14),
-                        Image.asset(
-                          'assets/list.png',
-                          width: double.infinity,
-                          height: listHeight,
-                          fit: BoxFit.contain,
-                        ),
-                        const SizedBox(height: 14),
-                        Image.asset(
-                          'assets/list.png',
-                          width: double.infinity,
-                          height: listHeight,
-                          fit: BoxFit.contain,
-                        ),
-                        const SizedBox(height: 14),
-                        Image.asset(
-                          'assets/list.png',
-                          width: double.infinity,
-                          height: listHeight,
-                          fit: BoxFit.contain,
-                        ),
-                      ],
-                    ),
+          SafeArea(
+            child: Column(
+              children: [
+                const SizedBox(height: 10),
+
+                // HERO (ÜST KART)
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: Image.asset(
+                    'assets/hero.png',
+                    width: double.infinity,
+                    height: 180,
+                    fit: BoxFit.contain,
                   ),
-                );
-              },
+                ),
+
+                const SizedBox(height: 20),
+
+                // LİSTE
+                Expanded(
+                  child: ListView.builder(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    itemCount: 5,
+                    itemBuilder: (context, index) {
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 16),
+                        child: Center(
+                          child: Image.asset(
+                            'assets/list.png',
+                            width: double.infinity,
+                            height: 80,
+                            fit: BoxFit.contain,
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ],
             ),
           ),
         ],
