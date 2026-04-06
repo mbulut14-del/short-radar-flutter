@@ -9,9 +9,9 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const MaterialApp(
+    return MaterialApp(
       debugShowCheckedModeBanner: false,
-      home: HomePage(),
+      home: const HomePage(),
     );
   }
 }
@@ -19,174 +19,124 @@ class MyApp extends StatelessWidget {
 class HomePage extends StatelessWidget {
   const HomePage({super.key});
 
+  final List<Map<String, String>> coins = const [
+    {"name": "KOMA_USDT", "change": "+58.22%"},
+    {"name": "BULLA_USDT", "change": "+44.77%"},
+    {"name": "PLAY_USDT", "change": "+34.27%"},
+    {"name": "APR_USDT", "change": "+31.12%"},
+    {"name": "TRU_USDT", "change": "+28.90%"},
+    {"name": "DOGE_USDT", "change": "+25.61%"},
+    {"name": "SOL_USDT", "change": "+22.10%"},
+    {"name": "ETH_USDT", "change": "+19.85%"},
+    {"name": "BTC_USDT", "change": "+17.40%"},
+    {"name": "XRP_USDT", "change": "+15.12%"},
+  ];
+
   @override
   Widget build(BuildContext context) {
-    final coins = [
-      {"name": "KOMA_USDT", "change": "+58.22%"},
-      {"name": "BULLA_USDT", "change": "+44.77%"},
-      {"name": "PLAY_USDT", "change": "+34.27%"},
-      {"name": "APR_USDT", "change": "+31.12%"},
-      {"name": "TRU_USDT", "change": "+28.90%"},
-      {"name": "DOGE_USDT", "change": "+25.61%"},
-      {"name": "PEPE_USDT", "change": "+23.47%"},
-      {"name": "WIF_USDT", "change": "+21.35%"},
-      {"name": "FLOKI_USDT", "change": "+19.82%"},
-      {"name": "BONK_USDT", "change": "+18.44%"},
-    ];
-
     return Scaffold(
       body: Stack(
         children: [
+          // 🔥 ARKA PLAN
           Positioned.fill(
             child: Image.asset(
               'assets/bg.png',
               fit: BoxFit.cover,
             ),
           ),
+
+          // 🔥 TÜM SAYFA
           SafeArea(
-            child: Column(
+            child: ListView(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
               children: [
-                const SizedBox(height: 8),
-
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  child: SizedBox(
-                    height: 220,
+                // 🔴 ÜST KART (BÜYÜTÜLDÜ)
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(20),
+                  child: Image.asset(
+                    'assets/hero.png',
                     width: double.infinity,
-                    child: Image.asset(
-                      'assets/hero.png',
-                      fit: BoxFit.contain,
-                    ),
+                    height: 200, // 🔥 BURASI BÜYÜDÜ
+                    fit: BoxFit.cover,
                   ),
                 ),
 
-                const SizedBox(height: 6),
+                const SizedBox(height: 12),
 
-                Expanded(
-                  child: ListView.builder(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                    itemCount: coins.length,
-                    itemBuilder: (context, index) {
-                      return Padding(
-                        padding: const EdgeInsets.only(bottom: 10),
-                        child: CoinCard(
-                          index: index + 1,
-                          name: coins[index]["name"]!,
-                          change: coins[index]["change"]!,
+                // 🔵 LİSTE
+                ...coins.map((coin) {
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 10),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(18),
+                        gradient: const LinearGradient(
+                          colors: [
+                            Color(0xFF071A2F),
+                            Color(0xFF0A2540),
+                          ],
                         ),
-                      );
-                    },
-                  ),
-                ),
+                        border: Border.all(
+                          color: Colors.blueAccent.withOpacity(0.5),
+                          width: 1.5,
+                        ),
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 14, vertical: 14),
+                        child: Row(
+                          children: [
+                            // 🔵 NUMARA
+                            Container(
+                              width: 36,
+                              height: 36,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                border: Border.all(
+                                    color: Colors.blueAccent, width: 2),
+                              ),
+                              child: const Center(
+                                child: Text(
+                                  "1",
+                                  style: TextStyle(color: Colors.white),
+                                ),
+                              ),
+                            ),
+
+                            const SizedBox(width: 12),
+
+                            // 🟢 COIN ADI
+                            Expanded(
+                              child: Text(
+                                coin["name"]!,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+
+                            // 🟢 YÜZDE
+                            Text(
+                              coin["change"]!,
+                              style: const TextStyle(
+                                color: Colors.greenAccent,
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  );
+                }).toList(),
               ],
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-class CoinCard extends StatelessWidget {
-  final int index;
-  final String name;
-  final String change;
-
-  const CoinCard({
-    super.key,
-    required this.index,
-    required this.name,
-    required this.change,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      height: 78,
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(22),
-        gradient: const LinearGradient(
-          begin: Alignment.centerLeft,
-          end: Alignment.centerRight,
-          colors: [
-            Color(0xFF07122A),
-            Color(0xFF091933),
-            Color(0xFF07122A),
-          ],
-        ),
-        border: Border.all(
-          color: const Color(0xFF3EA6FF),
-          width: 1.4,
-        ),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x663EA6FF),
-            blurRadius: 10,
-            spreadRadius: 1,
-          ),
-          BoxShadow(
-            color: Color(0x3300FFFF),
-            blurRadius: 18,
-            spreadRadius: 1,
-          ),
-        ],
-      ),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 14),
-        child: Row(
-          children: [
-            Container(
-              width: 40,
-              height: 40,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: const Color(0xFF123D9B),
-                border: Border.all(
-                  color: const Color(0xFF5AA8FF),
-                  width: 1.6,
-                ),
-                boxShadow: const [
-                  BoxShadow(
-                    color: Color(0x663EA6FF),
-                    blurRadius: 8,
-                    spreadRadius: 1,
-                  ),
-                ],
-              ),
-              alignment: Alignment.center,
-              child: Text(
-                "$index",
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 19,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Text(
-                name,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 17,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Text(
-              change,
-              style: const TextStyle(
-                color: Color(0xFF3CFFB2),
-                fontSize: 16,
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-          ],
-        ),
       ),
     );
   }
