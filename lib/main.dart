@@ -26,6 +26,10 @@ class HomePage extends StatelessWidget {
     {"name": "APR_USDT", "change": "+31.12%"},
     {"name": "TRU_USDT", "change": "+28.90%"},
     {"name": "DOGE_USDT", "change": "+25.61%"},
+    {"name": "SOL_USDT", "change": "+22.10%"},
+    {"name": "ETH_USDT", "change": "+19.85%"},
+    {"name": "BTC_USDT", "change": "+17.40%"},
+    {"name": "XRP_USDT", "change": "+15.12%"},
   ];
 
   @override
@@ -33,6 +37,7 @@ class HomePage extends StatelessWidget {
     return Scaffold(
       body: Stack(
         children: [
+          // 🔥 BACKGROUND
           Positioned.fill(
             child: Image.asset(
               'assets/bg.png',
@@ -44,7 +49,7 @@ class HomePage extends StatelessWidget {
             child: ListView(
               padding: const EdgeInsets.all(12),
               children: [
-                // 🔴 ÜST KART
+                // 🔴 HERO CARD (BÜYÜK)
                 ClipRRect(
                   borderRadius: BorderRadius.circular(20),
                   child: Image.asset(
@@ -57,8 +62,11 @@ class HomePage extends StatelessWidget {
 
                 const SizedBox(height: 12),
 
-                // 🔵 COIN LIST
-                ...coins.map((coin) {
+                // 🔵 COIN LIST (10 ADET + SIRALI)
+                ...coins.asMap().entries.map((entry) {
+                  int index = entry.key;
+                  var coin = entry.value;
+
                   return Padding(
                     padding: const EdgeInsets.only(bottom: 10),
                     child: GestureDetector(
@@ -92,6 +100,7 @@ class HomePage extends StatelessWidget {
                               horizontal: 14, vertical: 14),
                           child: Row(
                             children: [
+                              // 🔵 SIRA NUMARASI
                               Container(
                                 width: 36,
                                 height: 36,
@@ -100,14 +109,18 @@ class HomePage extends StatelessWidget {
                                   border: Border.all(
                                       color: Colors.blueAccent, width: 2),
                                 ),
-                                child: const Center(
+                                child: Center(
                                   child: Text(
-                                    "1",
-                                    style: TextStyle(color: Colors.white),
+                                    "${index + 1}",
+                                    style:
+                                        const TextStyle(color: Colors.white),
                                   ),
                                 ),
                               ),
+
                               const SizedBox(width: 12),
+
+                              // 🟢 COIN NAME
                               Expanded(
                                 child: Text(
                                   coin["name"]!,
@@ -116,8 +129,11 @@ class HomePage extends StatelessWidget {
                                     fontSize: 16,
                                     fontWeight: FontWeight.bold,
                                   ),
+                                  overflow: TextOverflow.ellipsis,
                                 ),
                               ),
+
+                              // 🟢 CHANGE %
                               Text(
                                 coin["change"]!,
                                 style: const TextStyle(
@@ -142,7 +158,7 @@ class HomePage extends StatelessWidget {
   }
 }
 
-// 🔥 DETAY SAYFASI (ŞU AN BOŞ AMA HAZIR)
+// 🔥 DETAY SAYFASI
 class DetailPage extends StatelessWidget {
   final String coinName;
   final String change;
@@ -168,11 +184,11 @@ class DetailPage extends StatelessWidget {
           SafeArea(
             child: Column(
               children: [
-                // 🔙 GERİ BUTONU
                 Row(
                   children: [
                     IconButton(
-                      icon: const Icon(Icons.arrow_back, color: Colors.white),
+                      icon:
+                          const Icon(Icons.arrow_back, color: Colors.white),
                       onPressed: () => Navigator.pop(context),
                     ),
                   ],
@@ -180,7 +196,6 @@ class DetailPage extends StatelessWidget {
 
                 const SizedBox(height: 20),
 
-                // 🔥 COIN DETAY
                 Text(
                   coinName,
                   style: const TextStyle(
