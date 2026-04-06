@@ -21,14 +21,6 @@ class HomePage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final coins = [
-      {"name": "KOMA_USDT", "change": "+53.75%"},
-      {"name": "BULLA_USDT", "change": "+44.77%"},
-      {"name": "PLAY_USDT", "change": "+34.27%"},
-      {"name": "APR_USDT", "change": "+31.12%"},
-      {"name": "TRU_USDT", "change": "+28.90%"},
-    ];
-
     return Scaffold(
       body: Stack(
         children: [
@@ -39,71 +31,63 @@ class HomePage extends StatelessWidget {
             ),
           ),
           SafeArea(
-            child: Column(
-              children: [
-                const SizedBox(height: 20),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: Image.asset(
-                    'assets/hero.png',
-                    fit: BoxFit.contain,
-                  ),
-                ),
-                const SizedBox(height: 16),
-                Expanded(
-                  child: ListView.builder(
-                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                    itemCount: coins.length,
-                    itemBuilder: (context, index) {
-                      return Padding(
-                        padding: const EdgeInsets.only(bottom: 14),
-                        child: Stack(
-                          alignment: Alignment.center,
-                          children: [
-                            Image.asset(
-                              'assets/list.png',
-                              fit: BoxFit.contain,
-                            ),
-                            Positioned(
-                              left: 92,
-                              child: Text(
-                                coins[index]["name"]!,
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ),
-                            Positioned(
-                              right: 40,
-                              child: Text(
-                                coins[index]["change"]!,
-                                style: const TextStyle(
-                                  color: Color(0xFF3CFFB2),
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ),
-                            Positioned(
-                              left: 36,
-                              child: Text(
-                                "${index + 1}",
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 22,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ),
-                          ],
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final screenHeight = constraints.maxHeight;
+                final heroHeight = screenHeight * 0.24;
+                final listHeight = screenHeight * 0.10;
+
+                return SingleChildScrollView(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+                    child: Column(
+                      children: [
+                        Image.asset(
+                          'assets/hero.png',
+                          width: double.infinity,
+                          height: heroHeight,
+                          fit: BoxFit.contain,
                         ),
-                      );
-                    },
+                        const SizedBox(height: 24),
+                        Image.asset(
+                          'assets/list.png',
+                          width: double.infinity,
+                          height: listHeight,
+                          fit: BoxFit.contain,
+                        ),
+                        const SizedBox(height: 14),
+                        Image.asset(
+                          'assets/list.png',
+                          width: double.infinity,
+                          height: listHeight,
+                          fit: BoxFit.contain,
+                        ),
+                        const SizedBox(height: 14),
+                        Image.asset(
+                          'assets/list.png',
+                          width: double.infinity,
+                          height: listHeight,
+                          fit: BoxFit.contain,
+                        ),
+                        const SizedBox(height: 14),
+                        Image.asset(
+                          'assets/list.png',
+                          width: double.infinity,
+                          height: listHeight,
+                          fit: BoxFit.contain,
+                        ),
+                        const SizedBox(height: 14),
+                        Image.asset(
+                          'assets/list.png',
+                          width: double.infinity,
+                          height: listHeight,
+                          fit: BoxFit.contain,
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-              ],
+                );
+              },
             ),
           ),
         ],
