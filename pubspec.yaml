@@ -1,6 +1,5 @@
-name: short_radar
-description: A new Flutter project
-
+name: short_radar_flutter
+description: Short Radar Flutter
 publish_to: 'none'
 
 version: 1.0.0+1
@@ -15,10 +14,10 @@ dependencies:
 dev_dependencies:
   flutter_test:
     sdk: flutter
+  flutter_lints: ^3.0.0
 
 flutter:
   uses-material-design: true
-
   assets:
     - assets/bg.png
     - assets/hero.png
