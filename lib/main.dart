@@ -24,18 +24,29 @@ class HomePage extends StatelessWidget {
     return Scaffold(
       body: Stack(
         children: [
-          // Arka plan
           Positioned.fill(
             child: Image.asset(
               'assets/bg.png',
               fit: BoxFit.cover,
             ),
           ),
-
-          // Hero (ortalanmış ve düzgün scale)
-          Align(
-            alignment: Alignment.center,
-            child: FractionallySizedBox(
-              widthFactor: 0.9,
-              child: Image.asset(
-                'assets
+          Center(
+            child: Image.asset(
+              'assets/hero.png',
+              width: 300,
+            ),
+          ),
+          Positioned(
+            bottom: 30,
+            left: 20,
+            right: 20,
+            child: Image.asset(
+              'assets/list.png',
+              height: 70,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
