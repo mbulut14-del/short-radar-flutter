@@ -1,5 +1,121 @@
 import 'package:flutter/material.dart';
 
+void main() {
+  runApp(const MyApp());
+}
+
+class MyApp extends StatelessWidget {
+  const MyApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return const MaterialApp(
+      debugShowCheckedModeBanner: false,
+      home: HomePage(),
+    );
+  }
+}
+
+/// 🔹 ANA SAYFA
+class HomePage extends StatelessWidget {
+  const HomePage({super.key});
+
+  final List<Map<String, String>> coins = const [
+    {"name": "KOMA_USDT", "change": "+58.22%"},
+    {"name": "BULLA_USDT", "change": "+44.77%"},
+    {"name": "PLAY_USDT", "change": "+34.27%"},
+    {"name": "APR_USDT", "change": "+31.12%"},
+    {"name": "TRU_USDT", "change": "+28.90%"},
+    {"name": "DOGE_USDT", "change": "+25.61%"},
+    {"name": "SOL_USDT", "change": "+22.10%"},
+    {"name": "ETH_USDT", "change": "+19.40%"},
+    {"name": "BTC_USDT", "change": "+17.80%"},
+    {"name": "XRP_USDT", "change": "+15.20%"},
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: Stack(
+        children: [
+          Positioned.fill(
+            child: Image.asset('assets/bg.png', fit: BoxFit.cover),
+          ),
+          SafeArea(
+            child: ListView(
+              padding: const EdgeInsets.all(16),
+              children: [
+                /// 🔥 ÜST KART (PNG)
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(20),
+                  child: Image.asset('assets/hero.png'),
+                ),
+
+                const SizedBox(height: 20),
+
+                /// 🔹 COIN LİSTESİ (10 ADET)
+                ...coins.asMap().entries.map((entry) {
+                  int index = entry.key + 1;
+                  var coin = entry.value;
+
+                  return GestureDetector(
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => DetailPage(
+                            coin: coin["name"]!,
+                            change: coin["change"]!,
+                          ),
+                        ),
+                      );
+                    },
+                    child: Container(
+                      margin: const EdgeInsets.only(bottom: 12),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 18),
+                      decoration: BoxDecoration(
+                        color: Colors.blueGrey.withOpacity(0.6),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(color: Colors.blueAccent),
+                      ),
+                      child: Row(
+                        children: [
+                          CircleAvatar(
+                            radius: 20,
+                            backgroundColor: Colors.blue,
+                            child: Text("$index"),
+                          ),
+                          const SizedBox(width: 16),
+                          Expanded(
+                            child: Text(
+                              coin["name"]!,
+                              style: const TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                          Text(
+                            coin["change"]!,
+                            style: const TextStyle(
+                                color: Colors.green,
+                                fontWeight: FontWeight.bold),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                }),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// 🔥 DETAY SAYFASI (FULL)
 class DetailPage extends StatelessWidget {
   final String coin;
   final String change;
@@ -11,47 +127,36 @@ class DetailPage extends StatelessWidget {
     return Scaffold(
       body: Stack(
         children: [
-          // ARKA PLAN
           Positioned.fill(
-            child: Image.asset(
-              'assets/bg.png',
-              fit: BoxFit.cover,
-            ),
+            child: Image.asset('assets/bg.png', fit: BoxFit.cover),
           ),
-
           SafeArea(
             child: SingleChildScrollView(
               padding: const EdgeInsets.all(16),
               child: Column(
                 children: [
-
-                  /// 🔙 GERİ BUTONU
+                  /// 🔙 GERİ
                   Row(
                     children: [
                       IconButton(
-                        icon: const Icon(Icons.arrow_back, color: Colors.white),
+                        icon: const Icon(Icons.arrow_back,
+                            color: Colors.white),
                         onPressed: () => Navigator.pop(context),
                       ),
                     ],
                   ),
 
-                  const SizedBox(height: 10),
-
-                  /// 🔥 ÜST KART (PNG)
+                  /// 🔥 HERO KART
                   ClipRRect(
                     borderRadius: BorderRadius.circular(20),
-                    child: Image.asset(
-                      'assets/hero.png',
-                      width: double.infinity,
-                      fit: BoxFit.cover,
-                    ),
+                    child: Image.asset('assets/hero.png'),
                   ),
 
-                  const SizedBox(height: 25),
+                  const SizedBox(height: 20),
 
-                  /// 📊 LONG / SHORT BAR
+                  /// 📊 LONG SHORT
                   Container(
-                    padding: const EdgeInsets.all(14),
+                    padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
                       color: Colors.black.withOpacity(0.4),
                       borderRadius: BorderRadius.circular(16),
@@ -59,10 +164,11 @@ class DetailPage extends StatelessWidget {
                     child: Column(
                       children: [
                         Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          mainAxisAlignment:
+                              MainAxisAlignment.spaceBetween,
                           children: const [
                             Text("Long / Short",
-                                style: TextStyle(color: Colors.white70)),
+                                style: TextStyle(color: Colors.white)),
                             Text("73%",
                                 style: TextStyle(
                                     color: Colors.red,
@@ -75,16 +181,18 @@ class DetailPage extends StatelessWidget {
                             Container(
                               height: 10,
                               decoration: BoxDecoration(
-                                color: Colors.green.withOpacity(0.4),
-                                borderRadius: BorderRadius.circular(10),
+                                color: Colors.green,
+                                borderRadius:
+                                    BorderRadius.circular(10),
                               ),
                             ),
                             Container(
                               height: 10,
-                              width: MediaQuery.of(context).size.width * 0.6,
+                              width: 250,
                               decoration: BoxDecoration(
                                 color: Colors.red,
-                                borderRadius: BorderRadius.circular(10),
+                                borderRadius:
+                                    BorderRadius.circular(10),
                               ),
                             ),
                           ],
@@ -93,9 +201,9 @@ class DetailPage extends StatelessWidget {
                     ),
                   ),
 
-                  const SizedBox(height: 25),
+                  const SizedBox(height: 20),
 
-                  /// 📉 FAKE GRAFİK
+                  /// 📉 GRAFİK
                   Container(
                     height: 180,
                     decoration: BoxDecoration(
@@ -104,46 +212,35 @@ class DetailPage extends StatelessWidget {
                     ),
                     child: CustomPaint(
                       painter: ChartPainter(),
-                      child: const Center(
-                        child: Text(
-                          "24H",
-                          style: TextStyle(color: Colors.white54),
-                        ),
-                      ),
                     ),
                   ),
 
-                  const SizedBox(height: 25),
+                  const SizedBox(height: 20),
 
-                  /// ⚠️ SİNYAL ALANI
+                  /// ⚠️ SİNYAL
                   Container(
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
                       color: Colors.red.withOpacity(0.2),
                       borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: Colors.redAccent),
+                      border: Border.all(color: Colors.red),
                     ),
                     child: Column(
-                      children: [
-                        const Text(
+                      children: const [
+                        Text(
                           "SHORT İÇİN GÜÇLÜ SİNYAL!",
                           style: TextStyle(
-                            color: Colors.redAccent,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 18,
-                          ),
+                              color: Colors.red,
+                              fontWeight: FontWeight.bold),
                         ),
-                        const SizedBox(height: 8),
-                        const Text(
-                          "RSI yüksek, funding pozitif.\nSatış baskısı bekleniyor.",
-                          textAlign: TextAlign.center,
-                          style: TextStyle(color: Colors.white70),
+                        SizedBox(height: 8),
+                        Text(
+                          "RSI yüksek, satış baskısı bekleniyor.",
+                          style: TextStyle(color: Colors.white),
                         ),
                       ],
                     ),
                   ),
-
-                  const SizedBox(height: 30),
                 ],
               ),
             ),
@@ -154,17 +251,16 @@ class DetailPage extends StatelessWidget {
   }
 }
 
-/// 📉 FAKE GRAFİK PAINTER
+/// 📉 FAKE GRAFİK
 class ChartPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
-      ..color = Colors.redAccent
+      ..color = Colors.red
       ..strokeWidth = 2
       ..style = PaintingStyle.stroke;
 
     final path = Path();
-
     path.moveTo(0, size.height * 0.3);
 
     for (double i = 0; i < size.width; i += 20) {
