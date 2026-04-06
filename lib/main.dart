@@ -9,9 +9,9 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
+    return const MaterialApp(
       debugShowCheckedModeBanner: false,
-      home: const HomePage(),
+      home: HomePage(),
     );
   }
 }
@@ -32,26 +32,10 @@ class HomePage extends StatelessWidget {
             ),
           ),
 
-          // Ortadaki kart
-          Center(
-            child: Image.asset(
-              'assets/hero.png',
-              width: 350,
-            ),
-          ),
-
-          // Alt liste
-          Positioned(
-            bottom: 40,
-            left: 20,
-            right: 20,
-            child: Image.asset(
-              'assets/list.png',
-              height: 80,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
+          // Hero (ortalanmış ve düzgün scale)
+          Align(
+            alignment: Alignment.center,
+            child: FractionallySizedBox(
+              widthFactor: 0.9,
+              child: Image.asset(
+                'assets
