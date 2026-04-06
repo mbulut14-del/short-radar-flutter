@@ -1,5 +1,5 @@
-name: short_radar_flutter
-description: Premium UI Short Radar
+name: short_radar
+description: A new Flutter project
 
 publish_to: 'none'
 
@@ -20,4 +20,6 @@ flutter:
   uses-material-design: true
 
   assets:
-    - assets/
+    - assets/bg.png
+    - assets/hero.png
+    - assets/list.png
