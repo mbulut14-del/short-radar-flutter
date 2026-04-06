@@ -9,9 +9,9 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const MaterialApp(
+    return MaterialApp(
       debugShowCheckedModeBanner: false,
-      home: HomePage(),
+      home: const HomePage(),
     );
   }
 }
@@ -24,25 +24,34 @@ class HomePage extends StatelessWidget {
     return Scaffold(
       body: Stack(
         children: [
+          // ARKA PLAN (FULL SCREEN)
           Positioned.fill(
             child: Image.asset(
               'assets/bg.png',
               fit: BoxFit.cover,
             ),
           ),
+
+          // ORTA ANA KART
           Center(
-            child: Image.asset(
-              'assets/hero.png',
-              width: 300,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Image.asset(
+                'assets/hero.png',
+                width: double.infinity,
+                fit: BoxFit.contain,
+              ),
             ),
           ),
+
+          // ALT LİSTE
           Positioned(
-            bottom: 30,
-            left: 20,
-            right: 20,
+            bottom: 40,
+            left: 16,
+            right: 16,
             child: Image.asset(
               'assets/list.png',
-              height: 70,
+              fit: BoxFit.contain,
             ),
           ),
         ],
