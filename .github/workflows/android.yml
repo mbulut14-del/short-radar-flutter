@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - main
-  workflow_dispatch:
 
 jobs:
   build:
@@ -17,48 +16,30 @@ jobs:
       - name: Flutter kur
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: "3.22.0"
+          flutter-version: "3.19.0"
 
-      - name: Temiz proje olustur
-        run: flutter create temp_app
+      - name: Proje olustur
+        run: flutter create app
 
-      - name: Kullanici dosyalarini kopyala
+      - name: Dosyalari kopyala
         run: |
-          rm -rf temp_app/lib
-          cp -r lib temp_app/lib
+          rm -rf app/lib
+          cp -r lib app/lib
 
-          rm -rf temp_app/assets
-          if [ -d assets ]; then cp -r assets temp_app/assets; fi
-
-          cp pubspec.yaml temp_app/pubspec.yaml
-
-      - name: Internet izni ve uygulama adini ayarla
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
-          p = Path("temp_app/android/app/src/main/AndroidManifest.xml")
-          s = p.read_text(encoding="utf-8")
-          if 'android.permission.INTERNET' not in s:
-              s = s.replace(
-                  '<manifest xmlns:android="http://schemas.android.com/apk/res/android">',
-                  '<manifest xmlns:android="http://schemas.android.com/apk/res/android">\n    <uses-permission android:name="android.permission.INTERNET"/>'
-              )
-          s = s.replace('android:label="temp_app"', 'android:label="Short Radar Pro"')
-          p.write_text(s, encoding="utf-8")
-          PY
+          cp pubspec.yaml app/pubspec.yaml
 
       - name: Paketleri yukle
         run: |
-          cd temp_app
+          cd app
           flutter pub get
 
       - name: APK build
         run: |
-          cd temp_app
+          cd app
           flutter build apk --release
 
-      - name: APK upload
+      - name: APK yukle
         uses: actions/upload-artifact@v4
         with:
-          name: short-radar-pro-apk
-          path: temp_app/build/app/outputs/flutter-apk/app-release.apk
+          name: app-release
+          path: app/build/app/outputs/flutter-apk/app-release.apk
