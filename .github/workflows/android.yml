@@ -34,11 +34,14 @@ jobs:
 
       - name: Uygulama adini degistir
         run: |
-          cat > android/app/src/main/res/values/strings.xml << 'EOF'
-          <resources>
-              <string name="app_name">Short Radar Pro</string>
-          </resources>
-          EOF
+          python3 - << 'PY'
+          from pathlib import Path
+
+          manifest = Path("android/app/src/main/AndroidManifest.xml")
+          text = manifest.read_text(encoding="utf-8")
+          text = text.replace('android:label="short_radar_flutter"', 'android:label="Short Radar Pro"')
+          manifest.write_text(text, encoding="utf-8")
+          PY
 
       - name: APK build
         run: flutter build apk --release
