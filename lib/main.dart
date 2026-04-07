@@ -138,7 +138,8 @@ class CoinRadarData {
     }
 
     if (indexPrice != 0) {
-      final double divergence = ((markPrice - indexPrice) / indexPrice).abs() * 100;
+      final double divergence =
+          ((markPrice - indexPrice) / indexPrice).abs() * 100;
       score += math.min(divergence * 22, 14);
     }
 
@@ -325,15 +326,7 @@ class _HomePageState extends State<HomePage> {
   Widget _buildRadarHero() {
     final CoinRadarData? leader = radarLeader;
     if (leader == null) {
-      return ClipRRect(
-        borderRadius: BorderRadius.circular(20),
-        child: Image.asset(
-          'assets/hero.png',
-          width: double.infinity,
-          height: 220,
-          fit: BoxFit.cover,
-        ),
-      );
+      return const SizedBox(height: 220);
     }
 
     final Color scoreColor = leader.score >= 75
@@ -346,28 +339,30 @@ class _HomePageState extends State<HomePage> {
 
     return Stack(
       children: [
-        ClipRRect(
-          borderRadius: BorderRadius.circular(20),
-          child: Image.asset(
-            'assets/hero.png',
-            width: double.infinity,
-            height: 220,
-            fit: BoxFit.cover,
-          ),
-        ),
-        Positioned.fill(
-          child: Container(
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(20),
-              gradient: LinearGradient(
-                begin: Alignment.bottomCenter,
-                end: Alignment.topCenter,
-                colors: [
-                  Colors.black.withOpacity(0.72),
-                  Colors.black.withOpacity(0.10),
-                ],
-              ),
+        Container(
+          width: double.infinity,
+          height: 220,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(20),
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                const Color(0xFF09101E),
+                const Color(0xFF101B32).withOpacity(0.95),
+                const Color(0xFF140B18),
+              ],
             ),
+            border: Border.all(
+              color: Colors.white.withOpacity(0.06),
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.25),
+                blurRadius: 20,
+                spreadRadius: 2,
+              ),
+            ],
           ),
         ),
         Positioned(
@@ -915,12 +910,30 @@ class _DetailPageState extends State<DetailPage> {
                   const SizedBox(height: 8),
                   Stack(
                     children: [
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(20),
-                        child: Image.asset(
-                          'assets/hero.png',
-                          width: double.infinity,
-                          fit: BoxFit.cover,
+                      Container(
+                        width: double.infinity,
+                        height: 220,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(20),
+                          gradient: LinearGradient(
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                            colors: [
+                              const Color(0xFF09101E),
+                              const Color(0xFF101B32).withOpacity(0.95),
+                              const Color(0xFF140B18),
+                            ],
+                          ),
+                          border: Border.all(
+                            color: Colors.white.withOpacity(0.06),
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.25),
+                              blurRadius: 20,
+                              spreadRadius: 2,
+                            ),
+                          ],
                         ),
                       ),
                       Positioned(
@@ -1239,7 +1252,8 @@ class ChartPainter extends CustomPainter {
     }
 
     final Color mainColor = isBullish ? Colors.redAccent : Colors.greenAccent;
-    final Color glowColor = isBullish ? Colors.orangeAccent : Colors.greenAccent;
+    final Color glowColor =
+        isBullish ? Colors.orangeAccent : Colors.greenAccent;
 
     final linePaint = Paint()
       ..color = mainColor
