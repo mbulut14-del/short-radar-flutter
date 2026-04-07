@@ -33,6 +33,7 @@ jobs:
         run: flutter create . --project-name short_radar_flutter --platforms=android
 
       - run: ls android
+      - run: find android -maxdepth 4 -type f
 
       - name: Uygulama adini degistir
         run: |
