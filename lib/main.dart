@@ -10,10 +10,7 @@ class Coin {
   final String name;
   final double change;
 
-  Coin({
-    required this.name,
-    required this.change,
-  });
+  Coin({required this.name, required this.change});
 }
 
 class MyApp extends StatelessWidget {
@@ -21,11 +18,9 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
+    return const MaterialApp(
       debugShowCheckedModeBanner: false,
-      title: 'Short Radar Pro',
-      theme: ThemeData.dark(),
-      home: const HomePage(),
+      home: HomePage(),
     );
   }
 }
@@ -49,47 +44,23 @@ class _HomePageState extends State<HomePage> {
   }
 
   Future<void> fetchCoins() async {
-    setState(() {
-      loading = true;
-      error = '';
-    });
-
     try {
-      final uri = Uri.parse(
-        'https://api.gateio.ws/api/v4/futures/usdt/tickers',
-      );
-
       final res = await http.get(
-        uri,
-        headers: {'Accept': 'application/json'},
+        Uri.parse(
+            'https://api.gateio.ws/api/v4/futures/usdt/contracts'),
       );
 
-      if (res.statusCode != 200) {
-        throw Exception('API hata verdi: ${res.statusCode}');
-      }
+      final data = json.decode(res.body);
 
-      final decoded = json.decode(res.body);
-      if (decoded is! List) {
-        throw Exception('Beklenmeyen veri formatı');
-      }
+      List<Coin> temp = [];
 
-      final List<Coin> temp = [];
+      for (var item in data) {
+        String name = item['name'] ?? '';
+        double change = double.tryParse(
+                item['change_percentage']?.toString() ?? '0') ??
+            0;
 
-      for (final item in decoded) {
-        if (item is! Map<String, dynamic>) continue;
-
-        final contract = item['contract']?.toString() ?? '';
-        if (!contract.endsWith('_USDT')) continue;
-
-        final change =
-            double.tryParse(item['change_percentage']?.toString() ?? '0') ?? 0.0;
-
-        temp.add(
-          Coin(
-            name: contract,
-            change: change,
-          ),
-        );
+        temp.add(Coin(name: name, change: change));
       }
 
       temp.sort((a, b) => b.change.compareTo(a.change));
@@ -108,192 +79,74 @@ class _HomePageState extends State<HomePage> {
 
   @override
   Widget build(BuildContext context) {
-    final topCoin = coins.isNotEmpty ? coins.first : null;
-
     return Scaffold(
       body: Container(
+        padding: const EdgeInsets.all(16),
         decoration: const BoxDecoration(
           gradient: LinearGradient(
-            colors: [Color(0xFF050014), Color(0xFF4A248A)],
+            colors: [Color(0xFF0A001F), Color(0xFF4B1FA5)],
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
           ),
         ),
-        child: SafeArea(
-          child: loading
-              ? const Center(child: CircularProgressIndicator())
-              : error.isNotEmpty
-                  ? Center(
-                      child: Padding(
-                        padding: const EdgeInsets.all(24),
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
+        child: loading
+            ? const Center(child: CircularProgressIndicator())
+            : error.isNotEmpty
+                ? Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Text(
+                          "Veri alınamadı",
+                          style: TextStyle(
+                              color: Colors.white, fontSize: 22),
+                        ),
+                        const SizedBox(height: 10),
+                        Text(error,
+                            style:
+                                const TextStyle(color: Colors.white)),
+                        const SizedBox(height: 20),
+                        ElevatedButton(
+                          onPressed: fetchCoins,
+                          child: const Text("Tekrar dene"),
+                        )
+                      ],
+                    ),
+                  )
+                : ListView.builder(
+                    itemCount: coins.length,
+                    itemBuilder: (context, index) {
+                      final coin = coins[index];
+
+                      return Container(
+                        margin: const EdgeInsets.only(bottom: 12),
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withOpacity(0.3),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(color: Colors.blue),
+                        ),
+                        child: Row(
+                          mainAxisAlignment:
+                              MainAxisAlignment.spaceBetween,
                           children: [
-                            const Text(
-                              'Veri alınamadı',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 22,
-                                fontWeight: FontWeight.bold,
-                              ),
-                              textAlign: TextAlign.center,
-                            ),
-                            const SizedBox(height: 16),
                             Text(
-                              error,
+                              "${index + 1}. ${coin.name}",
                               style: const TextStyle(
-                                color: Colors.white70,
-                                fontSize: 15,
-                              ),
-                              textAlign: TextAlign.center,
+                                  color: Colors.white,
+                                  fontSize: 18),
                             ),
-                            const SizedBox(height: 24),
-                            ElevatedButton(
-                              onPressed: fetchCoins,
-                              child: const Text('Tekrar dene'),
+                            Text(
+                              "+${coin.change.toStringAsFixed(2)}%",
+                              style: const TextStyle(
+                                  color: Colors.green,
+                                  fontSize: 18),
                             ),
                           ],
                         ),
-                      ),
-                    )
-                  : RefreshIndicator(
-                      onRefresh: fetchCoins,
-                      child: ListView(
-                        padding: const EdgeInsets.all(16),
-                        children: [
-                          if (topCoin != null)
-                            Container(
-                              padding: const EdgeInsets.all(20),
-                              decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(24),
-                                gradient: const LinearGradient(
-                                  colors: [
-                                    Color(0xFFFF3B1F),
-                                    Color(0xFFFF8A00),
-                                  ],
-                                  begin: Alignment.topLeft,
-                                  end: Alignment.bottomRight,
-                                ),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Colors.red.withOpacity(0.35),
-                                    blurRadius: 18,
-                                    spreadRadius: 2,
-                                  ),
-                                ],
-                              ),
-                              child: Column(
-                                children: [
-                                  const Text(
-                                    'EN GÜÇLÜ SHORT ADAYI',
-                                    style: TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.w700,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 12),
-                                  Text(
-                                    topCoin.name,
-                                    textAlign: TextAlign.center,
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 28,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 8),
-                                  Text(
-                                    '${topCoin.change >= 0 ? '+' : ''}${topCoin.change.toStringAsFixed(2)}%',
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 22,
-                                      fontWeight: FontWeight.w700,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          const SizedBox(height: 20),
-                          ...coins.asMap().entries.map((entry) {
-                            final rank = entry.key + 1;
-                            final coin = entry.value;
-
-                            return Container(
-                              margin: const EdgeInsets.only(bottom: 14),
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 18,
-                                vertical: 18,
-                              ),
-                              decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(22),
-                                color: const Color(0xFF041734),
-                                border: Border.all(
-                                  color: const Color(0xFF35A8FF),
-                                  width: 1.5,
-                                ),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: const Color(0xFF35A8FF)
-                                        .withOpacity(0.25),
-                                    blurRadius: 12,
-                                    spreadRadius: 1,
-                                  ),
-                                ],
-                              ),
-                              child: Row(
-                                children: [
-                                  Container(
-                                    width: 52,
-                                    height: 52,
-                                    alignment: Alignment.center,
-                                    decoration: BoxDecoration(
-                                      shape: BoxShape.circle,
-                                      color: const Color(0xFF1E4FB5),
-                                      border: Border.all(
-                                        color: const Color(0xFF66C2FF),
-                                        width: 1.5,
-                                      ),
-                                    ),
-                                    child: Text(
-                                      '$rank',
-                                      style: const TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 24,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 16),
-                                  Expanded(
-                                    child: Text(
-                                      coin.name,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: const TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 18,
-                                        fontWeight: FontWeight.w700,
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 12),
-                                  Text(
-                                    '${coin.change >= 0 ? '+' : ''}${coin.change.toStringAsFixed(2)}%',
-                                    style: const TextStyle(
-                                      color: Color(0xFF46F0A6),
-                                      fontSize: 18,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            );
-                          }),
-                        ],
-                      ),
-                    ),
-        ),
+                      );
+                    },
+                  ),
       ),
     );
   }
