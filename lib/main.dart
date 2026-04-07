@@ -11,6 +11,13 @@ class Coin {
   final double change;
 
   Coin({required this.name, required this.change});
+
+  factory Coin.fromJson(Map<String, dynamic> json) {
+    return Coin(
+      name: json['contract'] ?? '',
+      change: double.tryParse(json['change_percentage'] ?? '0') ?? 0,
+    );
+  }
 }
 
 class MyApp extends StatelessWidget {
@@ -35,40 +42,40 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage> {
   List<Coin> coins = [];
   bool loading = true;
-  String error = '';
+  String error = "";
 
   @override
   void initState() {
     super.initState();
-    fetchCoins();
+    fetchData();
   }
 
-  Future<void> fetchCoins() async {
+  Future<void> fetchData() async {
     try {
-      final res = await http.get(
+      final response = await http.get(
         Uri.parse(
-          'https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=percent_change_24h_desc&per_page=20&page=1',
+          'https://api.allorigins.win/raw?url=https://api.gateio.ws/api/v4/futures/usdt/tickers',
         ),
       );
 
-      final data = json.decode(res.body);
+      if (response.statusCode == 200) {
+        List data = json.decode(response.body);
 
-      List<Coin> temp = [];
+        List<Coin> temp =
+            data.map((e) => Coin.fromJson(e)).toList();
 
-      for (var item in data) {
-        String name = item['symbol'].toString().toUpperCase();
-        double change =
-            (item['price_change_percentage_24h'] ?? 0).toDouble();
+        temp.sort((a, b) => b.change.compareTo(a.change));
 
-        temp.add(Coin(name: name, change: change));
+        setState(() {
+          coins = temp.take(10).toList();
+          loading = false;
+        });
+      } else {
+        setState(() {
+          error = "API hata verdi";
+          loading = false;
+        });
       }
-
-      temp.sort((a, b) => b.change.compareTo(a.change));
-
-      setState(() {
-        coins = temp.take(10).toList();
-        loading = false;
-      });
     } catch (e) {
       setState(() {
         error = e.toString();
@@ -80,74 +87,72 @@ class _HomePageState extends State<HomePage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            colors: [Color(0xFF0A001F), Color(0xFF4B1FA5)],
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-          ),
-        ),
-        child: loading
-            ? const Center(child: CircularProgressIndicator())
-            : error.isNotEmpty
-                ? Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        const Text(
-                          "Veri alınamadı",
-                          style: TextStyle(
-                              color: Colors.white, fontSize: 22),
-                        ),
-                        const SizedBox(height: 10),
-                        Text(error,
-                            style:
-                                const TextStyle(color: Colors.white)),
-                        const SizedBox(height: 20),
-                        ElevatedButton(
-                          onPressed: fetchCoins,
-                          child: const Text("Tekrar dene"),
-                        )
-                      ],
-                    ),
-                  )
-                : ListView.builder(
-                    itemCount: coins.length,
-                    itemBuilder: (context, index) {
-                      final coin = coins[index];
-
-                      return Container(
-                        margin: const EdgeInsets.only(bottom: 12),
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: Colors.black.withOpacity(0.3),
-                          borderRadius: BorderRadius.circular(20),
-                          border: Border.all(color: Colors.blue),
-                        ),
-                        child: Row(
-                          mainAxisAlignment:
-                              MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text(
-                              "${index + 1}. ${coin.name}",
-                              style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 18),
-                            ),
-                            Text(
-                              "${coin.change.toStringAsFixed(2)}%",
-                              style: const TextStyle(
-                                  color: Colors.green,
-                                  fontSize: 18),
-                            ),
-                          ],
-                        ),
-                      );
-                    },
-                  ),
+      backgroundColor: const Color(0xFF12002A),
+      appBar: AppBar(
+        backgroundColor: Colors.black,
+        title: const Text("SHORT RADAR"),
       ),
+      body: loading
+          ? const Center(child: CircularProgressIndicator())
+          : error.isNotEmpty
+              ? Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Text("Veri alınamadı",
+                          style: TextStyle(color: Colors.white)),
+                      const SizedBox(height: 10),
+                      Text(error,
+                          style: const TextStyle(color: Colors.white54)),
+                      const SizedBox(height: 20),
+                      ElevatedButton(
+                        onPressed: () {
+                          setState(() {
+                            loading = true;
+                            error = "";
+                          });
+                          fetchData();
+                        },
+                        child: const Text("Tekrar dene"),
+                      )
+                    ],
+                  ),
+                )
+              : ListView.builder(
+                  itemCount: coins.length,
+                  itemBuilder: (context, index) {
+                    final coin = coins[index];
+
+                    return Container(
+                      margin: const EdgeInsets.all(10),
+                      padding: const EdgeInsets.all(15),
+                      decoration: BoxDecoration(
+                        color: Colors.black,
+                        borderRadius: BorderRadius.circular(15),
+                      ),
+                      child: Row(
+                        mainAxisAlignment:
+                            MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            "${index + 1}. ${coin.name}",
+                            style: const TextStyle(
+                                color: Colors.white, fontSize: 16),
+                          ),
+                          Text(
+                            "%${coin.change.toStringAsFixed(2)}",
+                            style: TextStyle(
+                              color: coin.change > 0
+                                  ? Colors.green
+                                  : Colors.red,
+                              fontSize: 16,
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
     );
   }
 }
