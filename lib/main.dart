@@ -47,7 +47,8 @@ class _HomePageState extends State<HomePage> {
     try {
       final res = await http.get(
         Uri.parse(
-            'https://api.gateio.ws/api/v4/futures/usdt/contracts'),
+          'https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=percent_change_24h_desc&per_page=20&page=1',
+        ),
       );
 
       final data = json.decode(res.body);
@@ -55,10 +56,9 @@ class _HomePageState extends State<HomePage> {
       List<Coin> temp = [];
 
       for (var item in data) {
-        String name = item['name'] ?? '';
-        double change = double.tryParse(
-                item['change_percentage']?.toString() ?? '0') ??
-            0;
+        String name = item['symbol'].toString().toUpperCase();
+        double change =
+            (item['price_change_percentage_24h'] ?? 0).toDouble();
 
         temp.add(Coin(name: name, change: change));
       }
@@ -137,7 +137,7 @@ class _HomePageState extends State<HomePage> {
                                   fontSize: 18),
                             ),
                             Text(
-                              "+${coin.change.toStringAsFixed(2)}%",
+                              "${coin.change.toStringAsFixed(2)}%",
                               style: const TextStyle(
                                   color: Colors.green,
                                   fontSize: 18),
