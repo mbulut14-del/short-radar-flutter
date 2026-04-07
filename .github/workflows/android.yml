@@ -2,8 +2,7 @@ name: Build APK
 
 on:
   push:
-    branches:
-      - main
+    branches: [ "main" ]
   workflow_dispatch:
 
 jobs:
@@ -19,14 +18,27 @@ jobs:
         with:
           flutter-version: '3.22.0'
 
-      - name: Paketleri yukle
-        run: flutter pub get
+      - name: Temiz proje olustur
+        run: flutter create temp_app
 
-      - name: APK build
-        run: flutter build apk --release
+      - name: Dosyalari kopyala
+        run: |
+          rm -rf temp_app/lib
+          cp -r lib temp_app/lib
+
+          rm -rf temp_app/assets
+          if [ -d assets ]; then cp -r assets temp_app/assets; fi
+
+          cp pubspec.yaml temp_app/pubspec.yaml
+
+      - name: Build al
+        run: |
+          cd temp_app
+          flutter pub get
+          flutter build apk --release
 
       - name: APK upload
         uses: actions/upload-artifact@v4
         with:
           name: app-release
-          path: build/app/outputs/flutter-apk/app-release.apk
+          path: temp_app/build/app/outputs/flutter-apk/app-release.apk
