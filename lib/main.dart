@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
@@ -41,11 +42,24 @@ class _HomePageState extends State<HomePage> {
 
   bool isLoading = true;
   String errorText = '';
+  Timer? _refreshTimer;
 
   @override
   void initState() {
     super.initState();
     fetchCoins();
+
+    _refreshTimer = Timer.periodic(const Duration(seconds: 5), (timer) {
+      if (mounted) {
+        fetchCoins();
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _refreshTimer?.cancel();
+    super.dispose();
   }
 
   Future<void> fetchCoins() async {
@@ -84,12 +98,14 @@ class _HomePageState extends State<HomePage> {
       }).toList();
 
       tempCoins.sort((a, b) {
-        final double av =
-            double.tryParse(a["change"]!.replaceAll('%', '').replaceAll('+', '')) ??
-                0.0;
-        final double bv =
-            double.tryParse(b["change"]!.replaceAll('%', '').replaceAll('+', '')) ??
-                0.0;
+        final double av = double.tryParse(
+              a["change"]!.replaceAll('%', '').replaceAll('+', ''),
+            ) ??
+            0.0;
+        final double bv = double.tryParse(
+              b["change"]!.replaceAll('%', '').replaceAll('+', ''),
+            ) ??
+            0.0;
         return bv.compareTo(av);
       });
 
@@ -358,7 +374,9 @@ class DetailPage extends StatelessWidget {
                     decoration: BoxDecoration(
                       color: Colors.black.withOpacity(0.35),
                       borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: Colors.redAccent.withOpacity(0.4)),
+                      border: Border.all(
+                        color: Colors.redAccent.withOpacity(0.4),
+                      ),
                     ),
                     child: Column(
                       children: [
@@ -424,7 +442,9 @@ class DetailPage extends StatelessWidget {
                     decoration: BoxDecoration(
                       color: Colors.black.withOpacity(0.35),
                       borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: Colors.orangeAccent.withOpacity(0.4)),
+                      border: Border.all(
+                        color: Colors.orangeAccent.withOpacity(0.4),
+                      ),
                     ),
                     child: CustomPaint(
                       painter: ChartPainter(),
@@ -442,7 +462,9 @@ class DetailPage extends StatelessWidget {
                     decoration: BoxDecoration(
                       color: Colors.red.withOpacity(0.15),
                       borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: Colors.redAccent.withOpacity(0.6)),
+                      border: Border.all(
+                        color: Colors.redAccent.withOpacity(0.6),
+                      ),
                     ),
                     child: Column(
                       children: [
