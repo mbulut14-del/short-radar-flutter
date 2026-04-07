@@ -66,53 +66,53 @@ class GateFuturesService {
 
       final contractInfo = contractsMap[contract] ?? const <String, dynamic>{};
 
-      final changePct = _firstDouble(raw, const [
+      final double changePct = _firstDouble(raw, const [
         'change_percentage',
         'change_percentage_24h',
         'price_24h_pcnt',
       ]);
 
-      final fundingRate = _firstDouble(raw, const [
+      final double fundingRate = _firstDouble(raw, const [
         'funding_rate',
         'funding_rate_indicative',
       ]);
 
-      final markPrice = _firstDouble(raw, const [
+      final double markPrice = _firstDouble(raw, const [
         'mark_price',
         'mark_price_round',
         'last',
       ]);
 
-      final lastPrice = _firstDouble(raw, const ['last', 'last_price']);
-      final indexPrice = _firstDouble(raw, const ['index_price']);
-      final volumeUsd = _firstDouble(raw, const [
+      final double lastPrice = _firstDouble(raw, const ['last', 'last_price']);
+      final double indexPrice = _firstDouble(raw, const ['index_price']);
+      final double volumeUsd = _firstDouble(raw, const [
         'volume_24h_usd',
         'volume_24h_quote',
         'volume_24h',
       ]);
 
-      final volumeBase = _firstDouble(raw, const [
+      final double volumeBase = _firstDouble(raw, const [
         'volume_24h_base',
         'volume_24h_btc',
       ]);
 
-      final quantoMultiplier = _firstDouble(
+      final double quantoMultiplier = _firstDouble(
         contractInfo,
         const ['quanto_multiplier'],
       );
 
-      final riskVolume = volumeUsd > 0
+      final double riskVolume = volumeUsd > 0
           ? volumeUsd
-          : (volumeBase > 0 && lastPrice > 0 ? volumeBase * lastPrice : 0);
+          : (volumeBase > 0 && lastPrice > 0 ? volumeBase * lastPrice : 0.0);
 
       if (changePct <= 0) continue;
       if (riskVolume <= 0) continue;
 
-      final premiumPct = (markPrice > 0 && indexPrice > 0)
+      final double premiumPct = (markPrice > 0 && indexPrice > 0)
           ? ((markPrice - indexPrice) / indexPrice) * 100
           : 0.0;
 
-      final score = _scoreCandidate(
+      final double score = _scoreCandidate(
         changePct: changePct,
         fundingRate: fundingRate,
         volumeUsd: riskVolume,
@@ -157,10 +157,13 @@ class GateFuturesService {
     required double volumeUsd,
     required double premiumPct,
   }) {
-    final changeScore = (changePct * 1.6).clamp(0, 45);
-    final fundingScore = (fundingRate > 0 ? fundingRate * 18000 : 0).clamp(0, 30);
-    final premiumScore = (premiumPct > 0 ? premiumPct * 8 : 0).clamp(0, 15);
-    final volumeScore = (_log10Safe(volumeUsd) * 3.8).clamp(0, 10);
+    final double changeScore = (changePct * 1.6).clamp(0, 45).toDouble();
+    final double fundingScore =
+        (fundingRate > 0 ? fundingRate * 18000 : 0).clamp(0, 30).toDouble();
+    final double premiumScore =
+        (premiumPct > 0 ? premiumPct * 8 : 0).clamp(0, 15).toDouble();
+    final double volumeScore =
+        (_log10Safe(volumeUsd) * 3.8).clamp(0, 10).toDouble();
 
     return (changeScore + fundingScore + premiumScore + volumeScore)
         .clamp(0, 100)
@@ -298,7 +301,10 @@ class _HomePageState extends State<HomePage> {
                       children: [
                         const Text(
                           'Veri alınamadı',
-                          style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+                          style: TextStyle(
+                            fontSize: 22,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                         const SizedBox(height: 12),
                         Text(
@@ -327,7 +333,6 @@ class _HomePageState extends State<HomePage> {
               }
 
               final top = items.first;
-              final list = items.skip(1).toList();
 
               return RefreshIndicator(
                 onRefresh: _refresh,
@@ -600,7 +605,10 @@ class ShortListCard extends StatelessWidget {
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   color: const Color(0xFF153A94),
-                  border: Border.all(color: const Color(0xFF56B1FF), width: 1.5),
+                  border: Border.all(
+                    color: const Color(0xFF56B1FF),
+                    width: 1.5,
+                  ),
                 ),
                 alignment: Alignment.center,
                 child: Text(
@@ -671,7 +679,11 @@ class DetailPage extends StatelessWidget {
               IconButton(
                 onPressed: () => Navigator.pop(context),
                 alignment: Alignment.centerLeft,
-                icon: const Icon(Icons.arrow_back, color: Colors.white, size: 30),
+                icon: const Icon(
+                  Icons.arrow_back,
+                  color: Colors.white,
+                  size: 30,
+                ),
               ),
               const SizedBox(height: 12),
               Center(
@@ -713,7 +725,10 @@ class DetailPage extends StatelessWidget {
                     const SizedBox(height: 12),
                     Text(
                       candidate.explanation,
-                      style: const TextStyle(color: Colors.white70, fontSize: 15),
+                      style: const TextStyle(
+                        color: Colors.white70,
+                        fontSize: 15,
+                      ),
                     ),
                   ],
                 ),
@@ -741,7 +756,10 @@ class DetailPage extends StatelessWidget {
               ),
               const SizedBox(height: 16),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 22),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 22,
+                ),
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(24),
                   color: const Color(0x55A4000D),
@@ -830,7 +848,10 @@ class DetailPage extends StatelessWidget {
           Expanded(
             child: Text(
               label,
-              style: const TextStyle(color: Colors.white70, fontSize: 16),
+              style: const TextStyle(
+                color: Colors.white70,
+                fontSize: 16,
+              ),
             ),
           ),
           Text(
