@@ -54,76 +54,51 @@ class _HomePageState extends State<HomePage> {
       errorText = '';
     });
 
-    final urls = [
-     'https://api.allorigins.win/raw?url=https://fx-api.gateio.ws/api/v4/futures/usdt/tickers',
-]; 
-
     try {
-      List<dynamic>? data;
+      final response = await http.get(
+        Uri.parse('https://fx-api.gateio.ws/api/v4/futures/usdt/tickers'),
+        headers: {'Accept': 'application/json'},
+      );
 
-      for (final url in urls) {
-        try {
-          final response = await http.get(
-            Uri.parse(url),
-            headers: {'Accept': 'application/json'},
-          );
-
-          if (response.statusCode == 200) {
-            final decoded = jsonDecode(response.body);
-            if (decoded is List) {
-              data = decoded;
-              break;
-            }
-          }
-        } catch (_) {}
-      }
-
-      if (data == null) {
-        throw Exception('Gate.io verisi alınamadı');
-      }
-
-      final List<Map<String, String>> tempCoins = [];
-
-      for (final item in data) {
-        if (item is! Map<String, dynamic>) continue;
-
-        final contract = (item['contract'] ?? '').toString();
-        if (!contract.endsWith('_USDT')) continue;
-
-        final rawChange = (item['change_percentage'] ?? '0').toString();
-        final parsedChange = double.tryParse(rawChange) ?? 0.0;
-
-        final changeText =
-            '${parsedChange >= 0 ? '+' : ''}${parsedChange.toStringAsFixed(2)}%';
-
-        tempCoins.add({
-          "name": contract,
-          "change": changeText,
+      if (response.statusCode != 200) {
+        setState(() {
+          isLoading = false;
+          errorText = 'Canlı veri alınamadı';
         });
+        return;
       }
+
+      final List<dynamic> parsed = json.decode(response.body);
+
+      final List<Map<String, String>> tempCoins = parsed
+          .where((e) => e['contract'] != null)
+          .map<Map<String, String>>((e) {
+        final String name = (e['contract'] ?? '').toString();
+        final double raw =
+            double.tryParse((e['change_percentage'] ?? '0').toString()) ?? 0.0;
+
+        return {
+          "name": name,
+          "change": "${raw >= 0 ? '+' : ''}${raw.toStringAsFixed(2)}%",
+        };
+      }).toList();
 
       tempCoins.sort((a, b) {
-        final aValue = double.tryParse(
-              a["change"]!.replaceAll('%', '').replaceAll('+', ''),
-            ) ??
-            0;
-        final bValue = double.tryParse(
-              b["change"]!.replaceAll('%', '').replaceAll('+', ''),
-            ) ??
-            0;
-        return bValue.compareTo(aValue);
+        final double av =
+            double.tryParse(a["change"]!.replaceAll('%', '').replaceAll('+', '')) ??
+                0.0;
+        final double bv =
+            double.tryParse(b["change"]!.replaceAll('%', '').replaceAll('+', '')) ??
+                0.0;
+        return bv.compareTo(av);
       });
-
-      if (!mounted) return;
 
       setState(() {
         coins = tempCoins.take(10).toList();
         isLoading = false;
         errorText = '';
       });
-    } catch (e) {
-      if (!mounted) return;
-
+    } catch (_) {
       setState(() {
         isLoading = false;
         errorText = 'Canlı veri alınamadı';
@@ -383,8 +358,7 @@ class DetailPage extends StatelessWidget {
                     decoration: BoxDecoration(
                       color: Colors.black.withOpacity(0.35),
                       borderRadius: BorderRadius.circular(16),
-                      border:
-                          Border.all(color: Colors.redAccent.withOpacity(0.4)),
+                      border: Border.all(color: Colors.redAccent.withOpacity(0.4)),
                     ),
                     child: Column(
                       children: [
@@ -393,8 +367,7 @@ class DetailPage extends StatelessWidget {
                           children: const [
                             Text(
                               "Long / Short",
-                              style:
-                                  TextStyle(color: Colors.white, fontSize: 18),
+                              style: TextStyle(color: Colors.white, fontSize: 18),
                             ),
                             Text(
                               "73%",
@@ -451,17 +424,14 @@ class DetailPage extends StatelessWidget {
                     decoration: BoxDecoration(
                       color: Colors.black.withOpacity(0.35),
                       borderRadius: BorderRadius.circular(16),
-                      border: Border.all(
-                        color: Colors.orangeAccent.withOpacity(0.4),
-                      ),
+                      border: Border.all(color: Colors.orangeAccent.withOpacity(0.4)),
                     ),
                     child: CustomPaint(
                       painter: ChartPainter(),
                       child: const Center(
                         child: Text(
                           "24H",
-                          style:
-                              TextStyle(color: Colors.white54, fontSize: 16),
+                          style: TextStyle(color: Colors.white54, fontSize: 16),
                         ),
                       ),
                     ),
@@ -472,8 +442,7 @@ class DetailPage extends StatelessWidget {
                     decoration: BoxDecoration(
                       color: Colors.red.withOpacity(0.15),
                       borderRadius: BorderRadius.circular(16),
-                      border:
-                          Border.all(color: Colors.redAccent.withOpacity(0.6)),
+                      border: Border.all(color: Colors.redAccent.withOpacity(0.6)),
                     ),
                     child: Column(
                       children: [
@@ -542,7 +511,6 @@ class ChartPainter extends CustomPainter {
     path.lineTo(size.width * 0.50, size.height * 0.52);
     path.lineTo(size.width * 0.63, size.height * 0.60);
     path.lineTo(size.width * 0.75, size.height * 0.67);
-    path.lineTo(size.width * 0.87, size.height * 0.76);
     path.lineTo(size.width, size.height * 0.88);
 
     canvas.drawPath(path, glowPaint);
