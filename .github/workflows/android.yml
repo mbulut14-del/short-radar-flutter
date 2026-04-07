@@ -32,6 +32,8 @@ jobs:
       - name: Android proje olustur
         run: flutter create . --project-name short_radar_flutter --platforms=android
 
+      - run: ls android
+
       - name: Uygulama adini degistir
         run: |
           python3 - << 'PY'
