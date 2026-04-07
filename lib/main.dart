@@ -1,4 +1,6 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 
 void main() {
   runApp(const MyApp());
@@ -16,10 +18,15 @@ class MyApp extends StatelessWidget {
   }
 }
 
-class HomePage extends StatelessWidget {
+class HomePage extends StatefulWidget {
   const HomePage({super.key});
 
-  final List<Map<String, String>> coins = const [
+  @override
+  State<HomePage> createState() => _HomePageState();
+}
+
+class _HomePageState extends State<HomePage> {
+  List<Map<String, String>> coins = const [
     {"name": "KOMA_USDT", "change": "+58.22%"},
     {"name": "BULLA_USDT", "change": "+44.77%"},
     {"name": "PLAY_USDT", "change": "+34.27%"},
@@ -31,6 +38,99 @@ class HomePage extends StatelessWidget {
     {"name": "BTC_USDT", "change": "+17.40%"},
     {"name": "XRP_USDT", "change": "+15.12%"},
   ];
+
+  bool isLoading = true;
+  String errorText = '';
+
+  @override
+  void initState() {
+    super.initState();
+    fetchCoins();
+  }
+
+  Future<void> fetchCoins() async {
+    setState(() {
+      isLoading = true;
+      errorText = '';
+    });
+
+    final urls = [
+      'https://api.gateio.ws/api/v4/futures/usdt/tickers',
+      'https://api.allorigins.win/raw?url=https://api.gateio.ws/api/v4/futures/usdt/tickers',
+    ];
+
+    try {
+      List<dynamic>? data;
+
+      for (final url in urls) {
+        try {
+          final response = await http.get(
+            Uri.parse(url),
+            headers: {'Accept': 'application/json'},
+          );
+
+          if (response.statusCode == 200) {
+            final decoded = jsonDecode(response.body);
+            if (decoded is List) {
+              data = decoded;
+              break;
+            }
+          }
+        } catch (_) {}
+      }
+
+      if (data == null) {
+        throw Exception('Gate.io verisi alınamadı');
+      }
+
+      final List<Map<String, String>> tempCoins = [];
+
+      for (final item in data) {
+        if (item is! Map<String, dynamic>) continue;
+
+        final contract = (item['contract'] ?? '').toString();
+        if (!contract.endsWith('_USDT')) continue;
+
+        final rawChange = (item['change_percentage'] ?? '0').toString();
+        final parsedChange = double.tryParse(rawChange) ?? 0.0;
+
+        final changeText =
+            '${parsedChange >= 0 ? '+' : ''}${parsedChange.toStringAsFixed(2)}%';
+
+        tempCoins.add({
+          "name": contract,
+          "change": changeText,
+        });
+      }
+
+      tempCoins.sort((a, b) {
+        final aValue = double.tryParse(
+              a["change"]!.replaceAll('%', '').replaceAll('+', ''),
+            ) ??
+            0;
+        final bValue = double.tryParse(
+              b["change"]!.replaceAll('%', '').replaceAll('+', ''),
+            ) ??
+            0;
+        return bValue.compareTo(aValue);
+      });
+
+      if (!mounted) return;
+
+      setState(() {
+        coins = tempCoins.take(10).toList();
+        isLoading = false;
+        errorText = '';
+      });
+    } catch (e) {
+      if (!mounted) return;
+
+      setState(() {
+        isLoading = false;
+        errorText = 'Canlı veri alınamadı';
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -44,129 +144,189 @@ class HomePage extends StatelessWidget {
             ),
           ),
           SafeArea(
-            child: ListView(
-              padding: const EdgeInsets.all(12),
-              children: [
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(20),
-                  child: Image.asset(
-                    'assets/hero.png',
-                    width: double.infinity,
-                    height: 200,
-                    fit: BoxFit.cover,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                ...coins.asMap().entries.map((entry) {
-                  final index = entry.key + 1;
-                  final coin = entry.value;
-
-                  return Padding(
-                    padding: const EdgeInsets.only(bottom: 10),
-                    child: GestureDetector(
-                      onTap: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => DetailPage(
-                              coin: coin["name"]!,
-                              change: coin["change"]!,
-                            ),
-                          ),
-                        );
-                      },
-                      child: Container(
-                        height: 78,
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(22),
-                          gradient: const LinearGradient(
-                            begin: Alignment.centerLeft,
-                            end: Alignment.centerRight,
-                            colors: [
-                              Color(0xFF07122A),
-                              Color(0xFF091933),
-                              Color(0xFF07122A),
-                            ],
-                          ),
-                          border: Border.all(
-                            color: Color(0xFF3EA6FF),
-                            width: 1.4,
-                          ),
-                          boxShadow: const [
-                            BoxShadow(
-                              color: Color(0x663EA6FF),
-                              blurRadius: 10,
-                              spreadRadius: 1,
-                            ),
-                            BoxShadow(
-                              color: Color(0x3300FFFF),
-                              blurRadius: 18,
-                              spreadRadius: 1,
-                            ),
-                          ],
+            child: RefreshIndicator(
+              onRefresh: fetchCoins,
+              child: ListView(
+                padding: const EdgeInsets.all(12),
+                children: [
+                  Stack(
+                    children: [
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(20),
+                        child: Image.asset(
+                          'assets/hero.png',
+                          width: double.infinity,
+                          height: 200,
+                          fit: BoxFit.cover,
                         ),
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 14),
-                          child: Row(
-                            children: [
-                              Container(
-                                width: 40,
-                                height: 40,
-                                decoration: BoxDecoration(
-                                  shape: BoxShape.circle,
-                                  color: const Color(0xFF123D9B),
-                                  border: Border.all(
-                                    color: const Color(0xFF5AA8FF),
-                                    width: 1.6,
-                                  ),
-                                  boxShadow: const [
-                                    BoxShadow(
-                                      color: Color(0x663EA6FF),
-                                      blurRadius: 8,
-                                      spreadRadius: 1,
-                                    ),
-                                  ],
-                                ),
-                                alignment: Alignment.center,
-                                child: Text(
-                                  "$index",
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 19,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 14),
-                              Expanded(
-                                child: Text(
-                                  coin["name"]!,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 17,
-                                    fontWeight: FontWeight.w800,
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 12),
-                              Text(
-                                coin["change"]!,
-                                style: const TextStyle(
-                                  color: Color(0xFF3CFFB2),
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w800,
-                                ),
-                              ),
-                            ],
+                      ),
+                      Positioned(
+                        top: 10,
+                        right: 10,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 6,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.black.withOpacity(0.55),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: isLoading
+                                  ? Colors.orangeAccent
+                                  : Colors.greenAccent,
+                            ),
+                          ),
+                          child: Text(
+                            isLoading ? 'Yükleniyor' : 'Canlı Veri',
+                            style: TextStyle(
+                              color: isLoading
+                                  ? Colors.orangeAccent
+                                  : Colors.greenAccent,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                            ),
                           ),
                         ),
                       ),
+                    ],
+                  ),
+                  if (errorText.isNotEmpty) ...[
+                    const SizedBox(height: 10),
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: Colors.red.withOpacity(0.18),
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(
+                          color: Colors.redAccent.withOpacity(0.5),
+                        ),
+                      ),
+                      child: Text(
+                        errorText,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
                     ),
-                  );
-                }),
-              ],
+                  ],
+                  const SizedBox(height: 12),
+                  ...coins.asMap().entries.map((entry) {
+                    final index = entry.key + 1;
+                    final coin = entry.value;
+
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 10),
+                      child: GestureDetector(
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => DetailPage(
+                                coin: coin["name"]!,
+                                change: coin["change"]!,
+                              ),
+                            ),
+                          );
+                        },
+                        child: Container(
+                          height: 78,
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(22),
+                            gradient: const LinearGradient(
+                              begin: Alignment.centerLeft,
+                              end: Alignment.centerRight,
+                              colors: [
+                                Color(0xFF07122A),
+                                Color(0xFF091933),
+                                Color(0xFF07122A),
+                              ],
+                            ),
+                            border: Border.all(
+                              color: const Color(0xFF3EA6FF),
+                              width: 1.4,
+                            ),
+                            boxShadow: const [
+                              BoxShadow(
+                                color: Color(0x663EA6FF),
+                                blurRadius: 10,
+                                spreadRadius: 1,
+                              ),
+                              BoxShadow(
+                                color: Color(0x3300FFFF),
+                                blurRadius: 18,
+                                spreadRadius: 1,
+                              ),
+                            ],
+                          ),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 14),
+                            child: Row(
+                              children: [
+                                Container(
+                                  width: 40,
+                                  height: 40,
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    color: const Color(0xFF123D9B),
+                                    border: Border.all(
+                                      color: const Color(0xFF5AA8FF),
+                                      width: 1.6,
+                                    ),
+                                    boxShadow: const [
+                                      BoxShadow(
+                                        color: Color(0x663EA6FF),
+                                        blurRadius: 8,
+                                        spreadRadius: 1,
+                                      ),
+                                    ],
+                                  ),
+                                  alignment: Alignment.center,
+                                  child: Text(
+                                    "$index",
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 19,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 14),
+                                Expanded(
+                                  child: Text(
+                                    coin["name"]!,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 17,
+                                      fontWeight: FontWeight.w800,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Text(
+                                  coin["change"]!,
+                                  style: TextStyle(
+                                    color: coin["change"]!.startsWith('-')
+                                        ? Colors.redAccent
+                                        : const Color(0xFF3CFFB2),
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    );
+                  }),
+                ],
+              ),
             ),
           ),
         ],
@@ -224,7 +384,8 @@ class DetailPage extends StatelessWidget {
                     decoration: BoxDecoration(
                       color: Colors.black.withOpacity(0.35),
                       borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: Colors.redAccent.withOpacity(0.4)),
+                      border:
+                          Border.all(color: Colors.redAccent.withOpacity(0.4)),
                     ),
                     child: Column(
                       children: [
@@ -233,7 +394,8 @@ class DetailPage extends StatelessWidget {
                           children: const [
                             Text(
                               "Long / Short",
-                              style: TextStyle(color: Colors.white, fontSize: 18),
+                              style:
+                                  TextStyle(color: Colors.white, fontSize: 18),
                             ),
                             Text(
                               "73%",
@@ -290,14 +452,17 @@ class DetailPage extends StatelessWidget {
                     decoration: BoxDecoration(
                       color: Colors.black.withOpacity(0.35),
                       borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: Colors.orangeAccent.withOpacity(0.4)),
+                      border: Border.all(
+                        color: Colors.orangeAccent.withOpacity(0.4),
+                      ),
                     ),
                     child: CustomPaint(
                       painter: ChartPainter(),
                       child: const Center(
                         child: Text(
                           "24H",
-                          style: TextStyle(color: Colors.white54, fontSize: 16),
+                          style:
+                              TextStyle(color: Colors.white54, fontSize: 16),
                         ),
                       ),
                     ),
@@ -308,11 +473,12 @@ class DetailPage extends StatelessWidget {
                     decoration: BoxDecoration(
                       color: Colors.red.withOpacity(0.15),
                       borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: Colors.redAccent.withOpacity(0.6)),
+                      border:
+                          Border.all(color: Colors.redAccent.withOpacity(0.6)),
                     ),
-                    child: const Column(
+                    child: Column(
                       children: [
-                        Text(
+                        const Text(
                           "SHORT İÇİN GÜÇLÜ SİNYAL!",
                           style: TextStyle(
                             color: Colors.orangeAccent,
@@ -320,11 +486,11 @@ class DetailPage extends StatelessWidget {
                             fontSize: 20,
                           ),
                         ),
-                        SizedBox(height: 10),
+                        const SizedBox(height: 10),
                         Text(
-                          "RSI yüksek, funding pozitif.\nSatış baskısı bekleniyor.",
+                          "$coin için canlı değişim verisi: $change",
                           textAlign: TextAlign.center,
-                          style: TextStyle(
+                          style: const TextStyle(
                             color: Colors.white70,
                             fontSize: 16,
                           ),
