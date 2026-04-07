@@ -24,8 +24,8 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'Short Radar Pro',
-      home: const HomePage(),
       theme: ThemeData.dark(),
+      home: const HomePage(),
     );
   }
 }
@@ -48,39 +48,6 @@ class _HomePageState extends State<HomePage> {
     fetchCoins();
   }
 
-  Future<List<dynamic>> _fetchFromAnyEndpoint() async {
-    final urls = [
-      'https://api.gateio.ws/api/v4/futures/usdt/tickers',
-      'https://fx-api.gateio.ws/api/v4/futures/usdt/tickers',
-    ];
-
-    Exception? lastError;
-
-    for (final url in urls) {
-      try {
-        final res = await http.get(
-          Uri.parse(url),
-          headers: {'Accept': 'application/json'},
-        );
-
-        if (res.statusCode == 200) {
-          final decoded = json.decode(res.body);
-          if (decoded is List) {
-            return decoded;
-          } else {
-            throw Exception('Beklenmeyen veri formatı');
-          }
-        } else {
-          lastError = Exception('API hata verdi: ${res.statusCode}');
-        }
-      } catch (e) {
-        lastError = Exception(e.toString());
-      }
-    }
-
-    throw lastError ?? Exception('Veri alınamadı');
-  }
-
   Future<void> fetchCoins() async {
     setState(() {
       loading = true;
@@ -88,18 +55,34 @@ class _HomePageState extends State<HomePage> {
     });
 
     try {
-      final data = await _fetchFromAnyEndpoint();
+      final uri = Uri.parse(
+        'https://api.gateio.ws/api/v4/futures/usdt/tickers',
+      );
+
+      final res = await http.get(
+        uri,
+        headers: {'Accept': 'application/json'},
+      );
+
+      if (res.statusCode != 200) {
+        throw Exception('API hata verdi: ${res.statusCode}');
+      }
+
+      final decoded = json.decode(res.body);
+      if (decoded is! List) {
+        throw Exception('Beklenmeyen veri formatı');
+      }
 
       final List<Coin> temp = [];
 
-      for (final item in data) {
+      for (final item in decoded) {
         if (item is! Map<String, dynamic>) continue;
 
         final contract = item['contract']?.toString() ?? '';
         if (!contract.endsWith('_USDT')) continue;
 
-        final changeRaw = item['change_percentage'];
-        final double change = double.tryParse(changeRaw?.toString() ?? '0') ?? 0.0;
+        final change =
+            double.tryParse(item['change_percentage']?.toString() ?? '0') ?? 0.0;
 
         temp.add(
           Coin(
@@ -138,9 +121,7 @@ class _HomePageState extends State<HomePage> {
         ),
         child: SafeArea(
           child: loading
-              ? const Center(
-                  child: CircularProgressIndicator(),
-                )
+              ? const Center(child: CircularProgressIndicator())
               : error.isNotEmpty
                   ? Center(
                       child: Padding(
@@ -186,7 +167,10 @@ class _HomePageState extends State<HomePage> {
                               decoration: BoxDecoration(
                                 borderRadius: BorderRadius.circular(24),
                                 gradient: const LinearGradient(
-                                  colors: [Color(0xFFFF3B1F), Color(0xFFFF8A00)],
+                                  colors: [
+                                    Color(0xFFFF3B1F),
+                                    Color(0xFFFF8A00),
+                                  ],
                                   begin: Alignment.topLeft,
                                   end: Alignment.bottomRight,
                                 ),
@@ -211,12 +195,12 @@ class _HomePageState extends State<HomePage> {
                                   const SizedBox(height: 12),
                                   Text(
                                     topCoin.name,
+                                    textAlign: TextAlign.center,
                                     style: const TextStyle(
                                       color: Colors.white,
                                       fontSize: 28,
                                       fontWeight: FontWeight.bold,
                                     ),
-                                    textAlign: TextAlign.center,
                                   ),
                                   const SizedBox(height: 8),
                                   Text(
@@ -250,7 +234,8 @@ class _HomePageState extends State<HomePage> {
                                 ),
                                 boxShadow: [
                                   BoxShadow(
-                                    color: const Color(0xFF35A8FF).withOpacity(0.25),
+                                    color: const Color(0xFF35A8FF)
+                                        .withOpacity(0.25),
                                     blurRadius: 12,
                                     spreadRadius: 1,
                                   ),
@@ -261,6 +246,7 @@ class _HomePageState extends State<HomePage> {
                                   Container(
                                     width: 52,
                                     height: 52,
+                                    alignment: Alignment.center,
                                     decoration: BoxDecoration(
                                       shape: BoxShape.circle,
                                       color: const Color(0xFF1E4FB5),
@@ -269,7 +255,6 @@ class _HomePageState extends State<HomePage> {
                                         width: 1.5,
                                       ),
                                     ),
-                                    alignment: Alignment.center,
                                     child: Text(
                                       '$rank',
                                       style: const TextStyle(
