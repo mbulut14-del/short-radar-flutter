@@ -43,6 +43,9 @@ jobs:
           manifest.write_text(text, encoding="utf-8")
           PY
 
+      - name: Uygulama ikonunu olustur
+        run: dart run flutter_launcher_icons
+
       - name: APK build
         run: flutter build apk --release
 
