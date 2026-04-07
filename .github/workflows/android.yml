@@ -25,7 +25,7 @@ jobs:
       - run: flutter pub get
 
       - run: |
-          flutter create .
+             flutter create . --project-name short_radar_flutter
 
       - run: flutter build apk --release
 
