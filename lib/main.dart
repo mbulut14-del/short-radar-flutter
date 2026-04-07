@@ -1,10 +1,208 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
 void main() {
   runApp(const MyApp());
+}
+
+double _parseDouble(dynamic value) {
+  if (value == null) return 0.0;
+  return double.tryParse(value.toString()) ?? 0.0;
+}
+
+String _formatPrice(double value, {int digits = 6}) {
+  if (value == 0) return '-';
+  return value.toStringAsFixed(digits);
+}
+
+String _formatPercent(double value, {int digits = 2}) {
+  return '${value >= 0 ? '+' : ''}${value.toStringAsFixed(digits)}%';
+}
+
+String _formatFunding(double value) {
+  final percent = value * 100;
+  return '${percent >= 0 ? '+' : ''}${percent.toStringAsFixed(4)}%';
+}
+
+class CoinRadarData {
+  final String name;
+  final double changePercent;
+  final double fundingRate;
+  final double lastPrice;
+  final double markPrice;
+  final double indexPrice;
+  final double volume24h;
+  final int score;
+  final String biasLabel;
+  final String note;
+
+  const CoinRadarData({
+    required this.name,
+    required this.changePercent,
+    required this.fundingRate,
+    required this.lastPrice,
+    required this.markPrice,
+    required this.indexPrice,
+    required this.volume24h,
+    required this.score,
+    required this.biasLabel,
+    required this.note,
+  });
+
+  factory CoinRadarData.seed({
+    required String name,
+    required double changePercent,
+  }) {
+    final int score = _calculateScore(
+      changePercent: changePercent,
+      fundingRate: 0,
+      markPrice: 0,
+      indexPrice: 0,
+      volume24h: 0,
+    );
+
+    return CoinRadarData(
+      name: name,
+      changePercent: changePercent,
+      fundingRate: 0,
+      lastPrice: 0,
+      markPrice: 0,
+      indexPrice: 0,
+      volume24h: 0,
+      score: score,
+      biasLabel: _biasLabel(score),
+      note: _noteText(score, changePercent, 0, 0, 0),
+    );
+  }
+
+  factory CoinRadarData.fromJson(Map<String, dynamic> json) {
+    final double changePercent = _parseDouble(json['change_percentage']);
+    final double fundingRate = _parseDouble(json['funding_rate']);
+    final double lastPrice = _parseDouble(json['last']);
+    final double markPrice = _parseDouble(json['mark_price']);
+    final double indexPrice = _parseDouble(json['index_price']);
+    final double volume24h = _parseDouble(
+      json['volume_24h_quote'] ?? json['volume_24h'] ?? 0,
+    );
+
+    final int score = _calculateScore(
+      changePercent: changePercent,
+      fundingRate: fundingRate,
+      markPrice: markPrice,
+      indexPrice: indexPrice,
+      volume24h: volume24h,
+    );
+
+    return CoinRadarData(
+      name: (json['contract'] ?? '').toString(),
+      changePercent: changePercent,
+      fundingRate: fundingRate,
+      lastPrice: lastPrice,
+      markPrice: markPrice,
+      indexPrice: indexPrice,
+      volume24h: volume24h,
+      score: score,
+      biasLabel: _biasLabel(score),
+      note: _noteText(
+        score,
+        changePercent,
+        fundingRate,
+        markPrice,
+        indexPrice,
+      ),
+    );
+  }
+
+  static int _calculateScore({
+    required double changePercent,
+    required double fundingRate,
+    required double markPrice,
+    required double indexPrice,
+    required double volume24h,
+  }) {
+    double score = 0;
+
+    if (changePercent > 0) {
+      score += math.min(changePercent * 0.9, 48);
+    } else {
+      score += math.max(changePercent * 0.15, -10);
+    }
+
+    if (fundingRate > 0) {
+      score += math.min(fundingRate * 10000, 28);
+    } else if (fundingRate < 0) {
+      score -= math.min(fundingRate.abs() * 5000, 10);
+    }
+
+    if (indexPrice != 0) {
+      final double divergence = ((markPrice - indexPrice) / indexPrice).abs() * 100;
+      score += math.min(divergence * 22, 14);
+    }
+
+    if (volume24h > 0) {
+      final double volumeBoost = math.max(
+        0,
+        math.min((math.log(volume24h + 1) - 10) * 2.2, 10),
+      );
+      score += volumeBoost;
+    }
+
+    score = score.clamp(0, 100);
+    return score.round();
+  }
+
+  static String _biasLabel(int score) {
+    if (score >= 75) return 'Çok güçlü short';
+    if (score >= 60) return 'Güçlü short';
+    if (score >= 45) return 'İzlemeye değer';
+    if (score >= 30) return 'Zayıf baskı';
+    return 'Nötr';
+  }
+
+  static String _noteText(
+    int score,
+    double changePercent,
+    double fundingRate,
+    double markPrice,
+    double indexPrice,
+  ) {
+    final double divergence =
+        indexPrice == 0 ? 0 : ((markPrice - indexPrice) / indexPrice).abs() * 100;
+
+    if (score >= 75) {
+      return 'Pump güçlü, funding şişmiş. Sert short takibi.';
+    }
+    if (score >= 60) {
+      return 'Yükseliş ve funding birlikte ısınıyor.';
+    }
+    if (score >= 45) {
+      return 'İzlenebilir short baskısı oluşuyor.';
+    }
+    if (changePercent < 0) {
+      return 'Zaten zayıflamış, short avantajı düşebilir.';
+    }
+    if (divergence > 0.20) {
+      return 'Fiyat farkı var, volatilite yükselebilir.';
+    }
+    if (fundingRate > 0) {
+      return 'Funding pozitif ama sinyal orta güçte.';
+    }
+    return 'Şimdilik net short baskısı zayıf.';
+  }
+
+  String get changeText => _formatPercent(changePercent);
+  String get fundingText => _formatFunding(fundingRate);
+  String get lastPriceText => _formatPrice(lastPrice);
+  String get markPriceText => _formatPrice(markPrice);
+  String get indexPriceText => _formatPrice(indexPrice);
+
+  double get divergencePercent {
+    if (indexPrice == 0) return 0;
+    return ((markPrice - indexPrice) / indexPrice).abs() * 100;
+  }
 }
 
 class MyApp extends StatelessWidget {
@@ -27,19 +225,20 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
-  List<Map<String, String>> coins = const [
-    {"name": "KOMA_USDT", "change": "+58.22%"},
-    {"name": "BULLA_USDT", "change": "+44.77%"},
-    {"name": "PLAY_USDT", "change": "+34.27%"},
-    {"name": "APR_USDT", "change": "+31.12%"},
-    {"name": "TRU_USDT", "change": "+28.90%"},
-    {"name": "DOGE_USDT", "change": "+25.61%"},
-    {"name": "SOL_USDT", "change": "+22.10%"},
-    {"name": "ETH_USDT", "change": "+19.85%"},
-    {"name": "BTC_USDT", "change": "+17.40%"},
-    {"name": "XRP_USDT", "change": "+15.12%"},
+  List<CoinRadarData> coins = [
+    CoinRadarData.seed(name: 'KOMA_USDT', changePercent: 58.22),
+    CoinRadarData.seed(name: 'BULLA_USDT', changePercent: 44.77),
+    CoinRadarData.seed(name: 'PLAY_USDT', changePercent: 34.27),
+    CoinRadarData.seed(name: 'APR_USDT', changePercent: 31.12),
+    CoinRadarData.seed(name: 'TRU_USDT', changePercent: 28.90),
+    CoinRadarData.seed(name: 'DOGE_USDT', changePercent: 25.61),
+    CoinRadarData.seed(name: 'SOL_USDT', changePercent: 22.10),
+    CoinRadarData.seed(name: 'ETH_USDT', changePercent: 19.85),
+    CoinRadarData.seed(name: 'BTC_USDT', changePercent: 17.40),
+    CoinRadarData.seed(name: 'XRP_USDT', changePercent: 15.12),
   ];
 
+  CoinRadarData? radarLeader;
   bool isLoading = true;
   String errorText = '';
   Timer? _refreshTimer;
@@ -47,6 +246,7 @@ class _HomePageState extends State<HomePage> {
   @override
   void initState() {
     super.initState();
+    radarLeader = coins.first;
     fetchCoins();
 
     _refreshTimer = Timer.periodic(const Duration(seconds: 5), (timer) {
@@ -84,33 +284,33 @@ class _HomePageState extends State<HomePage> {
 
       final List<dynamic> parsed = json.decode(response.body);
 
-      final List<Map<String, String>> tempCoins = parsed
-          .where((e) => e['contract'] != null)
-          .map<Map<String, String>>((e) {
-        final String name = (e['contract'] ?? '').toString();
-        final double raw =
-            double.tryParse((e['change_percentage'] ?? '0').toString()) ?? 0.0;
+      final List<CoinRadarData> allCoins = parsed
+          .whereType<Map<String, dynamic>>()
+          .where((e) => (e['contract'] ?? '').toString().isNotEmpty)
+          .map(CoinRadarData.fromJson)
+          .toList();
 
-        return {
-          "name": name,
-          "change": "${raw >= 0 ? '+' : ''}${raw.toStringAsFixed(2)}%",
-        };
-      }).toList();
+      if (allCoins.isEmpty) {
+        setState(() {
+          isLoading = false;
+          errorText = 'Canlı veri boş döndü';
+        });
+        return;
+      }
 
-      tempCoins.sort((a, b) {
-        final double av = double.tryParse(
-              a["change"]!.replaceAll('%', '').replaceAll('+', ''),
-            ) ??
-            0.0;
-        final double bv = double.tryParse(
-              b["change"]!.replaceAll('%', '').replaceAll('+', ''),
-            ) ??
-            0.0;
-        return bv.compareTo(av);
-      });
+      final List<CoinRadarData> sortedByChange = [...allCoins]
+        ..sort((a, b) => b.changePercent.compareTo(a.changePercent));
+
+      final List<CoinRadarData> sortedByScore = [...allCoins]
+        ..sort((a, b) {
+          final int scoreCompare = b.score.compareTo(a.score);
+          if (scoreCompare != 0) return scoreCompare;
+          return b.changePercent.compareTo(a.changePercent);
+        });
 
       setState(() {
-        coins = tempCoins.take(10).toList();
+        coins = sortedByChange.take(10).toList();
+        radarLeader = sortedByScore.first;
         isLoading = false;
         errorText = '';
       });
@@ -120,6 +320,188 @@ class _HomePageState extends State<HomePage> {
         errorText = 'Canlı veri alınamadı';
       });
     }
+  }
+
+  Widget _buildRadarHero() {
+    final CoinRadarData? leader = radarLeader;
+    if (leader == null) {
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(20),
+        child: Image.asset(
+          'assets/hero.png',
+          width: double.infinity,
+          height: 220,
+          fit: BoxFit.cover,
+        ),
+      );
+    }
+
+    final Color scoreColor = leader.score >= 75
+        ? Colors.redAccent
+        : leader.score >= 60
+            ? Colors.orangeAccent
+            : leader.score >= 45
+                ? Colors.amberAccent
+                : Colors.greenAccent;
+
+    return Stack(
+      children: [
+        ClipRRect(
+          borderRadius: BorderRadius.circular(20),
+          child: Image.asset(
+            'assets/hero.png',
+            width: double.infinity,
+            height: 220,
+            fit: BoxFit.cover,
+          ),
+        ),
+        Positioned.fill(
+          child: Container(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(20),
+              gradient: LinearGradient(
+                begin: Alignment.bottomCenter,
+                end: Alignment.topCenter,
+                colors: [
+                  Colors.black.withOpacity(0.72),
+                  Colors.black.withOpacity(0.10),
+                ],
+              ),
+            ),
+          ),
+        ),
+        Positioned(
+          left: 14,
+          right: 14,
+          bottom: 14,
+          child: Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: Colors.black.withOpacity(0.55),
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(
+                color: scoreColor.withOpacity(0.65),
+                width: 1.2,
+              ),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: 68,
+                  height: 68,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: Colors.black.withOpacity(0.55),
+                    border: Border.all(color: scoreColor, width: 3),
+                    boxShadow: [
+                      BoxShadow(
+                        color: scoreColor.withOpacity(0.35),
+                        blurRadius: 16,
+                        spreadRadius: 2,
+                      ),
+                    ],
+                  ),
+                  alignment: Alignment.center,
+                  child: Text(
+                    '${leader.score}',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 24,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'EN GÜÇLÜ SHORT ADAYI',
+                        style: TextStyle(
+                          color: scoreColor,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        leader.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 20,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 10,
+                        runSpacing: 6,
+                        children: [
+                          _miniInfo('Skor', '${leader.score}'),
+                          _miniInfo('Değişim', leader.changeText),
+                          _miniInfo('Funding', leader.fundingText),
+                          _miniInfo('Bias', leader.biasLabel),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        Positioned(
+          top: 10,
+          right: 10,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: BoxDecoration(
+              color: Colors.black.withOpacity(0.55),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: isLoading ? Colors.orangeAccent : Colors.greenAccent,
+              ),
+            ),
+            child: Text(
+              isLoading ? 'Yükleniyor' : 'Canlı Veri',
+              style: TextStyle(
+                color: isLoading ? Colors.orangeAccent : Colors.greenAccent,
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _miniInfo(String title, String value) {
+    return RichText(
+      text: TextSpan(
+        children: [
+          TextSpan(
+            text: '$title: ',
+            style: const TextStyle(
+              color: Colors.white60,
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          TextSpan(
+            text: value,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 11,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -139,48 +521,39 @@ class _HomePageState extends State<HomePage> {
               child: ListView(
                 padding: const EdgeInsets.all(12),
                 children: [
-                  Stack(
-                    children: [
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(20),
-                        child: Image.asset(
-                          'assets/hero.png',
-                          width: double.infinity,
-                          height: 200,
-                          fit: BoxFit.cover,
+                  _buildRadarHero(),
+                  if (radarLeader != null) ...[
+                    const SizedBox(height: 12),
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withOpacity(0.32),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
+                          color: Colors.orangeAccent.withOpacity(0.45),
                         ),
                       ),
-                      Positioned(
-                        top: 10,
-                        right: 10,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 6,
+                      child: Row(
+                        children: [
+                          const Icon(
+                            Icons.radar_rounded,
+                            color: Colors.orangeAccent,
                           ),
-                          decoration: BoxDecoration(
-                            color: Colors.black.withOpacity(0.55),
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(
-                              color: isLoading
-                                  ? Colors.orangeAccent
-                                  : Colors.greenAccent,
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              radarLeader!.note,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w700,
+                              ),
                             ),
                           ),
-                          child: Text(
-                            isLoading ? 'Yükleniyor' : 'Canlı Veri',
-                            style: TextStyle(
-                              color: isLoading
-                                  ? Colors.orangeAccent
-                                  : Colors.greenAccent,
-                              fontSize: 12,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                        ),
+                        ],
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
                   if (errorText.isNotEmpty) ...[
                     const SizedBox(height: 10),
                     Container(
@@ -216,14 +589,14 @@ class _HomePageState extends State<HomePage> {
                             context,
                             MaterialPageRoute(
                               builder: (_) => DetailPage(
-                                coin: coin["name"]!,
-                                change: coin["change"]!,
+                                coinData: coin,
+                                leaderData: radarLeader,
                               ),
                             ),
                           );
                         },
                         child: Container(
-                          height: 78,
+                          height: 86,
                           decoration: BoxDecoration(
                             borderRadius: BorderRadius.circular(22),
                             gradient: const LinearGradient(
@@ -276,7 +649,7 @@ class _HomePageState extends State<HomePage> {
                                   ),
                                   alignment: Alignment.center,
                                   child: Text(
-                                    "$index",
+                                    '$index',
                                     style: const TextStyle(
                                       color: Colors.white,
                                       fontSize: 19,
@@ -286,22 +659,39 @@ class _HomePageState extends State<HomePage> {
                                 ),
                                 const SizedBox(width: 14),
                                 Expanded(
-                                  child: Text(
-                                    coin["name"]!,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 17,
-                                      fontWeight: FontWeight.w800,
-                                    ),
+                                  child: Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        coin.name,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 17,
+                                          fontWeight: FontWeight.w800,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        'Short skoru: ${coin.score} • ${coin.biasLabel}',
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: TextStyle(
+                                          color: Colors.white.withOpacity(0.72),
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                      ),
+                                    ],
                                   ),
                                 ),
                                 const SizedBox(width: 12),
                                 Text(
-                                  coin["change"]!,
+                                  coin.changeText,
                                   style: TextStyle(
-                                    color: coin["change"]!.startsWith('-')
+                                    color: coin.changePercent < 0
                                         ? Colors.redAccent
                                         : const Color(0xFF3CFFB2),
                                     fontSize: 16,
@@ -326,13 +716,13 @@ class _HomePageState extends State<HomePage> {
 }
 
 class DetailPage extends StatefulWidget {
-  final String coin;
-  final String change;
+  final CoinRadarData coinData;
+  final CoinRadarData? leaderData;
 
   const DetailPage({
     super.key,
-    required this.coin,
-    required this.change,
+    required this.coinData,
+    this.leaderData,
   });
 
   @override
@@ -344,16 +734,14 @@ class _DetailPageState extends State<DetailPage> {
   bool detailLoading = true;
   String detailError = '';
 
-  String lastPrice = '-';
-  String markPrice = '-';
-  String indexPrice = '-';
-  String fundingRate = '-';
-  String changeText = '-';
+  late CoinRadarData selectedCoin;
+  late CoinRadarData heroCoin;
 
   @override
   void initState() {
     super.initState();
-    changeText = widget.change;
+    selectedCoin = widget.coinData;
+    heroCoin = widget.leaderData ?? widget.coinData;
     fetchDetail();
 
     _detailTimer = Timer.periodic(const Duration(seconds: 5), (timer) {
@@ -391,12 +779,21 @@ class _DetailPageState extends State<DetailPage> {
 
       final List<dynamic> parsed = json.decode(response.body);
 
-      final dynamic item = parsed.cast<Map<String, dynamic>?>().firstWhere(
-            (e) => (e?['contract'] ?? '').toString() == widget.coin,
-            orElse: () => null,
-          );
+      final List<CoinRadarData> allCoins = parsed
+          .whereType<Map<String, dynamic>>()
+          .where((e) => (e['contract'] ?? '').toString().isNotEmpty)
+          .map(CoinRadarData.fromJson)
+          .toList();
 
-      if (item == null) {
+      CoinRadarData? detailItem;
+      for (final coin in allCoins) {
+        if (coin.name == widget.coinData.name) {
+          detailItem = coin;
+          break;
+        }
+      }
+
+      if (detailItem == null) {
         setState(() {
           detailLoading = false;
           detailError = 'Coin detayı bulunamadı';
@@ -404,30 +801,16 @@ class _DetailPageState extends State<DetailPage> {
         return;
       }
 
-      String formatNum(dynamic value, {int digits = 6}) {
-        final d = double.tryParse((value ?? '').toString());
-        if (d == null) return '-';
-        return d.toStringAsFixed(digits);
-      }
-
-      String formatPercent(dynamic value) {
-        final d = double.tryParse((value ?? '').toString());
-        if (d == null) return '-';
-        return '${d >= 0 ? '+' : ''}${d.toStringAsFixed(2)}%';
-      }
-
-      String formatFunding(dynamic value) {
-        final d = double.tryParse((value ?? '').toString());
-        if (d == null) return '-';
-        return '${d >= 0 ? '+' : ''}${d.toStringAsFixed(6)}';
-      }
+      final List<CoinRadarData> sortedByScore = [...allCoins]
+        ..sort((a, b) {
+          final int scoreCompare = b.score.compareTo(a.score);
+          if (scoreCompare != 0) return scoreCompare;
+          return b.changePercent.compareTo(a.changePercent);
+        });
 
       setState(() {
-        lastPrice = formatNum(item['last'], digits: 6);
-        markPrice = formatNum(item['mark_price'], digits: 6);
-        indexPrice = formatNum(item['index_price'], digits: 6);
-        fundingRate = formatFunding(item['funding_rate']);
-        changeText = formatPercent(item['change_percentage']);
+        selectedCoin = detailItem!;
+        heroCoin = sortedByScore.first;
         detailLoading = false;
         detailError = '';
       });
@@ -439,8 +822,8 @@ class _DetailPageState extends State<DetailPage> {
     }
   }
 
-  Color getChangeColor(String value) {
-    return value.startsWith('-') ? Colors.redAccent : const Color(0xFF3CFFB2);
+  Color getChangeColor(double value) {
+    return value < 0 ? Colors.redAccent : const Color(0xFF3CFFB2);
   }
 
   Widget metricBox(String title, String value, {Color? valueColor}) {
@@ -478,7 +861,8 @@ class _DetailPageState extends State<DetailPage> {
 
   @override
   Widget build(BuildContext context) {
-    final bool isNegative = changeText.startsWith('-');
+    final int redFlex = selectedCoin.score.clamp(10, 90);
+    final int greenFlex = (100 - redFlex).clamp(10, 90);
 
     return Scaffold(
       body: Stack(
@@ -529,16 +913,97 @@ class _DetailPageState extends State<DetailPage> {
                     ],
                   ),
                   const SizedBox(height: 8),
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(20),
-                    child: Image.asset(
-                      'assets/hero.png',
-                      width: double.infinity,
-                      fit: BoxFit.cover,
-                    ),
+                  Stack(
+                    children: [
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(20),
+                        child: Image.asset(
+                          'assets/hero.png',
+                          width: double.infinity,
+                          fit: BoxFit.cover,
+                        ),
+                      ),
+                      Positioned(
+                        left: 14,
+                        right: 14,
+                        bottom: 14,
+                        child: Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: Colors.black.withOpacity(0.55),
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(
+                              color: Colors.orangeAccent.withOpacity(0.55),
+                            ),
+                          ),
+                          child: Row(
+                            children: [
+                              Container(
+                                width: 58,
+                                height: 58,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: Colors.black.withOpacity(0.55),
+                                  border: Border.all(
+                                    color: Colors.orangeAccent,
+                                    width: 2.5,
+                                  ),
+                                ),
+                                alignment: Alignment.center,
+                                child: Text(
+                                  '${heroCoin.score}',
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 22,
+                                    fontWeight: FontWeight.w900,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const Text(
+                                      'EN GÜÇLÜ SHORT ADAYI',
+                                      style: TextStyle(
+                                        color: Colors.orangeAccent,
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w800,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      heroCoin.name,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 18,
+                                        fontWeight: FontWeight.w900,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      'Funding: ${heroCoin.fundingText} • Değişim: ${heroCoin.changeText}',
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(
+                                        color: Colors.white70,
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 20),
-
                   if (detailError.isNotEmpty) ...[
                     Container(
                       width: double.infinity,
@@ -562,7 +1027,6 @@ class _DetailPageState extends State<DetailPage> {
                     ),
                     const SizedBox(height: 16),
                   ],
-
                   Container(
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
@@ -578,7 +1042,7 @@ class _DetailPageState extends State<DetailPage> {
                           children: [
                             Expanded(
                               child: Text(
-                                widget.coin,
+                                selectedCoin.name,
                                 style: const TextStyle(
                                   color: Colors.white,
                                   fontSize: 22,
@@ -587,14 +1051,26 @@ class _DetailPageState extends State<DetailPage> {
                               ),
                             ),
                             Text(
-                              changeText,
+                              selectedCoin.changeText,
                               style: TextStyle(
-                                color: getChangeColor(changeText),
+                                color: getChangeColor(selectedCoin.changePercent),
                                 fontSize: 20,
                                 fontWeight: FontWeight.bold,
                               ),
                             ),
                           ],
+                        ),
+                        const SizedBox(height: 8),
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: Text(
+                            'Short skoru: ${selectedCoin.score} • ${selectedCoin.biasLabel}',
+                            style: const TextStyle(
+                              color: Colors.orangeAccent,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
                         ),
                         const SizedBox(height: 14),
                         Container(
@@ -606,10 +1082,10 @@ class _DetailPageState extends State<DetailPage> {
                           child: Row(
                             children: [
                               Expanded(
-                                flex: isNegative ? 65 : 35,
+                                flex: greenFlex,
                                 child: Container(
                                   decoration: BoxDecoration(
-                                    color: Colors.green.withOpacity(0.7),
+                                    color: Colors.green.withOpacity(0.65),
                                     borderRadius: const BorderRadius.only(
                                       topLeft: Radius.circular(10),
                                       bottomLeft: Radius.circular(10),
@@ -618,7 +1094,7 @@ class _DetailPageState extends State<DetailPage> {
                                 ),
                               ),
                               Expanded(
-                                flex: isNegative ? 35 : 65,
+                                flex: redFlex,
                                 child: Container(
                                   decoration: BoxDecoration(
                                     color: Colors.redAccent.withOpacity(0.85),
@@ -632,35 +1108,50 @@ class _DetailPageState extends State<DetailPage> {
                             ],
                           ),
                         ),
+                        const SizedBox(height: 10),
+                        Text(
+                          selectedCoin.note,
+                          style: const TextStyle(
+                            color: Colors.white70,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
                       ],
                     ),
                   ),
-
                   const SizedBox(height: 20),
-
                   GridView.count(
                     crossAxisCount: 2,
                     crossAxisSpacing: 12,
                     mainAxisSpacing: 12,
                     shrinkWrap: true,
                     physics: const NeverScrollableScrollPhysics(),
-                    childAspectRatio: 1.55,
+                    childAspectRatio: 1.45,
                     children: [
-                      metricBox('Son fiyat', lastPrice),
-                      metricBox('Mark price', markPrice),
-                      metricBox('Index price', indexPrice),
+                      metricBox('Son fiyat', selectedCoin.lastPriceText),
+                      metricBox('Mark price', selectedCoin.markPriceText),
+                      metricBox('Index price', selectedCoin.indexPriceText),
                       metricBox(
                         'Funding rate',
-                        fundingRate,
-                        valueColor: fundingRate.startsWith('-')
+                        selectedCoin.fundingText,
+                        valueColor: selectedCoin.fundingRate < 0
                             ? Colors.redAccent
                             : Colors.orangeAccent,
                       ),
+                      metricBox(
+                        'Short skoru',
+                        '${selectedCoin.score}',
+                        valueColor: Colors.orangeAccent,
+                      ),
+                      metricBox(
+                        'Mark-Index farkı',
+                        _formatPercent(selectedCoin.divergencePercent, digits: 3),
+                        valueColor: Colors.cyanAccent,
+                      ),
                     ],
                   ),
-
                   const SizedBox(height: 20),
-
                   Container(
                     height: 190,
                     decoration: BoxDecoration(
@@ -671,18 +1162,22 @@ class _DetailPageState extends State<DetailPage> {
                       ),
                     ),
                     child: CustomPaint(
-                      painter: ChartPainter(),
-                      child: const Center(
+                      painter: ChartPainter(
+                        isBullish: selectedCoin.changePercent >= 0,
+                      ),
+                      child: Center(
                         child: Text(
-                          "24H",
-                          style: TextStyle(color: Colors.white54, fontSize: 16),
+                          selectedCoin.biasLabel,
+                          style: const TextStyle(
+                            color: Colors.white54,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                          ),
                         ),
                       ),
                     ),
                   ),
-
                   const SizedBox(height: 20),
-
                   Container(
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
@@ -695,7 +1190,7 @@ class _DetailPageState extends State<DetailPage> {
                     child: Column(
                       children: [
                         const Text(
-                          "CANLI DETAY EKRANI",
+                          'CANLI DETAY EKRANI',
                           style: TextStyle(
                             color: Colors.orangeAccent,
                             fontWeight: FontWeight.bold,
@@ -704,7 +1199,7 @@ class _DetailPageState extends State<DetailPage> {
                         ),
                         const SizedBox(height: 10),
                         Text(
-                          "${widget.coin} için son fiyat, değişim, funding, mark ve index verileri canlı güncelleniyor.",
+                          '${selectedCoin.name} için son fiyat, funding, mark-index farkı ve short skoru canlı güncelleniyor.',
                           textAlign: TextAlign.center,
                           style: const TextStyle(
                             color: Colors.white70,
@@ -726,6 +1221,10 @@ class _DetailPageState extends State<DetailPage> {
 }
 
 class ChartPainter extends CustomPainter {
+  final bool isBullish;
+
+  ChartPainter({required this.isBullish});
+
   @override
   void paint(Canvas canvas, Size size) {
     final gridPaint = Paint()
@@ -739,32 +1238,47 @@ class ChartPainter extends CustomPainter {
       canvas.drawLine(Offset(0, i), Offset(size.width, i), gridPaint);
     }
 
+    final Color mainColor = isBullish ? Colors.redAccent : Colors.greenAccent;
+    final Color glowColor = isBullish ? Colors.orangeAccent : Colors.greenAccent;
+
     final linePaint = Paint()
-      ..color = Colors.redAccent
+      ..color = mainColor
       ..strokeWidth = 3
       ..style = PaintingStyle.stroke;
 
     final glowPaint = Paint()
-      ..color = Colors.orangeAccent.withOpacity(0.35)
+      ..color = glowColor.withOpacity(0.35)
       ..strokeWidth = 8
       ..style = PaintingStyle.stroke
       ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8);
 
     final path = Path();
-    path.moveTo(0, size.height * 0.20);
-    path.lineTo(size.width * 0.10, size.height * 0.24);
-    path.lineTo(size.width * 0.18, size.height * 0.30);
-    path.lineTo(size.width * 0.28, size.height * 0.34);
-    path.lineTo(size.width * 0.38, size.height * 0.46);
-    path.lineTo(size.width * 0.50, size.height * 0.52);
-    path.lineTo(size.width * 0.63, size.height * 0.60);
-    path.lineTo(size.width * 0.75, size.height * 0.67);
-    path.lineTo(size.width, size.height * 0.88);
+
+    if (isBullish) {
+      path.moveTo(0, size.height * 0.18);
+      path.lineTo(size.width * 0.10, size.height * 0.23);
+      path.lineTo(size.width * 0.20, size.height * 0.29);
+      path.lineTo(size.width * 0.32, size.height * 0.38);
+      path.lineTo(size.width * 0.46, size.height * 0.48);
+      path.lineTo(size.width * 0.60, size.height * 0.57);
+      path.lineTo(size.width * 0.76, size.height * 0.70);
+      path.lineTo(size.width, size.height * 0.86);
+    } else {
+      path.moveTo(0, size.height * 0.82);
+      path.lineTo(size.width * 0.12, size.height * 0.74);
+      path.lineTo(size.width * 0.24, size.height * 0.66);
+      path.lineTo(size.width * 0.40, size.height * 0.56);
+      path.lineTo(size.width * 0.58, size.height * 0.41);
+      path.lineTo(size.width * 0.74, size.height * 0.29);
+      path.lineTo(size.width, size.height * 0.16);
+    }
 
     canvas.drawPath(path, glowPaint);
     canvas.drawPath(path, linePaint);
   }
 
   @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+  bool shouldRepaint(covariant ChartPainter oldDelegate) {
+    return oldDelegate.isBullish != isBullish;
+  }
 }
