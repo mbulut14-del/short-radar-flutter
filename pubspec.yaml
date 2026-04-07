@@ -1,5 +1,5 @@
-name: short_radar_flutter
-description: Short Radar Flutter
+name: short_radar
+description: Short Radar Pro
 publish_to: 'none'
 
 version: 1.0.0+1
@@ -15,6 +15,7 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^3.0.0
+  flutter_launcher_icons: ^0.13.1
 
 flutter:
   uses-material-design: true
@@ -22,3 +23,9 @@ flutter:
     - assets/bg.png
     - assets/hero.png
     - assets/list.png
+
+flutter_icons:
+  android: true
+  image_path: assets/hero.png
+  adaptive_icon_background: "#000000"
+  adaptive_icon_foreground: assets/hero.png
