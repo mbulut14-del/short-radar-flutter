@@ -5,31 +5,46 @@ on:
     branches:
       - restore-201f7ac
       - main
+  workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Repo cek
+        uses: actions/checkout@v4
 
-      - uses: actions/setup-java@v4
+      - name: Java kur
+        uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
 
-      - uses: subosito/flutter-action@v2
+      - name: Flutter kur
+        uses: subosito/flutter-action@v2
         with:
           flutter-version: '3.24.0'
 
-      - run: flutter pub get
+      - name: Paketleri yukle
+        run: flutter pub get
 
-      - run: |
-             flutter create . --project-name short_radar_flutter
+      - name: Android proje olustur
+        run: flutter create . --project-name short_radar_flutter --platforms=android
 
-      - run: flutter build apk --release
+      - name: Uygulama adini degistir
+        run: |
+          cat > android/app/src/main/res/values/strings.xml << 'EOF'
+          <resources>
+              <string name="app_name">Short Radar Pro</string>
+          </resources>
+          EOF
 
-      - uses: actions/upload-artifact@v4
+      - name: APK build
+        run: flutter build apk --release
+
+      - name: APK upload
+        uses: actions/upload-artifact@v4
         with:
           name: apk
           path: build/app/outputs/flutter-apk/app-release.apk
