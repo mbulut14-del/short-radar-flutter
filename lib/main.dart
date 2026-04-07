@@ -27,7 +27,7 @@ class ShortRadarApp extends StatelessWidget {
 }
 
 class GateFuturesService {
-  static const String _base = 'https://api.gateeu.com/api/v4';
+  static const String _base = 'https://api.gateio.ws/api/v4';
 
   Future<List<ShortCandidate>> fetchTopShortCandidates() async {
     final tickersUri = Uri.parse('$_base/futures/usdt/tickers');
