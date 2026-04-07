@@ -325,7 +325,7 @@ class _HomePageState extends State<HomePage> {
   }
 }
 
-class DetailPage extends StatelessWidget {
+class DetailPage extends StatefulWidget {
   final String coin;
   final String change;
 
@@ -336,7 +336,150 @@ class DetailPage extends StatelessWidget {
   });
 
   @override
+  State<DetailPage> createState() => _DetailPageState();
+}
+
+class _DetailPageState extends State<DetailPage> {
+  Timer? _detailTimer;
+  bool detailLoading = true;
+  String detailError = '';
+
+  String lastPrice = '-';
+  String markPrice = '-';
+  String indexPrice = '-';
+  String fundingRate = '-';
+  String changeText = '-';
+
+  @override
+  void initState() {
+    super.initState();
+    changeText = widget.change;
+    fetchDetail();
+
+    _detailTimer = Timer.periodic(const Duration(seconds: 5), (timer) {
+      if (mounted) {
+        fetchDetail();
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _detailTimer?.cancel();
+    super.dispose();
+  }
+
+  Future<void> fetchDetail() async {
+    setState(() {
+      detailLoading = true;
+      detailError = '';
+    });
+
+    try {
+      final response = await http.get(
+        Uri.parse('https://fx-api.gateio.ws/api/v4/futures/usdt/tickers'),
+        headers: {'Accept': 'application/json'},
+      );
+
+      if (response.statusCode != 200) {
+        setState(() {
+          detailLoading = false;
+          detailError = 'Detay verisi alınamadı';
+        });
+        return;
+      }
+
+      final List<dynamic> parsed = json.decode(response.body);
+
+      final dynamic item = parsed.cast<Map<String, dynamic>?>().firstWhere(
+            (e) => (e?['contract'] ?? '').toString() == widget.coin,
+            orElse: () => null,
+          );
+
+      if (item == null) {
+        setState(() {
+          detailLoading = false;
+          detailError = 'Coin detayı bulunamadı';
+        });
+        return;
+      }
+
+      String formatNum(dynamic value, {int digits = 6}) {
+        final d = double.tryParse((value ?? '').toString());
+        if (d == null) return '-';
+        return d.toStringAsFixed(digits);
+      }
+
+      String formatPercent(dynamic value) {
+        final d = double.tryParse((value ?? '').toString());
+        if (d == null) return '-';
+        return '${d >= 0 ? '+' : ''}${d.toStringAsFixed(2)}%';
+      }
+
+      String formatFunding(dynamic value) {
+        final d = double.tryParse((value ?? '').toString());
+        if (d == null) return '-';
+        return '${d >= 0 ? '+' : ''}${d.toStringAsFixed(6)}';
+      }
+
+      setState(() {
+        lastPrice = formatNum(item['last'], digits: 6);
+        markPrice = formatNum(item['mark_price'], digits: 6);
+        indexPrice = formatNum(item['index_price'], digits: 6);
+        fundingRate = formatFunding(item['funding_rate']);
+        changeText = formatPercent(item['change_percentage']);
+        detailLoading = false;
+        detailError = '';
+      });
+    } catch (_) {
+      setState(() {
+        detailLoading = false;
+        detailError = 'Detay verisi alınamadı';
+      });
+    }
+  }
+
+  Color getChangeColor(String value) {
+    return value.startsWith('-') ? Colors.redAccent : const Color(0xFF3CFFB2);
+  }
+
+  Widget metricBox(String title, String value, {Color? valueColor}) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.black.withOpacity(0.30),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.white.withOpacity(0.12)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: const TextStyle(
+              color: Colors.white70,
+              fontSize: 13,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            value,
+            style: TextStyle(
+              color: valueColor ?? Colors.white,
+              fontSize: 18,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final bool isNegative = changeText.startsWith('-');
+
     return Scaffold(
       body: Stack(
         children: [
@@ -357,6 +500,32 @@ class DetailPage extends StatelessWidget {
                         icon: const Icon(Icons.arrow_back, color: Colors.white),
                         onPressed: () => Navigator.pop(context),
                       ),
+                      const Spacer(),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 6,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withOpacity(0.55),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: detailLoading
+                                ? Colors.orangeAccent
+                                : Colors.greenAccent,
+                          ),
+                        ),
+                        child: Text(
+                          detailLoading ? 'Yükleniyor' : 'Canlı Detay',
+                          style: TextStyle(
+                            color: detailLoading
+                                ? Colors.orangeAccent
+                                : Colors.greenAccent,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
                     ],
                   ),
                   const SizedBox(height: 8),
@@ -369,6 +538,31 @@ class DetailPage extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 20),
+
+                  if (detailError.isNotEmpty) ...[
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.red.withOpacity(0.18),
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(
+                          color: Colors.redAccent.withOpacity(0.5),
+                        ),
+                      ),
+                      child: Text(
+                        detailError,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
+
                   Container(
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
@@ -381,23 +575,28 @@ class DetailPage extends StatelessWidget {
                     child: Column(
                       children: [
                         Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: const [
-                            Text(
-                              "Long / Short",
-                              style: TextStyle(color: Colors.white, fontSize: 18),
+                          children: [
+                            Expanded(
+                              child: Text(
+                                widget.coin,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 22,
+                                  fontWeight: FontWeight.w900,
+                                ),
+                              ),
                             ),
                             Text(
-                              "73%",
+                              changeText,
                               style: TextStyle(
-                                color: Colors.redAccent,
-                                fontSize: 18,
+                                color: getChangeColor(changeText),
+                                fontSize: 20,
                                 fontWeight: FontWeight.bold,
                               ),
                             ),
                           ],
                         ),
-                        const SizedBox(height: 10),
+                        const SizedBox(height: 14),
                         Container(
                           height: 14,
                           decoration: BoxDecoration(
@@ -407,7 +606,7 @@ class DetailPage extends StatelessWidget {
                           child: Row(
                             children: [
                               Expanded(
-                                flex: 27,
+                                flex: isNegative ? 65 : 35,
                                 child: Container(
                                   decoration: BoxDecoration(
                                     color: Colors.green.withOpacity(0.7),
@@ -419,7 +618,7 @@ class DetailPage extends StatelessWidget {
                                 ),
                               ),
                               Expanded(
-                                flex: 73,
+                                flex: isNegative ? 35 : 65,
                                 child: Container(
                                   decoration: BoxDecoration(
                                     color: Colors.redAccent.withOpacity(0.85),
@@ -436,7 +635,32 @@ class DetailPage extends StatelessWidget {
                       ],
                     ),
                   ),
+
                   const SizedBox(height: 20),
+
+                  GridView.count(
+                    crossAxisCount: 2,
+                    crossAxisSpacing: 12,
+                    mainAxisSpacing: 12,
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    childAspectRatio: 1.55,
+                    children: [
+                      metricBox('Son fiyat', lastPrice),
+                      metricBox('Mark price', markPrice),
+                      metricBox('Index price', indexPrice),
+                      metricBox(
+                        'Funding rate',
+                        fundingRate,
+                        valueColor: fundingRate.startsWith('-')
+                            ? Colors.redAccent
+                            : Colors.orangeAccent,
+                      ),
+                    ],
+                  ),
+
+                  const SizedBox(height: 20),
+
                   Container(
                     height: 190,
                     decoration: BoxDecoration(
@@ -456,7 +680,9 @@ class DetailPage extends StatelessWidget {
                       ),
                     ),
                   ),
+
                   const SizedBox(height: 20),
+
                   Container(
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
@@ -469,7 +695,7 @@ class DetailPage extends StatelessWidget {
                     child: Column(
                       children: [
                         const Text(
-                          "SHORT İÇİN GÜÇLÜ SİNYAL!",
+                          "CANLI DETAY EKRANI",
                           style: TextStyle(
                             color: Colors.orangeAccent,
                             fontWeight: FontWeight.bold,
@@ -478,7 +704,7 @@ class DetailPage extends StatelessWidget {
                         ),
                         const SizedBox(height: 10),
                         Text(
-                          "$coin için canlı değişim verisi: $change",
+                          "${widget.coin} için son fiyat, değişim, funding, mark ve index verileri canlı güncelleniyor.",
                           textAlign: TextAlign.center,
                           style: const TextStyle(
                             color: Colors.white70,
