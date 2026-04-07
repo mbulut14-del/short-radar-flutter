@@ -32,17 +32,28 @@ jobs:
       - name: Android proje olustur
         run: flutter create . --project-name short_radar_flutter --platforms=android
 
-      - run: ls android
-      - run: find android -maxdepth 4 -type f
+      - name: Android dosyalarini listele
+        run: find android -maxdepth 4 -type f
 
-      - name: Uygulama adini degistir
+      - name: Uygulama adini ve internet iznini ekle
         run: |
           python3 - << 'PY'
           from pathlib import Path
 
           manifest = Path("android/app/src/main/AndroidManifest.xml")
           text = manifest.read_text(encoding="utf-8")
-          text = text.replace('android:label="short_radar_flutter"', 'android:label="Short Radar Pro"')
+
+          if 'android.permission.INTERNET' not in text:
+              text = text.replace(
+                  '<application',
+                  '<uses-permission android:name="android.permission.INTERNET"/>\n    <application'
+              )
+
+          text = text.replace(
+              'android:label="short_radar_flutter"',
+              'android:label="Short Radar Pro"'
+          )
+
           manifest.write_text(text, encoding="utf-8")
           PY
 
