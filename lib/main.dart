@@ -55,9 +55,8 @@ class _HomePageState extends State<HomePage> {
     });
 
     final urls = [
-      'https://api.gateio.ws/api/v4/futures/usdt/tickers',
-      'https://api.allorigins.win/raw?url=https://api.gateio.ws/api/v4/futures/usdt/tickers',
-    ];
+     'https://api.allorigins.win/raw?url=https://fx-api.gateio.ws/api/v4/futures/usdt/tickers',
+]; 
 
     try {
       List<dynamic>? data;
