@@ -2,7 +2,8 @@ name: Build APK
 
 on:
   push:
-    branches: [ "main" ]
+    branches:
+      - main
   workflow_dispatch:
 
 jobs:
@@ -16,29 +17,35 @@ jobs:
       - name: Flutter kur
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.22.0'
+          flutter-version: "3.22.0"
 
       - name: Temiz proje olustur
         run: flutter create temp_app
 
-      - name: Dosyalari kopyala
+      - name: Kullanici dosyalarini kopyala
         run: |
           rm -rf temp_app/lib
           cp -r lib temp_app/lib
 
           rm -rf temp_app/assets
-          if [ -d assets ]; then cp -r assets temp_app/assets; fi
+          cp -r assets temp_app/assets
 
           cp pubspec.yaml temp_app/pubspec.yaml
 
-      - name: Build al
+      - name: Uygulama adi ve logo ayarla
         run: |
           cd temp_app
           flutter pub get
+          dart run flutter_launcher_icons
+          perl -0pi -e 's/android:label="[^"]*"/android:label="Short Radar Pro"/g' android/app/src/main/AndroidManifest.xml
+
+      - name: APK build
+        run: |
+          cd temp_app
           flutter build apk --release
 
       - name: APK upload
         uses: actions/upload-artifact@v4
         with:
-          name: app-release
+          name: short-radar-pro-apk
           path: temp_app/build/app/outputs/flutter-apk/app-release.apk
