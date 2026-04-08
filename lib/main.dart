@@ -8,8 +8,9 @@ void main() {
   runApp(const MyApp());
 }
 
-const _gateIoTickersUrl = 'https://fx-api.gateio.ws/api/v4/futures/usdt/tickers';
-const _jsonHeader = {'Accept': 'application/json'};
+const String _gateIoTickersUrl =
+    'https://fx-api.gateio.ws/api/v4/futures/usdt/tickers';
+const Map<String, String> _jsonHeader = {'Accept': 'application/json'};
 
 double _parseDouble(dynamic value) {
   if (value == null) return 0.0;
@@ -31,7 +32,10 @@ String _formatFunding(double value) {
 }
 
 Future<List<CoinRadarData>> _fetchAllCoins() async {
-  final response = await http.get(Uri.parse(_gateIoTickersUrl), headers: _jsonHeader);
+  final response = await http.get(
+    Uri.parse(_gateIoTickersUrl),
+    headers: _jsonHeader,
+  );
 
   if (response.statusCode != 200) {
     throw Exception('API error');
@@ -88,7 +92,9 @@ Widget _errorBox(String text) {
     decoration: BoxDecoration(
       color: Colors.red.withOpacity(0.18),
       borderRadius: BorderRadius.circular(14),
-      border: Border.all(color: Colors.redAccent.withOpacity(0.5)),
+      border: Border.all(
+        color: Colors.redAccent.withOpacity(0.5),
+      ),
     ),
     child: Text(
       text,
@@ -170,7 +176,9 @@ class CoinRadarData {
     final lastPrice = _parseDouble(json['last']);
     final markPrice = _parseDouble(json['mark_price']);
     final indexPrice = _parseDouble(json['index_price']);
-    final volume24h = _parseDouble(json['volume_24h_quote'] ?? json['volume_24h'] ?? 0);
+    final volume24h = _parseDouble(
+      json['volume_24h_quote'] ?? json['volume_24h'] ?? 0,
+    );
 
     final score = _calculateScore(
       changePercent: changePercent,
@@ -190,7 +198,13 @@ class CoinRadarData {
       volume24h: volume24h,
       score: score,
       biasLabel: _biasLabel(score),
-      note: _noteText(score, changePercent, fundingRate, markPrice, indexPrice),
+      note: _noteText(
+        score,
+        changePercent,
+        fundingRate,
+        markPrice,
+        indexPrice,
+      ),
     );
   }
 
@@ -216,7 +230,8 @@ class CoinRadarData {
     }
 
     if (indexPrice != 0) {
-      final divergence = ((markPrice - indexPrice) / indexPrice).abs() * 100;
+      final divergence =
+          ((markPrice - indexPrice) / indexPrice).abs() * 100;
       score += math.min(divergence * 22, 14);
     }
 
@@ -246,15 +261,28 @@ class CoinRadarData {
     double markPrice,
     double indexPrice,
   ) {
-    final divergence =
-        indexPrice == 0 ? 0 : ((markPrice - indexPrice) / indexPrice).abs() * 100;
+    final divergence = indexPrice == 0
+        ? 0
+        : ((markPrice - indexPrice) / indexPrice).abs() * 100;
 
-    if (score >= 75) return 'Pump güçlü, funding şişmiş. Sert short takibi.';
-    if (score >= 60) return 'Yükseliş ve funding birlikte ısınıyor.';
-    if (score >= 45) return 'İzlenebilir short baskısı oluşuyor.';
-    if (changePercent < 0) return 'Zaten zayıflamış, short avantajı düşebilir.';
-    if (divergence > 0.20) return 'Fiyat farkı var, volatilite yükselebilir.';
-    if (fundingRate > 0) return 'Funding pozitif ama sinyal orta güçte.';
+    if (score >= 75) {
+      return 'Pump güçlü, funding şişmiş. Sert short takibi.';
+    }
+    if (score >= 60) {
+      return 'Yükseliş ve funding birlikte ısınıyor.';
+    }
+    if (score >= 45) {
+      return 'İzlenebilir short baskısı oluşuyor.';
+    }
+    if (changePercent < 0) {
+      return 'Zaten zayıflamış, short avantajı düşebilir.';
+    }
+    if (divergence > 0.20) {
+      return 'Fiyat farkı var, volatilite yükselebilir.';
+    }
+    if (fundingRate > 0) {
+      return 'Funding pozitif ama sinyal orta güçte.';
+    }
     return 'Şimdilik net short baskısı zayıf.';
   }
 
@@ -314,27 +342,45 @@ class _SplashScreenState extends State<SplashScreen>
       duration: const Duration(milliseconds: 1100),
     );
 
-    _textOpacity = CurvedAnimation(parent: _textController, curve: Curves.easeOut);
+    _textOpacity = CurvedAnimation(
+      parent: _textController,
+      curve: Curves.easeOut,
+    );
 
     _textSlide = Tween<Offset>(
       begin: const Offset(0, 0.12),
       end: Offset.zero,
     ).animate(
-      CurvedAnimation(parent: _textController, curve: Curves.easeOutCubic),
+      CurvedAnimation(
+        parent: _textController,
+        curve: Curves.easeOutCubic,
+      ),
     );
 
-    _logoOpacity = CurvedAnimation(parent: _logoController, curve: Curves.easeOut);
+    _logoOpacity = CurvedAnimation(
+      parent: _logoController,
+      curve: Curves.easeOut,
+    );
 
     _logoScale = Tween<double>(begin: 0.86, end: 1.0).animate(
-      CurvedAnimation(parent: _logoController, curve: Curves.easeOutBack),
+      CurvedAnimation(
+        parent: _logoController,
+        curve: Curves.easeOutBack,
+      ),
     );
 
     _logoGlow = Tween<double>(begin: 0.45, end: 1.0).animate(
-      CurvedAnimation(parent: _logoController, curve: Curves.easeOut),
+      CurvedAnimation(
+        parent: _logoController,
+        curve: Curves.easeOut,
+      ),
     );
 
     _logoTranslateY = Tween<double>(begin: -180, end: 0).animate(
-      CurvedAnimation(parent: _logoController, curve: Curves.easeOutCubic),
+      CurvedAnimation(
+        parent: _logoController,
+        curve: Curves.easeOutCubic,
+      ),
     );
 
     _startSplashFlow();
@@ -358,7 +404,10 @@ class _SplashScreenState extends State<SplashScreen>
         pageBuilder: (_, __, ___) => const HomePage(),
         transitionsBuilder: (_, animation, __, child) {
           return FadeTransition(
-            opacity: CurvedAnimation(parent: animation, curve: Curves.easeOut),
+            opacity: CurvedAnimation(
+              parent: animation,
+              curve: Curves.easeOut,
+            ),
             child: child,
           );
         },
@@ -381,7 +430,11 @@ class _SplashScreenState extends State<SplashScreen>
         child: ShaderMask(
           shaderCallback: (bounds) {
             return const LinearGradient(
-              colors: [Colors.white, Color(0xFFEDEDED), Color(0xFFFFB300)],
+              colors: [
+                Colors.white,
+                Color(0xFFEDEDED),
+                Color(0xFFFFB300),
+              ],
             ).createShader(bounds);
           },
           child: const Text(
@@ -416,12 +469,16 @@ class _SplashScreenState extends State<SplashScreen>
                   shape: BoxShape.circle,
                   boxShadow: [
                     BoxShadow(
-                      color: const Color(0xFF7B2CFF).withOpacity(0.22 * _logoGlow.value),
+                      color: const Color(0xFF7B2CFF).withOpacity(
+                        0.22 * _logoGlow.value,
+                      ),
                       blurRadius: 38,
                       spreadRadius: 5,
                     ),
                     BoxShadow(
-                      color: const Color(0xFFFF2E63).withOpacity(0.20 * _logoGlow.value),
+                      color: const Color(0xFFFF2E63).withOpacity(
+                        0.20 * _logoGlow.value,
+                      ),
                       blurRadius: 48,
                       spreadRadius: 3,
                     ),
@@ -433,7 +490,10 @@ class _SplashScreenState extends State<SplashScreen>
           ),
         );
       },
-      child: Image.asset('assets/logo.png', fit: BoxFit.contain),
+      child: Image.asset(
+        'assets/logo.png',
+        fit: BoxFit.contain,
+      ),
     );
   }
 
@@ -469,7 +529,11 @@ class _SplashScreenState extends State<SplashScreen>
           gradient: RadialGradient(
             center: Alignment(0, -0.18),
             radius: 1.15,
-            colors: [Color(0xFF0B0B13), Color(0xFF050507), Colors.black],
+            colors: [
+              Color(0xFF0B0B13),
+              Color(0xFF050507),
+              Colors.black,
+            ],
           ),
         ),
         child: Stack(
@@ -477,7 +541,10 @@ class _SplashScreenState extends State<SplashScreen>
             Positioned(
               top: -80,
               left: -50,
-              child: _glowCircle(size: 220, color: const Color(0xFF243CFF)),
+              child: _glowCircle(
+                size: 220,
+                color: const Color(0xFF243CFF),
+              ),
             ),
             Positioned(
               right: -70,
@@ -541,8 +608,11 @@ class _HomePageState extends State<HomePage> {
     super.initState();
     radarLeader = coins.first;
     fetchCoins();
+
     _refreshTimer = Timer.periodic(const Duration(seconds: 5), (_) {
-      if (mounted) fetchCoins();
+      if (mounted) {
+        fetchCoins();
+      }
     });
   }
 
@@ -619,7 +689,9 @@ class _HomePageState extends State<HomePage> {
 
   Widget _buildRadarHero() {
     final leader = radarLeader;
-    if (leader == null) return const SizedBox(height: 150);
+    if (leader == null) {
+      return const SizedBox(height: 150);
+    }
 
     final scoreColor = _scoreColor(leader.score);
 
@@ -627,7 +699,11 @@ class _HomePageState extends State<HomePage> {
       height: 150,
       child: Stack(
         children: [
-          Positioned(top: 0, right: 0, child: _liveBadge(isLoading)),
+          Positioned(
+            top: 0,
+            right: 0,
+            child: _liveBadge(isLoading),
+          ),
           Positioned(
             left: 0,
             right: 0,
@@ -742,9 +818,16 @@ class _HomePageState extends State<HomePage> {
             gradient: const LinearGradient(
               begin: Alignment.centerLeft,
               end: Alignment.centerRight,
-              colors: [Color(0xFF07122A), Color(0xFF091933), Color(0xFF07122A)],
+              colors: [
+                Color(0xFF07122A),
+                Color(0xFF091933),
+                Color(0xFF07122A),
+              ],
             ),
-            border: Border.all(color: const Color(0xFF3EA6FF), width: 1.4),
+            border: Border.all(
+              color: const Color(0xFF3EA6FF),
+              width: 1.4,
+            ),
             boxShadow: const [
               BoxShadow(
                 color: Color(0x663EA6FF),
@@ -769,7 +852,10 @@ class _HomePageState extends State<HomePage> {
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
                     color: const Color(0xFF123D9B),
-                    border: Border.all(color: const Color(0xFF5AA8FF), width: 1.6),
+                    border: Border.all(
+                      color: const Color(0xFF5AA8FF),
+                      width: 1.6,
+                    ),
                     boxShadow: const [
                       BoxShadow(
                         color: Color(0x663EA6FF),
@@ -840,7 +926,10 @@ class _HomePageState extends State<HomePage> {
       body: Stack(
         children: [
           Positioned.fill(
-            child: Image.asset('assets/bg.png', fit: BoxFit.cover),
+            child: Image.asset(
+              'assets/bg.png',
+              fit: BoxFit.cover,
+            ),
           ),
           SafeArea(
             child: RefreshIndicator(
@@ -859,7 +948,10 @@ class _HomePageState extends State<HomePage> {
                       ),
                       child: Row(
                         children: [
-                          const Icon(Icons.radar_rounded, color: Colors.orangeAccent),
+                          const Icon(
+                            Icons.radar_rounded,
+                            color: Colors.orangeAccent,
+                          ),
                           const SizedBox(width: 10),
                           Expanded(
                             child: Text(
@@ -923,7 +1015,9 @@ class _DetailPageState extends State<DetailPage> {
     fetchDetail();
 
     _detailTimer = Timer.periodic(const Duration(seconds: 5), (_) {
-      if (mounted) fetchDetail();
+      if (mounted) {
+        fetchDetail();
+      }
     });
   }
 
@@ -942,7 +1036,13 @@ class _DetailPageState extends State<DetailPage> {
     try {
       final allCoins = await _fetchAllCoins();
 
-      final detailItem = allCoins.where((coin) => coin.name == widget.coinData.name).firstOrNull;
+      CoinRadarData? detailItem;
+      for (final coin in allCoins) {
+        if (coin.name == widget.coinData.name) {
+          detailItem = coin;
+          break;
+        }
+      }
 
       if (detailItem == null) {
         setState(() {
@@ -960,7 +1060,7 @@ class _DetailPageState extends State<DetailPage> {
         });
 
       setState(() {
-        selectedCoin = detailItem;
+        selectedCoin = detailItem!;
         heroCoin = sortedByScore.first;
         detailLoading = false;
       });
@@ -1047,7 +1147,10 @@ class _DetailPageState extends State<DetailPage> {
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
                     color: Colors.black.withOpacity(0.55),
-                    border: Border.all(color: Colors.orangeAccent, width: 2.5),
+                    border: Border.all(
+                      color: Colors.orangeAccent,
+                      width: 2.5,
+                    ),
                   ),
                   child: Text(
                     '${heroCoin.score}',
@@ -1151,7 +1254,10 @@ class _DetailPageState extends State<DetailPage> {
       body: Stack(
         children: [
           Positioned.fill(
-            child: Image.asset('assets/bg.png', fit: BoxFit.cover),
+            child: Image.asset(
+              'assets/bg.png',
+              fit: BoxFit.cover,
+            ),
           ),
           SafeArea(
             child: SingleChildScrollView(
@@ -1256,7 +1362,10 @@ class _DetailPageState extends State<DetailPage> {
                       ),
                       metricBox(
                         'Mark-Index farkı',
-                        _formatPercent(selectedCoin.divergencePercent, digits: 3),
+                        _formatPercent(
+                          selectedCoin.divergencePercent,
+                          digits: 3,
+                        ),
                         valueColor: Colors.cyanAccent,
                       ),
                     ],
@@ -1289,7 +1398,9 @@ class _DetailPageState extends State<DetailPage> {
                     decoration: BoxDecoration(
                       color: Colors.red.withOpacity(0.15),
                       borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: Colors.redAccent.withOpacity(0.6)),
+                      border: Border.all(
+                        color: Colors.redAccent.withOpacity(0.6),
+                      ),
                     ),
                     child: Column(
                       children: [
@@ -1343,7 +1454,8 @@ class ChartPainter extends CustomPainter {
     }
 
     final mainColor = isBullish ? Colors.redAccent : Colors.greenAccent;
-    final glowColor = isBullish ? Colors.orangeAccent : Colors.greenAccent;
+    final glowColor =
+        isBullish ? Colors.orangeAccent : Colors.greenAccent;
 
     final linePaint = Paint()
       ..color = mainColor
@@ -1385,8 +1497,4 @@ class ChartPainter extends CustomPainter {
   bool shouldRepaint(covariant ChartPainter oldDelegate) {
     return oldDelegate.isBullish != isBullish;
   }
-}
-
-extension<T> on Iterable<T> {
-  T? get firstOrNull => isEmpty ? null : first;
 }
