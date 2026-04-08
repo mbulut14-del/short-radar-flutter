@@ -4,12 +4,9 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
-void main() {
-  runApp(const MyApp());
-}
+void main() => runApp(const MyApp());
 
-const String _gateIoTickersUrl =
-    'https://fx-api.gateio.ws/api/v4/futures/usdt/tickers';
+const String _tickersUrl = 'https://fx-api.gateio.ws/api/v4/futures/usdt/tickers';
 const Map<String, String> _jsonHeader = {'Accept': 'application/json'};
 
 double _parseDouble(dynamic value) {
@@ -17,32 +14,18 @@ double _parseDouble(dynamic value) {
   return double.tryParse(value.toString()) ?? 0.0;
 }
 
-String _formatPrice(double value, {int digits = 6}) {
-  if (value == 0) return '-';
-  return value.toStringAsFixed(digits);
-}
-
-String _formatPercent(double value, {int digits = 2}) {
-  return '${value >= 0 ? '+' : ''}${value.toStringAsFixed(digits)}%';
-}
-
+String _formatPrice(double value, {int digits = 6}) => value == 0 ? '-' : value.toStringAsFixed(digits);
+String _formatPercent(double value, {int digits = 2}) => '${value >= 0 ? '+' : ''}${value.toStringAsFixed(digits)}%';
 String _formatFunding(double value) {
   final percent = value * 100;
   return '${percent >= 0 ? '+' : ''}${percent.toStringAsFixed(4)}%';
 }
 
 Future<List<CoinRadarData>> _fetchAllCoins() async {
-  final response = await http.get(
-    Uri.parse(_gateIoTickersUrl),
-    headers: _jsonHeader,
-  );
-
-  if (response.statusCode != 200) {
-    throw Exception('API error');
-  }
+  final response = await http.get(Uri.parse(_tickersUrl), headers: _jsonHeader);
+  if (response.statusCode != 200) throw Exception('API error');
 
   final List<dynamic> parsed = json.decode(response.body);
-
   return parsed
       .whereType<Map<String, dynamic>>()
       .where((e) => (e['contract'] ?? '').toString().isNotEmpty)
@@ -66,7 +49,6 @@ BoxDecoration _glassBox({
 
 Widget _liveBadge(bool isLoading, {String readyText = 'Canlı Veri'}) {
   final color = isLoading ? Colors.orangeAccent : Colors.greenAccent;
-
   return Container(
     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
     decoration: BoxDecoration(
@@ -76,11 +58,7 @@ Widget _liveBadge(bool isLoading, {String readyText = 'Canlı Veri'}) {
     ),
     child: Text(
       isLoading ? 'Yükleniyor' : readyText,
-      style: TextStyle(
-        color: color,
-        fontSize: 12,
-        fontWeight: FontWeight.w700,
-      ),
+      style: TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.w700),
     ),
   );
 }
@@ -92,18 +70,12 @@ Widget _errorBox(String text) {
     decoration: BoxDecoration(
       color: Colors.red.withOpacity(0.18),
       borderRadius: BorderRadius.circular(14),
-      border: Border.all(
-        color: Colors.redAccent.withOpacity(0.5),
-      ),
+      border: Border.all(color: Colors.redAccent.withOpacity(0.5)),
     ),
     child: Text(
       text,
       textAlign: TextAlign.center,
-      style: const TextStyle(
-        color: Colors.white,
-        fontSize: 13,
-        fontWeight: FontWeight.w600,
-      ),
+      style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600),
     ),
   );
 }
@@ -115,21 +87,13 @@ Color _scoreColor(int score) {
   return Colors.greenAccent;
 }
 
-Color _changeColor(double value) {
-  return value < 0 ? Colors.redAccent : const Color(0xFF3CFFB2);
-}
+Color _changeColor(double value) => value < 0 ? Colors.redAccent : const Color(0xFF3CFFB2);
 
 class CoinRadarData {
   final String name;
-  final double changePercent;
-  final double fundingRate;
-  final double lastPrice;
-  final double markPrice;
-  final double indexPrice;
-  final double volume24h;
+  final double changePercent, fundingRate, lastPrice, markPrice, indexPrice, volume24h;
   final int score;
-  final String biasLabel;
-  final String note;
+  final String biasLabel, note;
 
   const CoinRadarData({
     required this.name,
@@ -144,10 +108,7 @@ class CoinRadarData {
     required this.note,
   });
 
-  factory CoinRadarData.seed({
-    required String name,
-    required double changePercent,
-  }) {
+  factory CoinRadarData.seed({required String name, required double changePercent}) {
     final score = _calculateScore(
       changePercent: changePercent,
       fundingRate: 0,
@@ -176,9 +137,7 @@ class CoinRadarData {
     final lastPrice = _parseDouble(json['last']);
     final markPrice = _parseDouble(json['mark_price']);
     final indexPrice = _parseDouble(json['index_price']);
-    final volume24h = _parseDouble(
-      json['volume_24h_quote'] ?? json['volume_24h'] ?? 0,
-    );
+    final volume24h = _parseDouble(json['volume_24h_quote'] ?? json['volume_24h'] ?? 0);
 
     final score = _calculateScore(
       changePercent: changePercent,
@@ -198,13 +157,7 @@ class CoinRadarData {
       volume24h: volume24h,
       score: score,
       biasLabel: _biasLabel(score),
-      note: _noteText(
-        score,
-        changePercent,
-        fundingRate,
-        markPrice,
-        indexPrice,
-      ),
+      note: _noteText(score, changePercent, fundingRate, markPrice, indexPrice),
     );
   }
 
@@ -230,16 +183,12 @@ class CoinRadarData {
     }
 
     if (indexPrice != 0) {
-      final divergence =
-          ((markPrice - indexPrice) / indexPrice).abs() * 100;
+      final divergence = ((markPrice - indexPrice) / indexPrice).abs() * 100;
       score += math.min(divergence * 22, 14);
     }
 
     if (volume24h > 0) {
-      final volumeBoost = math.max(
-        0,
-        math.min((math.log(volume24h + 1) - 10) * 2.2, 10),
-      );
+      final volumeBoost = math.max(0, math.min((math.log(volume24h + 1) - 10) * 2.2, 10));
       score += volumeBoost;
     }
 
@@ -254,35 +203,14 @@ class CoinRadarData {
     return 'Nötr';
   }
 
-  static String _noteText(
-    int score,
-    double changePercent,
-    double fundingRate,
-    double markPrice,
-    double indexPrice,
-  ) {
-    final divergence = indexPrice == 0
-        ? 0
-        : ((markPrice - indexPrice) / indexPrice).abs() * 100;
-
-    if (score >= 75) {
-      return 'Pump güçlü, funding şişmiş. Sert short takibi.';
-    }
-    if (score >= 60) {
-      return 'Yükseliş ve funding birlikte ısınıyor.';
-    }
-    if (score >= 45) {
-      return 'İzlenebilir short baskısı oluşuyor.';
-    }
-    if (changePercent < 0) {
-      return 'Zaten zayıflamış, short avantajı düşebilir.';
-    }
-    if (divergence > 0.20) {
-      return 'Fiyat farkı var, volatilite yükselebilir.';
-    }
-    if (fundingRate > 0) {
-      return 'Funding pozitif ama sinyal orta güçte.';
-    }
+  static String _noteText(int score, double changePercent, double fundingRate, double markPrice, double indexPrice) {
+    final divergence = indexPrice == 0 ? 0 : ((markPrice - indexPrice) / indexPrice).abs() * 100;
+    if (score >= 75) return 'Pump güçlü, funding şişmiş. Sert short takibi.';
+    if (score >= 60) return 'Yükseliş ve funding birlikte ısınıyor.';
+    if (score >= 45) return 'İzlenebilir short baskısı oluşuyor.';
+    if (changePercent < 0) return 'Zaten zayıflamış, short avantajı düşebilir.';
+    if (divergence > 0.20) return 'Fiyat farkı var, volatilite yükselebilir.';
+    if (fundingRate > 0) return 'Funding pozitif ama sinyal orta güçte.';
     return 'Şimdilik net short baskısı zayıf.';
   }
 
@@ -303,10 +231,7 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const MaterialApp(
-      debugShowCheckedModeBanner: false,
-      home: SplashScreen(),
-    );
+    return const MaterialApp(debugShowCheckedModeBanner: false, home: SplashScreen());
   }
 }
 
@@ -317,83 +242,40 @@ class SplashScreen extends StatefulWidget {
   State<SplashScreen> createState() => _SplashScreenState();
 }
 
-class _SplashScreenState extends State<SplashScreen>
-    with TickerProviderStateMixin {
+class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMixin {
   late final AnimationController _textController;
   late final AnimationController _logoController;
-  late final Animation<double> _textOpacity;
+  late final Animation<double> _textOpacity, _logoOpacity, _logoScale, _logoGlow, _logoTranslateY;
   late final Animation<Offset> _textSlide;
-  late final Animation<double> _logoOpacity;
-  late final Animation<double> _logoScale;
-  late final Animation<double> _logoGlow;
-  late final Animation<double> _logoTranslateY;
 
   @override
   void initState() {
     super.initState();
 
-    _textController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 650),
-    );
+    _textController = AnimationController(vsync: this, duration: const Duration(milliseconds: 650));
+    _logoController = AnimationController(vsync: this, duration: const Duration(milliseconds: 1100));
 
-    _logoController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1100),
-    );
+    _textOpacity = CurvedAnimation(parent: _textController, curve: Curves.easeOut);
+    _textSlide = Tween<Offset>(begin: const Offset(0, 0.12), end: Offset.zero)
+        .animate(CurvedAnimation(parent: _textController, curve: Curves.easeOutCubic));
 
-    _textOpacity = CurvedAnimation(
-      parent: _textController,
-      curve: Curves.easeOut,
-    );
-
-    _textSlide = Tween<Offset>(
-      begin: const Offset(0, 0.12),
-      end: Offset.zero,
-    ).animate(
-      CurvedAnimation(
-        parent: _textController,
-        curve: Curves.easeOutCubic,
-      ),
-    );
-
-    _logoOpacity = CurvedAnimation(
-      parent: _logoController,
-      curve: Curves.easeOut,
-    );
-
-    _logoScale = Tween<double>(begin: 0.86, end: 1.0).animate(
-      CurvedAnimation(
-        parent: _logoController,
-        curve: Curves.easeOutBack,
-      ),
-    );
-
-    _logoGlow = Tween<double>(begin: 0.45, end: 1.0).animate(
-      CurvedAnimation(
-        parent: _logoController,
-        curve: Curves.easeOut,
-      ),
-    );
-
-    _logoTranslateY = Tween<double>(begin: -180, end: 0).animate(
-      CurvedAnimation(
-        parent: _logoController,
-        curve: Curves.easeOutCubic,
-      ),
-    );
+    _logoOpacity = CurvedAnimation(parent: _logoController, curve: Curves.easeOut);
+    _logoScale = Tween<double>(begin: 0.86, end: 1.0)
+        .animate(CurvedAnimation(parent: _logoController, curve: Curves.easeOutBack));
+    _logoGlow = Tween<double>(begin: 0.45, end: 1.0)
+        .animate(CurvedAnimation(parent: _logoController, curve: Curves.easeOut));
+    _logoTranslateY = Tween<double>(begin: -180, end: 0)
+        .animate(CurvedAnimation(parent: _logoController, curve: Curves.easeOutCubic));
 
     _startSplashFlow();
   }
 
   Future<void> _startSplashFlow() async {
     _textController.forward();
-
     await Future.delayed(const Duration(milliseconds: 1200));
     if (!mounted) return;
 
     _logoController.forward();
-
     await Future.delayed(const Duration(milliseconds: 2400));
     if (!mounted) return;
 
@@ -404,10 +286,7 @@ class _SplashScreenState extends State<SplashScreen>
         pageBuilder: (_, __, ___) => const HomePage(),
         transitionsBuilder: (_, animation, __, child) {
           return FadeTransition(
-            opacity: CurvedAnimation(
-              parent: animation,
-              curve: Curves.easeOut,
-            ),
+            opacity: CurvedAnimation(parent: animation, curve: Curves.easeOut),
             child: child,
           );
         },
@@ -428,24 +307,13 @@ class _SplashScreenState extends State<SplashScreen>
       child: SlideTransition(
         position: _textSlide,
         child: ShaderMask(
-          shaderCallback: (bounds) {
-            return const LinearGradient(
-              colors: [
-                Colors.white,
-                Color(0xFFEDEDED),
-                Color(0xFFFFB300),
-              ],
-            ).createShader(bounds);
-          },
+          shaderCallback: (bounds) => const LinearGradient(
+            colors: [Colors.white, Color(0xFFEDEDED), Color(0xFFFFB300)],
+          ).createShader(bounds),
           child: const Text(
             'SHORT RADAR PRO',
             textAlign: TextAlign.center,
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 34,
-              fontWeight: FontWeight.w900,
-              letterSpacing: 1.1,
-            ),
+            style: TextStyle(color: Colors.white, fontSize: 34, fontWeight: FontWeight.w900, letterSpacing: 1.1),
           ),
         ),
       ),
@@ -469,16 +337,12 @@ class _SplashScreenState extends State<SplashScreen>
                   shape: BoxShape.circle,
                   boxShadow: [
                     BoxShadow(
-                      color: const Color(0xFF7B2CFF).withOpacity(
-                        0.22 * _logoGlow.value,
-                      ),
+                      color: const Color(0xFF7B2CFF).withOpacity(0.22 * _logoGlow.value),
                       blurRadius: 38,
                       spreadRadius: 5,
                     ),
                     BoxShadow(
-                      color: const Color(0xFFFF2E63).withOpacity(
-                        0.20 * _logoGlow.value,
-                      ),
+                      color: const Color(0xFFFF2E63).withOpacity(0.20 * _logoGlow.value),
                       blurRadius: 48,
                       spreadRadius: 3,
                     ),
@@ -490,10 +354,7 @@ class _SplashScreenState extends State<SplashScreen>
           ),
         );
       },
-      child: Image.asset(
-        'assets/logo.png',
-        fit: BoxFit.contain,
-      ),
+      child: Image.asset('assets/logo.png', fit: BoxFit.contain),
     );
   }
 
@@ -529,23 +390,12 @@ class _SplashScreenState extends State<SplashScreen>
           gradient: RadialGradient(
             center: Alignment(0, -0.18),
             radius: 1.15,
-            colors: [
-              Color(0xFF0B0B13),
-              Color(0xFF050507),
-              Colors.black,
-            ],
+            colors: [Color(0xFF0B0B13), Color(0xFF050507), Colors.black],
           ),
         ),
         child: Stack(
           children: [
-            Positioned(
-              top: -80,
-              left: -50,
-              child: _glowCircle(
-                size: 220,
-                color: const Color(0xFF243CFF),
-              ),
-            ),
+            Positioned(top: -80, left: -50, child: _glowCircle(size: 220, color: const Color(0xFF243CFF))),
             Positioned(
               right: -70,
               bottom: 120,
@@ -562,11 +412,7 @@ class _SplashScreenState extends State<SplashScreen>
                 padding: const EdgeInsets.symmetric(horizontal: 24),
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    _buildAnimatedLogo(),
-                    const SizedBox(height: 28),
-                    _buildSplashText(),
-                  ],
+                  children: [_buildAnimatedLogo(), const SizedBox(height: 28), _buildSplashText()],
                 ),
               ),
             ),
@@ -608,11 +454,8 @@ class _HomePageState extends State<HomePage> {
     super.initState();
     radarLeader = coins.first;
     fetchCoins();
-
     _refreshTimer = Timer.periodic(const Duration(seconds: 5), (_) {
-      if (mounted) {
-        fetchCoins();
-      }
+      if (mounted) fetchCoins();
     });
   }
 
@@ -630,7 +473,6 @@ class _HomePageState extends State<HomePage> {
 
     try {
       final allCoins = await _fetchAllCoins();
-
       if (allCoins.isEmpty) {
         setState(() {
           isLoading = false;
@@ -639,14 +481,11 @@ class _HomePageState extends State<HomePage> {
         return;
       }
 
-      final sortedByChange = [...allCoins]
-        ..sort((a, b) => b.changePercent.compareTo(a.changePercent));
-
+      final sortedByChange = [...allCoins]..sort((a, b) => b.changePercent.compareTo(a.changePercent));
       final sortedByScore = [...allCoins]
         ..sort((a, b) {
           final scoreCompare = b.score.compareTo(a.score);
-          if (scoreCompare != 0) return scoreCompare;
-          return b.changePercent.compareTo(a.changePercent);
+          return scoreCompare != 0 ? scoreCompare : b.changePercent.compareTo(a.changePercent);
         });
 
       setState(() {
@@ -668,19 +507,11 @@ class _HomePageState extends State<HomePage> {
         children: [
           TextSpan(
             text: '$title: ',
-            style: const TextStyle(
-              color: Colors.white60,
-              fontSize: 11,
-              fontWeight: FontWeight.w600,
-            ),
+            style: const TextStyle(color: Colors.white60, fontSize: 11, fontWeight: FontWeight.w600),
           ),
           TextSpan(
             text: value,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 11,
-              fontWeight: FontWeight.w800,
-            ),
+            style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w800),
           ),
         ],
       ),
@@ -689,9 +520,7 @@ class _HomePageState extends State<HomePage> {
 
   Widget _buildRadarHero() {
     final leader = radarLeader;
-    if (leader == null) {
-      return const SizedBox(height: 150);
-    }
+    if (leader == null) return const SizedBox(height: 150);
 
     final scoreColor = _scoreColor(leader.score);
 
@@ -699,11 +528,7 @@ class _HomePageState extends State<HomePage> {
       height: 150,
       child: Stack(
         children: [
-          Positioned(
-            top: 0,
-            right: 0,
-            child: _liveBadge(isLoading),
-          ),
+          Positioned(top: 0, right: 0, child: _liveBadge(isLoading)),
           Positioned(
             left: 0,
             right: 0,
@@ -714,13 +539,7 @@ class _HomePageState extends State<HomePage> {
                 borderColor: scoreColor.withOpacity(0.75),
                 radius: 24,
                 opacity: 0.55,
-                boxShadow: [
-                  BoxShadow(
-                    color: scoreColor.withOpacity(0.18),
-                    blurRadius: 18,
-                    spreadRadius: 1,
-                  ),
-                ],
+                boxShadow: [BoxShadow(color: scoreColor.withOpacity(0.18), blurRadius: 18, spreadRadius: 1)],
               ),
               child: Row(
                 children: [
@@ -732,21 +551,11 @@ class _HomePageState extends State<HomePage> {
                       shape: BoxShape.circle,
                       color: Colors.black.withOpacity(0.55),
                       border: Border.all(color: scoreColor, width: 3),
-                      boxShadow: [
-                        BoxShadow(
-                          color: scoreColor.withOpacity(0.35),
-                          blurRadius: 16,
-                          spreadRadius: 2,
-                        ),
-                      ],
+                      boxShadow: [BoxShadow(color: scoreColor.withOpacity(0.35), blurRadius: 16, spreadRadius: 2)],
                     ),
                     child: Text(
                       '${leader.score}',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 26,
-                        fontWeight: FontWeight.w900,
-                      ),
+                      style: const TextStyle(color: Colors.white, fontSize: 26, fontWeight: FontWeight.w900),
                     ),
                   ),
                   const SizedBox(width: 14),
@@ -756,22 +565,14 @@ class _HomePageState extends State<HomePage> {
                       children: [
                         Text(
                           'EN GÜÇLÜ SHORT ADAYI',
-                          style: TextStyle(
-                            color: scoreColor,
-                            fontSize: 12,
-                            fontWeight: FontWeight.w800,
-                          ),
+                          style: TextStyle(color: scoreColor, fontSize: 12, fontWeight: FontWeight.w800),
                         ),
                         const SizedBox(height: 4),
                         Text(
                           leader.name,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 20,
-                            fontWeight: FontWeight.w900,
-                          ),
+                          style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w900),
                         ),
                         const SizedBox(height: 8),
                         Wrap(
@@ -803,12 +604,7 @@ class _HomePageState extends State<HomePage> {
         onTap: () {
           Navigator.push(
             context,
-            MaterialPageRoute(
-              builder: (_) => DetailPage(
-                coinData: coin,
-                leaderData: radarLeader,
-              ),
-            ),
+            MaterialPageRoute(builder: (_) => DetailPage(coinData: coin, leaderData: radarLeader)),
           );
         },
         child: Container(
@@ -818,27 +614,12 @@ class _HomePageState extends State<HomePage> {
             gradient: const LinearGradient(
               begin: Alignment.centerLeft,
               end: Alignment.centerRight,
-              colors: [
-                Color(0xFF07122A),
-                Color(0xFF091933),
-                Color(0xFF07122A),
-              ],
+              colors: [Color(0xFF07122A), Color(0xFF091933), Color(0xFF07122A)],
             ),
-            border: Border.all(
-              color: const Color(0xFF3EA6FF),
-              width: 1.4,
-            ),
+            border: Border.all(color: const Color(0xFF3EA6FF), width: 1.4),
             boxShadow: const [
-              BoxShadow(
-                color: Color(0x663EA6FF),
-                blurRadius: 10,
-                spreadRadius: 1,
-              ),
-              BoxShadow(
-                color: Color(0x3300FFFF),
-                blurRadius: 18,
-                spreadRadius: 1,
-              ),
+              BoxShadow(color: Color(0x663EA6FF), blurRadius: 10, spreadRadius: 1),
+              BoxShadow(color: Color(0x3300FFFF), blurRadius: 18, spreadRadius: 1),
             ],
           ),
           child: Padding(
@@ -852,25 +633,12 @@ class _HomePageState extends State<HomePage> {
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
                     color: const Color(0xFF123D9B),
-                    border: Border.all(
-                      color: const Color(0xFF5AA8FF),
-                      width: 1.6,
-                    ),
-                    boxShadow: const [
-                      BoxShadow(
-                        color: Color(0x663EA6FF),
-                        blurRadius: 8,
-                        spreadRadius: 1,
-                      ),
-                    ],
+                    border: Border.all(color: const Color(0xFF5AA8FF), width: 1.6),
+                    boxShadow: const [BoxShadow(color: Color(0x663EA6FF), blurRadius: 8, spreadRadius: 1)],
                   ),
                   child: Text(
                     '$index',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 19,
-                      fontWeight: FontWeight.bold,
-                    ),
+                    style: const TextStyle(color: Colors.white, fontSize: 19, fontWeight: FontWeight.bold),
                   ),
                 ),
                 const SizedBox(width: 14),
@@ -883,22 +651,14 @@ class _HomePageState extends State<HomePage> {
                         coin.name,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 17,
-                          fontWeight: FontWeight.w800,
-                        ),
+                        style: const TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w800),
                       ),
                       const SizedBox(height: 4),
                       Text(
                         'Short skoru: ${coin.score} • ${coin.biasLabel}',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          color: Colors.white.withOpacity(0.72),
-                          fontSize: 11,
-                          fontWeight: FontWeight.w700,
-                        ),
+                        style: TextStyle(color: Colors.white.withOpacity(0.72), fontSize: 11, fontWeight: FontWeight.w700),
                       ),
                     ],
                   ),
@@ -906,11 +666,7 @@ class _HomePageState extends State<HomePage> {
                 const SizedBox(width: 12),
                 Text(
                   coin.changeText,
-                  style: TextStyle(
-                    color: _changeColor(coin.changePercent),
-                    fontSize: 16,
-                    fontWeight: FontWeight.w800,
-                  ),
+                  style: TextStyle(color: _changeColor(coin.changePercent), fontSize: 16, fontWeight: FontWeight.w800),
                 ),
               ],
             ),
@@ -925,12 +681,7 @@ class _HomePageState extends State<HomePage> {
     return Scaffold(
       body: Stack(
         children: [
-          Positioned.fill(
-            child: Image.asset(
-              'assets/bg.png',
-              fit: BoxFit.cover,
-            ),
-          ),
+          Positioned.fill(child: Image.asset('assets/bg.png', fit: BoxFit.cover)),
           SafeArea(
             child: RefreshIndicator(
               onRefresh: fetchCoins,
@@ -942,39 +693,24 @@ class _HomePageState extends State<HomePage> {
                     const SizedBox(height: 12),
                     Container(
                       padding: const EdgeInsets.all(12),
-                      decoration: _glassBox(
-                        borderColor: Colors.orangeAccent.withOpacity(0.45),
-                        opacity: 0.32,
-                      ),
+                      decoration: _glassBox(borderColor: Colors.orangeAccent.withOpacity(0.45), opacity: 0.32),
                       child: Row(
                         children: [
-                          const Icon(
-                            Icons.radar_rounded,
-                            color: Colors.orangeAccent,
-                          ),
+                          const Icon(Icons.radar_rounded, color: Colors.orangeAccent),
                           const SizedBox(width: 10),
                           Expanded(
                             child: Text(
                               radarLeader!.note,
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 13,
-                                fontWeight: FontWeight.w700,
-                              ),
+                              style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w700),
                             ),
                           ),
                         ],
                       ),
                     ),
                   ],
-                  if (errorText.isNotEmpty) ...[
-                    const SizedBox(height: 10),
-                    _errorBox(errorText),
-                  ],
+                  if (errorText.isNotEmpty) ...[const SizedBox(height: 10), _errorBox(errorText)],
                   const SizedBox(height: 12),
-                  ...coins.asMap().entries.map(
-                        (entry) => _buildCoinCard(entry.key + 1, entry.value),
-                      ),
+                  ...coins.asMap().entries.map((entry) => _buildCoinCard(entry.key + 1, entry.value)),
                 ],
               ),
             ),
@@ -989,11 +725,7 @@ class DetailPage extends StatefulWidget {
   final CoinRadarData coinData;
   final CoinRadarData? leaderData;
 
-  const DetailPage({
-    super.key,
-    required this.coinData,
-    this.leaderData,
-  });
+  const DetailPage({super.key, required this.coinData, this.leaderData});
 
   @override
   State<DetailPage> createState() => _DetailPageState();
@@ -1003,7 +735,6 @@ class _DetailPageState extends State<DetailPage> {
   Timer? _detailTimer;
   bool detailLoading = true;
   String detailError = '';
-
   late CoinRadarData selectedCoin;
   late CoinRadarData heroCoin;
 
@@ -1013,11 +744,8 @@ class _DetailPageState extends State<DetailPage> {
     selectedCoin = widget.coinData;
     heroCoin = widget.leaderData ?? widget.coinData;
     fetchDetail();
-
     _detailTimer = Timer.periodic(const Duration(seconds: 5), (_) {
-      if (mounted) {
-        fetchDetail();
-      }
+      if (mounted) fetchDetail();
     });
   }
 
@@ -1035,8 +763,8 @@ class _DetailPageState extends State<DetailPage> {
 
     try {
       final allCoins = await _fetchAllCoins();
-
       CoinRadarData? detailItem;
+
       for (final coin in allCoins) {
         if (coin.name == widget.coinData.name) {
           detailItem = coin;
@@ -1055,8 +783,7 @@ class _DetailPageState extends State<DetailPage> {
       final sortedByScore = [...allCoins]
         ..sort((a, b) {
           final scoreCompare = b.score.compareTo(a.score);
-          if (scoreCompare != 0) return scoreCompare;
-          return b.changePercent.compareTo(a.changePercent);
+          return scoreCompare != 0 ? scoreCompare : b.changePercent.compareTo(a.changePercent);
         });
 
       setState(() {
@@ -1081,20 +808,12 @@ class _DetailPageState extends State<DetailPage> {
         children: [
           Text(
             title,
-            style: const TextStyle(
-              color: Colors.white70,
-              fontSize: 13,
-              fontWeight: FontWeight.w500,
-            ),
+            style: const TextStyle(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.w500),
           ),
           const SizedBox(height: 8),
           Text(
             value,
-            style: TextStyle(
-              color: valueColor ?? Colors.white,
-              fontSize: 18,
-              fontWeight: FontWeight.w800,
-            ),
+            style: TextStyle(color: valueColor ?? Colors.white, fontSize: 18, fontWeight: FontWeight.w800),
           ),
         ],
       ),
@@ -1112,20 +831,10 @@ class _DetailPageState extends State<DetailPage> {
             gradient: LinearGradient(
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
-              colors: [
-                const Color(0xFF09101E),
-                const Color(0xFF101B32).withOpacity(0.95),
-                const Color(0xFF140B18),
-              ],
+              colors: [const Color(0xFF09101E), const Color(0xFF101B32).withOpacity(0.95), const Color(0xFF140B18)],
             ),
             border: Border.all(color: Colors.white.withOpacity(0.06)),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.25),
-                blurRadius: 20,
-                spreadRadius: 2,
-              ),
-            ],
+            boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.25), blurRadius: 20, spreadRadius: 2)],
           ),
         ),
         Positioned(
@@ -1134,10 +843,7 @@ class _DetailPageState extends State<DetailPage> {
           bottom: 14,
           child: Container(
             padding: const EdgeInsets.all(12),
-            decoration: _glassBox(
-              borderColor: Colors.orangeAccent.withOpacity(0.55),
-              opacity: 0.55,
-            ),
+            decoration: _glassBox(borderColor: Colors.orangeAccent.withOpacity(0.55), opacity: 0.55),
             child: Row(
               children: [
                 Container(
@@ -1147,18 +853,11 @@ class _DetailPageState extends State<DetailPage> {
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
                     color: Colors.black.withOpacity(0.55),
-                    border: Border.all(
-                      color: Colors.orangeAccent,
-                      width: 2.5,
-                    ),
+                    border: Border.all(color: Colors.orangeAccent, width: 2.5),
                   ),
                   child: Text(
                     '${heroCoin.score}',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 22,
-                      fontWeight: FontWeight.w900,
-                    ),
+                    style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w900),
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -1168,33 +867,21 @@ class _DetailPageState extends State<DetailPage> {
                     children: [
                       const Text(
                         'EN GÜÇLÜ SHORT ADAYI',
-                        style: TextStyle(
-                          color: Colors.orangeAccent,
-                          fontSize: 11,
-                          fontWeight: FontWeight.w800,
-                        ),
+                        style: TextStyle(color: Colors.orangeAccent, fontSize: 11, fontWeight: FontWeight.w800),
                       ),
                       const SizedBox(height: 4),
                       Text(
                         heroCoin.name,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 18,
-                          fontWeight: FontWeight.w900,
-                        ),
+                        style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w900),
                       ),
                       const SizedBox(height: 4),
                       Text(
                         'Funding: ${heroCoin.fundingText} • Değişim: ${heroCoin.changeText}',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: Colors.white70,
-                          fontSize: 11,
-                          fontWeight: FontWeight.w700,
-                        ),
+                        style: const TextStyle(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.w700),
                       ),
                     ],
                   ),
@@ -1210,10 +897,7 @@ class _DetailPageState extends State<DetailPage> {
   Widget _buildScoreBar(int greenFlex, int redFlex) {
     return Container(
       height: 14,
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.08),
-        borderRadius: BorderRadius.circular(10),
-      ),
+      decoration: BoxDecoration(color: Colors.white.withOpacity(0.08), borderRadius: BorderRadius.circular(10)),
       child: Row(
         children: [
           Expanded(
@@ -1221,10 +905,7 @@ class _DetailPageState extends State<DetailPage> {
             child: Container(
               decoration: BoxDecoration(
                 color: Colors.green.withOpacity(0.65),
-                borderRadius: const BorderRadius.only(
-                  topLeft: Radius.circular(10),
-                  bottomLeft: Radius.circular(10),
-                ),
+                borderRadius: const BorderRadius.only(topLeft: Radius.circular(10), bottomLeft: Radius.circular(10)),
               ),
             ),
           ),
@@ -1233,10 +914,7 @@ class _DetailPageState extends State<DetailPage> {
             child: Container(
               decoration: BoxDecoration(
                 color: Colors.redAccent.withOpacity(0.85),
-                borderRadius: const BorderRadius.only(
-                  topRight: Radius.circular(10),
-                  bottomRight: Radius.circular(10),
-                ),
+                borderRadius: const BorderRadius.only(topRight: Radius.circular(10), bottomRight: Radius.circular(10)),
               ),
             ),
           ),
@@ -1253,12 +931,7 @@ class _DetailPageState extends State<DetailPage> {
     return Scaffold(
       body: Stack(
         children: [
-          Positioned.fill(
-            child: Image.asset(
-              'assets/bg.png',
-              fit: BoxFit.cover,
-            ),
-          ),
+          Positioned.fill(child: Image.asset('assets/bg.png', fit: BoxFit.cover)),
           SafeArea(
             child: SingleChildScrollView(
               padding: const EdgeInsets.all(16),
@@ -1277,15 +950,10 @@ class _DetailPageState extends State<DetailPage> {
                   const SizedBox(height: 8),
                   _buildHeroCard(),
                   const SizedBox(height: 20),
-                  if (detailError.isNotEmpty) ...[
-                    _errorBox(detailError),
-                    const SizedBox(height: 16),
-                  ],
+                  if (detailError.isNotEmpty) ...[_errorBox(detailError), const SizedBox(height: 16)],
                   Container(
                     padding: const EdgeInsets.all(16),
-                    decoration: _glassBox(
-                      borderColor: Colors.redAccent.withOpacity(0.4),
-                    ),
+                    decoration: _glassBox(borderColor: Colors.redAccent.withOpacity(0.4)),
                     child: Column(
                       children: [
                         Row(
@@ -1293,11 +961,7 @@ class _DetailPageState extends State<DetailPage> {
                             Expanded(
                               child: Text(
                                 selectedCoin.name,
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 22,
-                                  fontWeight: FontWeight.w900,
-                                ),
+                                style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w900),
                               ),
                             ),
                             Text(
@@ -1315,11 +979,7 @@ class _DetailPageState extends State<DetailPage> {
                           alignment: Alignment.centerLeft,
                           child: Text(
                             'Short skoru: ${selectedCoin.score} • ${selectedCoin.biasLabel}',
-                            style: const TextStyle(
-                              color: Colors.orangeAccent,
-                              fontSize: 13,
-                              fontWeight: FontWeight.w800,
-                            ),
+                            style: const TextStyle(color: Colors.orangeAccent, fontSize: 13, fontWeight: FontWeight.w800),
                           ),
                         ),
                         const SizedBox(height: 14),
@@ -1327,11 +987,7 @@ class _DetailPageState extends State<DetailPage> {
                         const SizedBox(height: 10),
                         Text(
                           selectedCoin.note,
-                          style: const TextStyle(
-                            color: Colors.white70,
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                          ),
+                          style: const TextStyle(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.w600),
                         ),
                       ],
                     ),
@@ -1351,21 +1007,12 @@ class _DetailPageState extends State<DetailPage> {
                       metricBox(
                         'Funding rate',
                         selectedCoin.fundingText,
-                        valueColor: selectedCoin.fundingRate < 0
-                            ? Colors.redAccent
-                            : Colors.orangeAccent,
+                        valueColor: selectedCoin.fundingRate < 0 ? Colors.redAccent : Colors.orangeAccent,
                       ),
-                      metricBox(
-                        'Short skoru',
-                        '${selectedCoin.score}',
-                        valueColor: Colors.orangeAccent,
-                      ),
+                      metricBox('Short skoru', '${selectedCoin.score}', valueColor: Colors.orangeAccent),
                       metricBox(
                         'Mark-Index farkı',
-                        _formatPercent(
-                          selectedCoin.divergencePercent,
-                          digits: 3,
-                        ),
+                        _formatPercent(selectedCoin.divergencePercent, digits: 3),
                         valueColor: Colors.cyanAccent,
                       ),
                     ],
@@ -1373,21 +1020,13 @@ class _DetailPageState extends State<DetailPage> {
                   const SizedBox(height: 20),
                   Container(
                     height: 190,
-                    decoration: _glassBox(
-                      borderColor: Colors.orangeAccent.withOpacity(0.4),
-                    ),
+                    decoration: _glassBox(borderColor: Colors.orangeAccent.withOpacity(0.4)),
                     child: CustomPaint(
-                      painter: ChartPainter(
-                        isBullish: selectedCoin.changePercent >= 0,
-                      ),
+                      painter: ChartPainter(isBullish: selectedCoin.changePercent >= 0),
                       child: Center(
                         child: Text(
                           selectedCoin.biasLabel,
-                          style: const TextStyle(
-                            color: Colors.white54,
-                            fontSize: 16,
-                            fontWeight: FontWeight.w700,
-                          ),
+                          style: const TextStyle(color: Colors.white54, fontSize: 16, fontWeight: FontWeight.w700),
                         ),
                       ),
                     ),
@@ -1398,28 +1037,19 @@ class _DetailPageState extends State<DetailPage> {
                     decoration: BoxDecoration(
                       color: Colors.red.withOpacity(0.15),
                       borderRadius: BorderRadius.circular(16),
-                      border: Border.all(
-                        color: Colors.redAccent.withOpacity(0.6),
-                      ),
+                      border: Border.all(color: Colors.redAccent.withOpacity(0.6)),
                     ),
                     child: Column(
                       children: [
                         const Text(
                           'CANLI DETAY EKRANI',
-                          style: TextStyle(
-                            color: Colors.orangeAccent,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 20,
-                          ),
+                          style: TextStyle(color: Colors.orangeAccent, fontWeight: FontWeight.bold, fontSize: 20),
                         ),
                         const SizedBox(height: 10),
                         Text(
                           '${selectedCoin.name} için son fiyat, funding, mark-index farkı ve short skoru canlı güncelleniyor.',
                           textAlign: TextAlign.center,
-                          style: const TextStyle(
-                            color: Colors.white70,
-                            fontSize: 16,
-                          ),
+                          style: const TextStyle(color: Colors.white70, fontSize: 16),
                         ),
                       ],
                     ),
@@ -1437,14 +1067,11 @@ class _DetailPageState extends State<DetailPage> {
 
 class ChartPainter extends CustomPainter {
   final bool isBullish;
-
   ChartPainter({required this.isBullish});
 
   @override
   void paint(Canvas canvas, Size size) {
-    final gridPaint = Paint()
-      ..color = Colors.white.withOpacity(0.08)
-      ..strokeWidth = 1;
+    final gridPaint = Paint()..color = Colors.white.withOpacity(0.08)..strokeWidth = 1;
 
     for (double i = 0; i <= size.width; i += size.width / 6) {
       canvas.drawLine(Offset(i, 0), Offset(i, size.height), gridPaint);
@@ -1454,14 +1081,9 @@ class ChartPainter extends CustomPainter {
     }
 
     final mainColor = isBullish ? Colors.redAccent : Colors.greenAccent;
-    final glowColor =
-        isBullish ? Colors.orangeAccent : Colors.greenAccent;
+    final glowColor = isBullish ? Colors.orangeAccent : Colors.greenAccent;
 
-    final linePaint = Paint()
-      ..color = mainColor
-      ..strokeWidth = 3
-      ..style = PaintingStyle.stroke;
-
+    final linePaint = Paint()..color = mainColor..strokeWidth = 3..style = PaintingStyle.stroke;
     final glowPaint = Paint()
       ..color = glowColor.withOpacity(0.35)
       ..strokeWidth = 8
@@ -1494,7 +1116,5 @@ class ChartPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant ChartPainter oldDelegate) {
-    return oldDelegate.isBullish != isBullish;
-  }
+  bool shouldRepaint(covariant ChartPainter oldDelegate) => oldDelegate.isBullish != isBullish;
 }
