@@ -170,8 +170,9 @@ class CoinRadarData {
     double markPrice,
     double indexPrice,
   ) {
-    final double divergence =
-        indexPrice == 0 ? 0 : ((markPrice - indexPrice) / indexPrice).abs() * 100;
+    final double divergence = indexPrice == 0
+        ? 0
+        : ((markPrice - indexPrice) / indexPrice).abs() * 100;
 
     if (score >= 75) {
       return 'Pump güçlü, funding şişmiş. Sert short takibi.';
@@ -326,7 +327,7 @@ class _HomePageState extends State<HomePage> {
   Widget _buildRadarHero() {
     final CoinRadarData? leader = radarLeader;
     if (leader == null) {
-      return const SizedBox(height: 220);
+      return const SizedBox(height: 150);
     }
 
     final Color scoreColor = leader.score >= 75
@@ -337,140 +338,124 @@ class _HomePageState extends State<HomePage> {
                 ? Colors.amberAccent
                 : Colors.greenAccent;
 
-    return Stack(
-      children: [
-        Container(
-          width: double.infinity,
-          height: 220,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(20),
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [
-                const Color(0xFF09101E),
-                const Color(0xFF101B32).withOpacity(0.95),
-                const Color(0xFF140B18),
-              ],
-            ),
-            border: Border.all(
-              color: Colors.white.withOpacity(0.06),
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.25),
-                blurRadius: 20,
-                spreadRadius: 2,
+    return SizedBox(
+      height: 150,
+      child: Stack(
+        children: [
+          Positioned(
+            top: 0,
+            right: 0,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: Colors.black.withOpacity(0.55),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: isLoading ? Colors.orangeAccent : Colors.greenAccent,
+                ),
               ),
-            ],
+              child: Text(
+                isLoading ? 'Yükleniyor' : 'Canlı Veri',
+                style: TextStyle(
+                  color: isLoading ? Colors.orangeAccent : Colors.greenAccent,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
           ),
-        ),
-        Positioned(
-          left: 14,
-          right: 14,
-          bottom: 14,
-          child: Container(
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              color: Colors.black.withOpacity(0.55),
-              borderRadius: BorderRadius.circular(18),
-              border: Border.all(
-                color: scoreColor.withOpacity(0.65),
-                width: 1.2,
-              ),
-            ),
-            child: Row(
-              children: [
-                Container(
-                  width: 68,
-                  height: 68,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: Colors.black.withOpacity(0.55),
-                    border: Border.all(color: scoreColor, width: 3),
-                    boxShadow: [
-                      BoxShadow(
-                        color: scoreColor.withOpacity(0.35),
-                        blurRadius: 16,
-                        spreadRadius: 2,
-                      ),
-                    ],
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 0,
+            child: Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: Colors.black.withOpacity(0.55),
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(
+                  color: scoreColor.withOpacity(0.75),
+                  width: 1.4,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: scoreColor.withOpacity(0.18),
+                    blurRadius: 18,
+                    spreadRadius: 1,
                   ),
-                  alignment: Alignment.center,
-                  child: Text(
-                    '${leader.score}',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 24,
-                      fontWeight: FontWeight.w900,
+                ],
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    width: 74,
+                    height: 74,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Colors.black.withOpacity(0.55),
+                      border: Border.all(color: scoreColor, width: 3),
+                      boxShadow: [
+                        BoxShadow(
+                          color: scoreColor.withOpacity(0.35),
+                          blurRadius: 16,
+                          spreadRadius: 2,
+                        ),
+                      ],
+                    ),
+                    alignment: Alignment.center,
+                    child: Text(
+                      '${leader.score}',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 26,
+                        fontWeight: FontWeight.w900,
+                      ),
                     ),
                   ),
-                ),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'EN GÜÇLÜ SHORT ADAYI',
-                        style: TextStyle(
-                          color: scoreColor,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w800,
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'EN GÜÇLÜ SHORT ADAYI',
+                          style: TextStyle(
+                            color: scoreColor,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w800,
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        leader.name,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 20,
-                          fontWeight: FontWeight.w900,
+                        const SizedBox(height: 4),
+                        Text(
+                          leader.name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 20,
+                            fontWeight: FontWeight.w900,
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 8),
-                      Wrap(
-                        spacing: 10,
-                        runSpacing: 6,
-                        children: [
-                          _miniInfo('Skor', '${leader.score}'),
-                          _miniInfo('Değişim', leader.changeText),
-                          _miniInfo('Funding', leader.fundingText),
-                          _miniInfo('Bias', leader.biasLabel),
-                        ],
-                      ),
-                    ],
+                        const SizedBox(height: 8),
+                        Wrap(
+                          spacing: 10,
+                          runSpacing: 6,
+                          children: [
+                            _miniInfo('Skor', '${leader.score}'),
+                            _miniInfo('Değişim', leader.changeText),
+                            _miniInfo('Funding', leader.fundingText),
+                            _miniInfo('Bias', leader.biasLabel),
+                          ],
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-              ],
-            ),
-          ),
-        ),
-        Positioned(
-          top: 10,
-          right: 10,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-            decoration: BoxDecoration(
-              color: Colors.black.withOpacity(0.55),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: isLoading ? Colors.orangeAccent : Colors.greenAccent,
-              ),
-            ),
-            child: Text(
-              isLoading ? 'Yükleniyor' : 'Canlı Veri',
-              style: TextStyle(
-                color: isLoading ? Colors.orangeAccent : Colors.greenAccent,
-                fontSize: 12,
-                fontWeight: FontWeight.w700,
+                ],
               ),
             ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
@@ -656,7 +641,8 @@ class _HomePageState extends State<HomePage> {
                                 Expanded(
                                   child: Column(
                                     mainAxisAlignment: MainAxisAlignment.center,
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     children: [
                                       Text(
                                         coin.name,
@@ -1159,7 +1145,10 @@ class _DetailPageState extends State<DetailPage> {
                       ),
                       metricBox(
                         'Mark-Index farkı',
-                        _formatPercent(selectedCoin.divergencePercent, digits: 3),
+                        _formatPercent(
+                          selectedCoin.divergencePercent,
+                          digits: 3,
+                        ),
                         valueColor: Colors.cyanAccent,
                       ),
                     ],
