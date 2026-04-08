@@ -22,9 +22,10 @@ flutter:
   uses-material-design: true
 
   assets:
-    - assets/bg.png
-    - assets/hero.png
-    - assets/ic_launcher.png
+  - assets/bg.png
+  - assets/hero.png
+  - assets/ic_launcher.png
+  - assets/logo.png
 
 flutter_launcher_icons:
   android: true
