@@ -8,6 +8,9 @@ void main() {
   runApp(const MyApp());
 }
 
+const _gateIoTickersUrl = 'https://fx-api.gateio.ws/api/v4/futures/usdt/tickers';
+const _jsonHeader = {'Accept': 'application/json'};
+
 double _parseDouble(dynamic value) {
   if (value == null) return 0.0;
   return double.tryParse(value.toString()) ?? 0.0;
@@ -27,18 +30,87 @@ String _formatFunding(double value) {
   return '${percent >= 0 ? '+' : ''}${percent.toStringAsFixed(4)}%';
 }
 
-String _formatCompactNumber(double value) {
-  final abs = value.abs();
-  if (abs >= 1000000000) {
-    return '${(value / 1000000000).toStringAsFixed(2)}B';
+Future<List<CoinRadarData>> _fetchAllCoins() async {
+  final response = await http.get(Uri.parse(_gateIoTickersUrl), headers: _jsonHeader);
+
+  if (response.statusCode != 200) {
+    throw Exception('API error');
   }
-  if (abs >= 1000000) {
-    return '${(value / 1000000).toStringAsFixed(2)}M';
-  }
-  if (abs >= 1000) {
-    return '${(value / 1000).toStringAsFixed(2)}K';
-  }
-  return value.toStringAsFixed(2);
+
+  final List<dynamic> parsed = json.decode(response.body);
+
+  return parsed
+      .whereType<Map<String, dynamic>>()
+      .where((e) => (e['contract'] ?? '').toString().isNotEmpty)
+      .map(CoinRadarData.fromJson)
+      .toList();
+}
+
+BoxDecoration _glassBox({
+  Color? borderColor,
+  double radius = 16,
+  double opacity = 0.35,
+  List<BoxShadow>? boxShadow,
+}) {
+  return BoxDecoration(
+    color: Colors.black.withOpacity(opacity),
+    borderRadius: BorderRadius.circular(radius),
+    border: Border.all(color: borderColor ?? Colors.white.withOpacity(0.12)),
+    boxShadow: boxShadow,
+  );
+}
+
+Widget _liveBadge(bool isLoading, {String readyText = 'Canlı Veri'}) {
+  final color = isLoading ? Colors.orangeAccent : Colors.greenAccent;
+
+  return Container(
+    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+    decoration: BoxDecoration(
+      color: Colors.black.withOpacity(0.55),
+      borderRadius: BorderRadius.circular(12),
+      border: Border.all(color: color),
+    ),
+    child: Text(
+      isLoading ? 'Yükleniyor' : readyText,
+      style: TextStyle(
+        color: color,
+        fontSize: 12,
+        fontWeight: FontWeight.w700,
+      ),
+    ),
+  );
+}
+
+Widget _errorBox(String text) {
+  return Container(
+    width: double.infinity,
+    padding: const EdgeInsets.all(12),
+    decoration: BoxDecoration(
+      color: Colors.red.withOpacity(0.18),
+      borderRadius: BorderRadius.circular(14),
+      border: Border.all(color: Colors.redAccent.withOpacity(0.5)),
+    ),
+    child: Text(
+      text,
+      textAlign: TextAlign.center,
+      style: const TextStyle(
+        color: Colors.white,
+        fontSize: 13,
+        fontWeight: FontWeight.w600,
+      ),
+    ),
+  );
+}
+
+Color _scoreColor(int score) {
+  if (score >= 75) return Colors.redAccent;
+  if (score >= 60) return Colors.orangeAccent;
+  if (score >= 45) return Colors.amberAccent;
+  return Colors.greenAccent;
+}
+
+Color _changeColor(double value) {
+  return value < 0 ? Colors.redAccent : const Color(0xFF3CFFB2);
 }
 
 class CoinRadarData {
@@ -49,7 +121,6 @@ class CoinRadarData {
   final double markPrice;
   final double indexPrice;
   final double volume24h;
-  final double openInterest;
   final int score;
   final String biasLabel;
   final String note;
@@ -62,7 +133,6 @@ class CoinRadarData {
     required this.markPrice,
     required this.indexPrice,
     required this.volume24h,
-    required this.openInterest,
     required this.score,
     required this.biasLabel,
     required this.note,
@@ -72,7 +142,7 @@ class CoinRadarData {
     required String name,
     required double changePercent,
   }) {
-    final int score = _calculateScore(
+    final score = _calculateScore(
       changePercent: changePercent,
       fundingRate: 0,
       markPrice: 0,
@@ -88,7 +158,6 @@ class CoinRadarData {
       markPrice: 0,
       indexPrice: 0,
       volume24h: 0,
-      openInterest: 0,
       score: score,
       biasLabel: _biasLabel(score),
       note: _noteText(score, changePercent, 0, 0, 0),
@@ -96,24 +165,14 @@ class CoinRadarData {
   }
 
   factory CoinRadarData.fromJson(Map<String, dynamic> json) {
-    final double changePercent = _parseDouble(json['change_percentage']);
-    final double fundingRate = _parseDouble(json['funding_rate']);
-    final double lastPrice = _parseDouble(json['last']);
-    final double markPrice = _parseDouble(json['mark_price']);
-    final double indexPrice = _parseDouble(json['index_price']);
-    final double volume24h = _parseDouble(
-      json['volume_24h_quote'] ?? json['volume_24h'] ?? 0,
-    );
+    final changePercent = _parseDouble(json['change_percentage']);
+    final fundingRate = _parseDouble(json['funding_rate']);
+    final lastPrice = _parseDouble(json['last']);
+    final markPrice = _parseDouble(json['mark_price']);
+    final indexPrice = _parseDouble(json['index_price']);
+    final volume24h = _parseDouble(json['volume_24h_quote'] ?? json['volume_24h'] ?? 0);
 
-    final double openInterest = _parseDouble(
-      json['open_interest'] ??
-          json['total_size'] ??
-          json['position_size'] ??
-          json['open_interest_usd'] ??
-          0,
-    );
-
-    final int score = _calculateScore(
+    final score = _calculateScore(
       changePercent: changePercent,
       fundingRate: fundingRate,
       markPrice: markPrice,
@@ -129,16 +188,9 @@ class CoinRadarData {
       markPrice: markPrice,
       indexPrice: indexPrice,
       volume24h: volume24h,
-      openInterest: openInterest,
       score: score,
       biasLabel: _biasLabel(score),
-      note: _noteText(
-        score,
-        changePercent,
-        fundingRate,
-        markPrice,
-        indexPrice,
-      ),
+      note: _noteText(score, changePercent, fundingRate, markPrice, indexPrice),
     );
   }
 
@@ -164,21 +216,19 @@ class CoinRadarData {
     }
 
     if (indexPrice != 0) {
-      final double divergence =
-          ((markPrice - indexPrice) / indexPrice).abs() * 100;
+      final divergence = ((markPrice - indexPrice) / indexPrice).abs() * 100;
       score += math.min(divergence * 22, 14);
     }
 
     if (volume24h > 0) {
-      final double volumeBoost = math.max(
+      final volumeBoost = math.max(
         0,
         math.min((math.log(volume24h + 1) - 10) * 2.2, 10),
       );
       score += volumeBoost;
     }
 
-    score = score.clamp(0, 100);
-    return score.round();
+    return score.clamp(0, 100).round();
   }
 
   static String _biasLabel(int score) {
@@ -196,28 +246,15 @@ class CoinRadarData {
     double markPrice,
     double indexPrice,
   ) {
-    final double divergence = indexPrice == 0
-        ? 0
-        : ((markPrice - indexPrice) / indexPrice).abs() * 100;
+    final divergence =
+        indexPrice == 0 ? 0 : ((markPrice - indexPrice) / indexPrice).abs() * 100;
 
-    if (score >= 75) {
-      return 'Pump güçlü, funding şişmiş. Sert short takibi.';
-    }
-    if (score >= 60) {
-      return 'Yükseliş ve funding birlikte ısınıyor.';
-    }
-    if (score >= 45) {
-      return 'İzlenebilir short baskısı oluşuyor.';
-    }
-    if (changePercent < 0) {
-      return 'Zaten zayıflamış, short avantajı düşebilir.';
-    }
-    if (divergence > 0.20) {
-      return 'Fiyat farkı var, volatilite yükselebilir.';
-    }
-    if (fundingRate > 0) {
-      return 'Funding pozitif ama sinyal orta güçte.';
-    }
+    if (score >= 75) return 'Pump güçlü, funding şişmiş. Sert short takibi.';
+    if (score >= 60) return 'Yükseliş ve funding birlikte ısınıyor.';
+    if (score >= 45) return 'İzlenebilir short baskısı oluşuyor.';
+    if (changePercent < 0) return 'Zaten zayıflamış, short avantajı düşebilir.';
+    if (divergence > 0.20) return 'Fiyat farkı var, volatilite yükselebilir.';
+    if (fundingRate > 0) return 'Funding pozitif ama sinyal orta güçte.';
     return 'Şimdilik net short baskısı zayıf.';
   }
 
@@ -226,45 +263,11 @@ class CoinRadarData {
   String get lastPriceText => _formatPrice(lastPrice);
   String get markPriceText => _formatPrice(markPrice);
   String get indexPriceText => _formatPrice(indexPrice);
-  String get volumeText => _formatCompactNumber(volume24h);
-  String get openInterestText => _formatCompactNumber(openInterest);
 
   double get divergencePercent {
     if (indexPrice == 0) return 0;
     return ((markPrice - indexPrice) / indexPrice).abs() * 100;
   }
-}
-
-class CandlePoint {
-  final DateTime time;
-  final double open;
-  final double high;
-  final double low;
-  final double close;
-  final double volume;
-
-  const CandlePoint({
-    required this.time,
-    required this.open,
-    required this.high,
-    required this.low,
-    required this.close,
-    required this.volume,
-  });
-}
-
-class LivePoint {
-  final DateTime time;
-  final double fundingPercent;
-  final double openInterest;
-  final double volume24h;
-
-  const LivePoint({
-    required this.time,
-    required this.fundingPercent,
-    required this.openInterest,
-    required this.volume24h,
-  });
 }
 
 class MyApp extends StatelessWidget {
@@ -274,7 +277,235 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return const MaterialApp(
       debugShowCheckedModeBanner: false,
-      home: HomePage(),
+      home: SplashScreen(),
+    );
+  }
+}
+
+class SplashScreen extends StatefulWidget {
+  const SplashScreen({super.key});
+
+  @override
+  State<SplashScreen> createState() => _SplashScreenState();
+}
+
+class _SplashScreenState extends State<SplashScreen>
+    with TickerProviderStateMixin {
+  late final AnimationController _textController;
+  late final AnimationController _logoController;
+  late final Animation<double> _textOpacity;
+  late final Animation<Offset> _textSlide;
+  late final Animation<double> _logoOpacity;
+  late final Animation<double> _logoScale;
+  late final Animation<double> _logoGlow;
+  late final Animation<double> _logoTranslateY;
+
+  @override
+  void initState() {
+    super.initState();
+
+    _textController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 650),
+    );
+
+    _logoController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1100),
+    );
+
+    _textOpacity = CurvedAnimation(parent: _textController, curve: Curves.easeOut);
+
+    _textSlide = Tween<Offset>(
+      begin: const Offset(0, 0.12),
+      end: Offset.zero,
+    ).animate(
+      CurvedAnimation(parent: _textController, curve: Curves.easeOutCubic),
+    );
+
+    _logoOpacity = CurvedAnimation(parent: _logoController, curve: Curves.easeOut);
+
+    _logoScale = Tween<double>(begin: 0.86, end: 1.0).animate(
+      CurvedAnimation(parent: _logoController, curve: Curves.easeOutBack),
+    );
+
+    _logoGlow = Tween<double>(begin: 0.45, end: 1.0).animate(
+      CurvedAnimation(parent: _logoController, curve: Curves.easeOut),
+    );
+
+    _logoTranslateY = Tween<double>(begin: -180, end: 0).animate(
+      CurvedAnimation(parent: _logoController, curve: Curves.easeOutCubic),
+    );
+
+    _startSplashFlow();
+  }
+
+  Future<void> _startSplashFlow() async {
+    _textController.forward();
+
+    await Future.delayed(const Duration(milliseconds: 1200));
+    if (!mounted) return;
+
+    _logoController.forward();
+
+    await Future.delayed(const Duration(milliseconds: 2400));
+    if (!mounted) return;
+
+    Navigator.pushReplacement(
+      context,
+      PageRouteBuilder(
+        transitionDuration: const Duration(milliseconds: 350),
+        pageBuilder: (_, __, ___) => const HomePage(),
+        transitionsBuilder: (_, animation, __, child) {
+          return FadeTransition(
+            opacity: CurvedAnimation(parent: animation, curve: Curves.easeOut),
+            child: child,
+          );
+        },
+      ),
+    );
+  }
+
+  @override
+  void dispose() {
+    _textController.dispose();
+    _logoController.dispose();
+    super.dispose();
+  }
+
+  Widget _buildSplashText() {
+    return FadeTransition(
+      opacity: _textOpacity,
+      child: SlideTransition(
+        position: _textSlide,
+        child: ShaderMask(
+          shaderCallback: (bounds) {
+            return const LinearGradient(
+              colors: [Colors.white, Color(0xFFEDEDED), Color(0xFFFFB300)],
+            ).createShader(bounds);
+          },
+          child: const Text(
+            'SHORT RADAR PRO',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 34,
+              fontWeight: FontWeight.w900,
+              letterSpacing: 1.1,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAnimatedLogo() {
+    return AnimatedBuilder(
+      animation: _logoController,
+      builder: (context, child) {
+        return Opacity(
+          opacity: _logoOpacity.value,
+          child: Transform.translate(
+            offset: Offset(0, _logoTranslateY.value),
+            child: Transform.scale(
+              scale: _logoScale.value,
+              child: Container(
+                width: 260,
+                height: 260,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFF7B2CFF).withOpacity(0.22 * _logoGlow.value),
+                      blurRadius: 38,
+                      spreadRadius: 5,
+                    ),
+                    BoxShadow(
+                      color: const Color(0xFFFF2E63).withOpacity(0.20 * _logoGlow.value),
+                      blurRadius: 48,
+                      spreadRadius: 3,
+                    ),
+                  ],
+                ),
+                child: child,
+              ),
+            ),
+          ),
+        );
+      },
+      child: Image.asset('assets/logo.png', fit: BoxFit.contain),
+    );
+  }
+
+  Widget _glowCircle({
+    required double size,
+    required Color color,
+    double opacity = 0.12,
+    double blurRadius = 80,
+    double spreadRadius = 30,
+  }) {
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: color.withOpacity(opacity),
+        boxShadow: [
+          BoxShadow(
+            color: color.withOpacity(opacity + 0.08),
+            blurRadius: blurRadius,
+            spreadRadius: spreadRadius,
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: RadialGradient(
+            center: Alignment(0, -0.18),
+            radius: 1.15,
+            colors: [Color(0xFF0B0B13), Color(0xFF050507), Colors.black],
+          ),
+        ),
+        child: Stack(
+          children: [
+            Positioned(
+              top: -80,
+              left: -50,
+              child: _glowCircle(size: 220, color: const Color(0xFF243CFF)),
+            ),
+            Positioned(
+              right: -70,
+              bottom: 120,
+              child: _glowCircle(
+                size: 240,
+                color: const Color(0xFFFF2E63),
+                opacity: 0.10,
+                blurRadius: 90,
+                spreadRadius: 35,
+              ),
+            ),
+            Center(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    _buildAnimatedLogo(),
+                    const SizedBox(height: 28),
+                    _buildSplashText(),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -310,11 +541,8 @@ class _HomePageState extends State<HomePage> {
     super.initState();
     radarLeader = coins.first;
     fetchCoins();
-
-    _refreshTimer = Timer.periodic(const Duration(seconds: 5), (timer) {
-      if (mounted) {
-        fetchCoins();
-      }
+    _refreshTimer = Timer.periodic(const Duration(seconds: 5), (_) {
+      if (mounted) fetchCoins();
     });
   }
 
@@ -331,26 +559,7 @@ class _HomePageState extends State<HomePage> {
     });
 
     try {
-      final response = await http.get(
-        Uri.parse('https://fx-api.gateio.ws/api/v4/futures/usdt/tickers'),
-        headers: {'Accept': 'application/json'},
-      );
-
-      if (response.statusCode != 200) {
-        setState(() {
-          isLoading = false;
-          errorText = 'Canlı veri alınamadı';
-        });
-        return;
-      }
-
-      final List<dynamic> parsed = json.decode(response.body);
-
-      final List<CoinRadarData> allCoins = parsed
-          .whereType<Map<String, dynamic>>()
-          .where((e) => (e['contract'] ?? '').toString().isNotEmpty)
-          .map(CoinRadarData.fromJson)
-          .toList();
+      final allCoins = await _fetchAllCoins();
 
       if (allCoins.isEmpty) {
         setState(() {
@@ -360,12 +569,12 @@ class _HomePageState extends State<HomePage> {
         return;
       }
 
-      final List<CoinRadarData> sortedByChange = [...allCoins]
+      final sortedByChange = [...allCoins]
         ..sort((a, b) => b.changePercent.compareTo(a.changePercent));
 
-      final List<CoinRadarData> sortedByScore = [...allCoins]
+      final sortedByScore = [...allCoins]
         ..sort((a, b) {
-          final int scoreCompare = b.score.compareTo(a.score);
+          final scoreCompare = b.score.compareTo(a.score);
           if (scoreCompare != 0) return scoreCompare;
           return b.changePercent.compareTo(a.changePercent);
         });
@@ -374,7 +583,6 @@ class _HomePageState extends State<HomePage> {
         coins = sortedByChange.take(10).toList();
         radarLeader = sortedByScore.first;
         isLoading = false;
-        errorText = '';
       });
     } catch (_) {
       setState(() {
@@ -384,59 +592,52 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
-  Widget _buildRadarHero() {
-    final CoinRadarData? leader = radarLeader;
-    if (leader == null) {
-      return const SizedBox(height: 150);
-    }
+  Widget _miniInfo(String title, String value) {
+    return RichText(
+      text: TextSpan(
+        children: [
+          TextSpan(
+            text: '$title: ',
+            style: const TextStyle(
+              color: Colors.white60,
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          TextSpan(
+            text: value,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 11,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 
-    final Color scoreColor = leader.score >= 75
-        ? Colors.redAccent
-        : leader.score >= 60
-            ? Colors.orangeAccent
-            : leader.score >= 45
-                ? Colors.amberAccent
-                : Colors.greenAccent;
+  Widget _buildRadarHero() {
+    final leader = radarLeader;
+    if (leader == null) return const SizedBox(height: 150);
+
+    final scoreColor = _scoreColor(leader.score);
 
     return SizedBox(
       height: 150,
       child: Stack(
         children: [
-          Positioned(
-            top: 0,
-            right: 0,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-              decoration: BoxDecoration(
-                color: Colors.black.withOpacity(0.55),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                  color: isLoading ? Colors.orangeAccent : Colors.greenAccent,
-                ),
-              ),
-              child: Text(
-                isLoading ? 'Yükleniyor' : 'Canlı Veri',
-                style: TextStyle(
-                  color: isLoading ? Colors.orangeAccent : Colors.greenAccent,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ),
-          ),
+          Positioned(top: 0, right: 0, child: _liveBadge(isLoading)),
           Positioned(
             left: 0,
             right: 0,
             bottom: 0,
             child: Container(
               padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                color: Colors.black.withOpacity(0.55),
-                borderRadius: BorderRadius.circular(24),
-                border: Border.all(
-                  color: scoreColor.withOpacity(0.75),
-                  width: 1.4,
-                ),
+              decoration: _glassBox(
+                borderColor: scoreColor.withOpacity(0.75),
+                radius: 24,
+                opacity: 0.55,
                 boxShadow: [
                   BoxShadow(
                     color: scoreColor.withOpacity(0.18),
@@ -450,6 +651,7 @@ class _HomePageState extends State<HomePage> {
                   Container(
                     width: 74,
                     height: 74,
+                    alignment: Alignment.center,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
                       color: Colors.black.withOpacity(0.55),
@@ -462,7 +664,6 @@ class _HomePageState extends State<HomePage> {
                         ),
                       ],
                     ),
-                    alignment: Alignment.center,
                     child: Text(
                       '${leader.score}',
                       style: const TextStyle(
@@ -519,27 +720,116 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  Widget _miniInfo(String title, String value) {
-    return RichText(
-      text: TextSpan(
-        children: [
-          TextSpan(
-            text: '$title: ',
-            style: const TextStyle(
-              color: Colors.white60,
-              fontSize: 11,
-              fontWeight: FontWeight.w600,
+  Widget _buildCoinCard(int index, CoinRadarData coin) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: GestureDetector(
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => DetailPage(
+                coinData: coin,
+                leaderData: radarLeader,
+              ),
+            ),
+          );
+        },
+        child: Container(
+          height: 86,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(22),
+            gradient: const LinearGradient(
+              begin: Alignment.centerLeft,
+              end: Alignment.centerRight,
+              colors: [Color(0xFF07122A), Color(0xFF091933), Color(0xFF07122A)],
+            ),
+            border: Border.all(color: const Color(0xFF3EA6FF), width: 1.4),
+            boxShadow: const [
+              BoxShadow(
+                color: Color(0x663EA6FF),
+                blurRadius: 10,
+                spreadRadius: 1,
+              ),
+              BoxShadow(
+                color: Color(0x3300FFFF),
+                blurRadius: 18,
+                spreadRadius: 1,
+              ),
+            ],
+          ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14),
+            child: Row(
+              children: [
+                Container(
+                  width: 40,
+                  height: 40,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: const Color(0xFF123D9B),
+                    border: Border.all(color: const Color(0xFF5AA8FF), width: 1.6),
+                    boxShadow: const [
+                      BoxShadow(
+                        color: Color(0x663EA6FF),
+                        blurRadius: 8,
+                        spreadRadius: 1,
+                      ),
+                    ],
+                  ),
+                  child: Text(
+                    '$index',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 19,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        coin.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 17,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Short skoru: ${coin.score} • ${coin.biasLabel}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: Colors.white.withOpacity(0.72),
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Text(
+                  coin.changeText,
+                  style: TextStyle(
+                    color: _changeColor(coin.changePercent),
+                    fontSize: 16,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ],
             ),
           ),
-          TextSpan(
-            text: value,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 11,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -550,10 +840,7 @@ class _HomePageState extends State<HomePage> {
       body: Stack(
         children: [
           Positioned.fill(
-            child: Image.asset(
-              'assets/bg.png',
-              fit: BoxFit.cover,
-            ),
+            child: Image.asset('assets/bg.png', fit: BoxFit.cover),
           ),
           SafeArea(
             child: RefreshIndicator(
@@ -566,19 +853,13 @@ class _HomePageState extends State<HomePage> {
                     const SizedBox(height: 12),
                     Container(
                       padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: Colors.black.withOpacity(0.32),
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(
-                          color: Colors.orangeAccent.withOpacity(0.45),
-                        ),
+                      decoration: _glassBox(
+                        borderColor: Colors.orangeAccent.withOpacity(0.45),
+                        opacity: 0.32,
                       ),
                       child: Row(
                         children: [
-                          const Icon(
-                            Icons.radar_rounded,
-                            color: Colors.orangeAccent,
-                          ),
+                          const Icon(Icons.radar_rounded, color: Colors.orangeAccent),
                           const SizedBox(width: 10),
                           Expanded(
                             child: Text(
@@ -596,153 +877,12 @@ class _HomePageState extends State<HomePage> {
                   ],
                   if (errorText.isNotEmpty) ...[
                     const SizedBox(height: 10),
-                    Container(
-                      padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(
-                        color: Colors.red.withOpacity(0.18),
-                        borderRadius: BorderRadius.circular(14),
-                        border: Border.all(
-                          color: Colors.redAccent.withOpacity(0.5),
-                        ),
-                      ),
-                      child: Text(
-                        errorText,
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
+                    _errorBox(errorText),
                   ],
                   const SizedBox(height: 12),
-                  ...coins.asMap().entries.map((entry) {
-                    final index = entry.key + 1;
-                    final coin = entry.value;
-
-                    return Padding(
-                      padding: const EdgeInsets.only(bottom: 10),
-                      child: GestureDetector(
-                        onTap: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => DetailPage(coinData: coin),
-                            ),
-                          );
-                        },
-                        child: Container(
-                          height: 86,
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(22),
-                            gradient: const LinearGradient(
-                              begin: Alignment.centerLeft,
-                              end: Alignment.centerRight,
-                              colors: [
-                                Color(0xFF07122A),
-                                Color(0xFF091933),
-                                Color(0xFF07122A),
-                              ],
-                            ),
-                            border: Border.all(
-                              color: const Color(0xFF3EA6FF),
-                              width: 1.4,
-                            ),
-                            boxShadow: const [
-                              BoxShadow(
-                                color: Color(0x663EA6FF),
-                                blurRadius: 10,
-                                spreadRadius: 1,
-                              ),
-                              BoxShadow(
-                                color: Color(0x3300FFFF),
-                                blurRadius: 18,
-                                spreadRadius: 1,
-                              ),
-                            ],
-                          ),
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 14),
-                            child: Row(
-                              children: [
-                                Container(
-                                  width: 40,
-                                  height: 40,
-                                  decoration: BoxDecoration(
-                                    shape: BoxShape.circle,
-                                    color: const Color(0xFF123D9B),
-                                    border: Border.all(
-                                      color: const Color(0xFF5AA8FF),
-                                      width: 1.6,
-                                    ),
-                                    boxShadow: const [
-                                      BoxShadow(
-                                        color: Color(0x663EA6FF),
-                                        blurRadius: 8,
-                                        spreadRadius: 1,
-                                      ),
-                                    ],
-                                  ),
-                                  alignment: Alignment.center,
-                                  child: Text(
-                                    '$index',
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 19,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(width: 14),
-                                Expanded(
-                                  child: Column(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        coin.name,
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: const TextStyle(
-                                          color: Colors.white,
-                                          fontSize: 17,
-                                          fontWeight: FontWeight.w800,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 4),
-                                      Text(
-                                        'Short skoru: ${coin.score} • ${coin.biasLabel}',
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: TextStyle(
-                                          color: Colors.white.withOpacity(0.72),
-                                          fontSize: 11,
-                                          fontWeight: FontWeight.w700,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                const SizedBox(width: 12),
-                                Text(
-                                  coin.changeText,
-                                  style: TextStyle(
-                                    color: coin.changePercent < 0
-                                        ? Colors.redAccent
-                                        : const Color(0xFF3CFFB2),
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w800,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
+                  ...coins.asMap().entries.map(
+                        (entry) => _buildCoinCard(entry.key + 1, entry.value),
                       ),
-                    );
-                  }),
                 ],
               ),
             ),
@@ -755,10 +895,12 @@ class _HomePageState extends State<HomePage> {
 
 class DetailPage extends StatefulWidget {
   final CoinRadarData coinData;
+  final CoinRadarData? leaderData;
 
   const DetailPage({
     super.key,
     required this.coinData,
+    this.leaderData,
   });
 
   @override
@@ -771,19 +913,17 @@ class _DetailPageState extends State<DetailPage> {
   String detailError = '';
 
   late CoinRadarData selectedCoin;
-  List<CandlePoint> candles = [];
-  List<LivePoint> livePoints = [];
+  late CoinRadarData heroCoin;
 
   @override
   void initState() {
     super.initState();
     selectedCoin = widget.coinData;
+    heroCoin = widget.leaderData ?? widget.coinData;
     fetchDetail();
 
-    _detailTimer = Timer.periodic(const Duration(seconds: 5), (timer) {
-      if (mounted) {
-        fetchDetail();
-      }
+    _detailTimer = Timer.periodic(const Duration(seconds: 5), (_) {
+      if (mounted) fetchDetail();
     });
   }
 
@@ -800,26 +940,11 @@ class _DetailPageState extends State<DetailPage> {
     });
 
     try {
-      final contract = widget.coinData.name;
+      final allCoins = await _fetchAllCoins();
 
-      final tickerResponse = await http.get(
-        Uri.parse(
-          'https://fx-api.gateio.ws/api/v4/futures/usdt/tickers?contract=$contract',
-        ),
-        headers: {'Accept': 'application/json'},
-      );
+      final detailItem = allCoins.where((coin) => coin.name == widget.coinData.name).firstOrNull;
 
-      if (tickerResponse.statusCode != 200) {
-        setState(() {
-          detailLoading = false;
-          detailError = 'Detay verisi alınamadı';
-        });
-        return;
-      }
-
-      final List<dynamic> tickerParsed = json.decode(tickerResponse.body);
-
-      if (tickerParsed.isEmpty) {
+      if (detailItem == null) {
         setState(() {
           detailLoading = false;
           detailError = 'Coin detayı bulunamadı';
@@ -827,56 +952,17 @@ class _DetailPageState extends State<DetailPage> {
         return;
       }
 
-      final CoinRadarData coin = CoinRadarData.fromJson(
-        Map<String, dynamic>.from(tickerParsed.first as Map),
-      );
-
-      final candleResponse = await http.get(
-        Uri.parse(
-          'https://fx-api.gateio.ws/api/v4/futures/usdt/candlesticks?contract=$contract&interval=5m&limit=48',
-        ),
-        headers: {'Accept': 'application/json'},
-      );
-
-      List<CandlePoint> parsedCandles = [];
-      if (candleResponse.statusCode == 200) {
-        final dynamic candleJson = json.decode(candleResponse.body);
-        if (candleJson is List) {
-          parsedCandles = candleJson
-              .map(_parseCandle)
-              .whereType<CandlePoint>()
-              .toList()
-            ..sort((a, b) => a.time.compareTo(b.time));
-        }
-      }
-
-      final nextPoints = List<LivePoint>.from(livePoints)
-        ..add(
-          LivePoint(
-            time: DateTime.now(),
-            fundingPercent: coin.fundingRate * 100,
-            openInterest: coin.openInterest,
-            volume24h: coin.volume24h,
-          ),
-        );
-
-      while (nextPoints.length > 48) {
-        nextPoints.removeAt(0);
-      }
-
-      final normalizedPoints = _normalizeLivePoints(
-        nextPoints,
-        coin.fundingRate * 100,
-        coin.openInterest,
-        coin.volume24h,
-      );
+      final sortedByScore = [...allCoins]
+        ..sort((a, b) {
+          final scoreCompare = b.score.compareTo(a.score);
+          if (scoreCompare != 0) return scoreCompare;
+          return b.changePercent.compareTo(a.changePercent);
+        });
 
       setState(() {
-        selectedCoin = coin;
-        candles = parsedCandles;
-        livePoints = normalizedPoints;
+        selectedCoin = detailItem;
+        heroCoin = sortedByScore.first;
         detailLoading = false;
-        detailError = '';
       });
     } catch (_) {
       setState(() {
@@ -886,245 +972,10 @@ class _DetailPageState extends State<DetailPage> {
     }
   }
 
-  List<LivePoint> _normalizeLivePoints(
-    List<LivePoint> points,
-    double fundingPercent,
-    double openInterest,
-    double volume24h,
-  ) {
-    if (points.length >= 12) return points;
-
-    final now = DateTime.now();
-    final List<LivePoint> seeded = [];
-
-    for (int i = 11; i >= 0; i--) {
-      seeded.add(
-        LivePoint(
-          time: now.subtract(Duration(seconds: i * 5)),
-          fundingPercent: fundingPercent,
-          openInterest: openInterest,
-          volume24h: volume24h,
-        ),
-      );
-    }
-
-    if (points.isEmpty) {
-      return seeded;
-    }
-
-    final int overlap = math.min(points.length, seeded.length);
-    seeded.removeRange(seeded.length - overlap, seeded.length);
-    seeded.addAll(points.takeLast(overlap));
-    return seeded;
-  }
-
-  CandlePoint? _parseCandle(dynamic item) {
-    if (item is Map) {
-      final map = Map<String, dynamic>.from(item);
-
-      final double t = _parseDouble(
-        map['t'] ?? map['time'] ?? map['timestamp'],
-      );
-      final double o = _parseDouble(map['o'] ?? map['open']);
-      final double h = _parseDouble(map['h'] ?? map['high']);
-      final double l = _parseDouble(map['l'] ?? map['low']);
-      final double c = _parseDouble(map['c'] ?? map['close']);
-      final double v = _parseDouble(map['v'] ?? map['volume']);
-
-      if ([o, h, l, c].every((e) => e == 0)) return null;
-
-      return CandlePoint(
-        time: DateTime.fromMillisecondsSinceEpoch((t * 1000).round()),
-        open: o,
-        high: h,
-        low: l,
-        close: c,
-        volume: v,
-      );
-    }
-
-    if (item is List && item.length >= 6) {
-      final double t = _parseDouble(item[0]);
-      final double v = _parseDouble(item[1]);
-      final double c = _parseDouble(item[2]);
-      final double h = _parseDouble(item[3]);
-      final double l = _parseDouble(item[4]);
-      final double o = _parseDouble(item[5]);
-
-      if ([o, h, l, c].every((e) => e == 0)) return null;
-
-      return CandlePoint(
-        time: DateTime.fromMillisecondsSinceEpoch((t * 1000).round()),
-        open: o,
-        high: h,
-        low: l,
-        close: c,
-        volume: v,
-      );
-    }
-
-    return null;
-  }
-
-  double get shortPercent {
-    double value = 50;
-    value += math.min(selectedCoin.score * 0.32, 22);
-
-    if (selectedCoin.fundingRate > 0) {
-      value += math.min(selectedCoin.fundingRate * 100 * 18, 12);
-    } else {
-      value -= math.min(selectedCoin.fundingRate.abs() * 100 * 10, 8);
-    }
-
-    if (selectedCoin.changePercent > 0) {
-      value += math.min(selectedCoin.changePercent * 0.14, 10);
-    } else {
-      value -= math.min(selectedCoin.changePercent.abs() * 0.08, 6);
-    }
-
-    return value.clamp(10, 90);
-  }
-
-  double get longPercent => 100 - shortPercent;
-
-  String get pressureText {
-    if (shortPercent >= 70) return 'Short baskısı çok güçlü.';
-    if (shortPercent >= 58) return 'Short tarafı önde.';
-    if (longPercent >= 60) return 'Long tarafı güçlü.';
-    return 'Piyasa dengeli.';
-  }
-
-  Widget _statusChip() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-      decoration: BoxDecoration(
-        color: Colors.black.withOpacity(0.55),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(
-          color: detailLoading ? Colors.orangeAccent : Colors.greenAccent,
-        ),
-      ),
-      child: Text(
-        detailLoading ? 'Yükleniyor' : 'Canlı Detay',
-        style: TextStyle(
-          color: detailLoading ? Colors.orangeAccent : Colors.greenAccent,
-          fontSize: 12,
-          fontWeight: FontWeight.w700,
-        ),
-      ),
-    );
-  }
-
-  Widget _summaryCard() {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(22),
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            const Color(0xFF0B1428),
-            const Color(0xFF0A1020),
-            const Color(0xFF180C24).withOpacity(0.92),
-          ],
-        ),
-        border: Border.all(color: Colors.white.withOpacity(0.08)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  selectedCoin.name,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 26,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Text(
-                selectedCoin.changeText,
-                style: TextStyle(
-                  color: selectedCoin.changePercent < 0
-                      ? Colors.redAccent
-                      : const Color(0xFF3CFFB2),
-                  fontSize: 22,
-                  fontWeight: FontWeight.w900,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          Text(
-            'Short skoru: ${selectedCoin.score} • ${selectedCoin.biasLabel}',
-            style: const TextStyle(
-              color: Colors.orangeAccent,
-              fontSize: 15,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-          const SizedBox(height: 12),
-          Text(
-            selectedCoin.note,
-            style: const TextStyle(
-              color: Colors.white70,
-              fontSize: 15,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _sectionCard({
-    required String title,
-    required Widget child,
-  }) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.black.withOpacity(0.30),
-        borderRadius: BorderRadius.circular(22),
-        border: Border.all(
-          color: Colors.orangeAccent.withOpacity(0.35),
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            title,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 17,
-              fontWeight: FontWeight.w900,
-            ),
-          ),
-          const SizedBox(height: 14),
-          child,
-        ],
-      ),
-    );
-  }
-
-  Widget _metricBox(String title, String value, {Color? valueColor}) {
+  Widget metricBox(String title, String value, {Color? valueColor}) {
     return Container(
       padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: Colors.black.withOpacity(0.28),
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: Colors.white.withOpacity(0.10)),
-      ),
+      decoration: _glassBox(),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1136,13 +987,13 @@ class _DetailPageState extends State<DetailPage> {
               fontWeight: FontWeight.w500,
             ),
           ),
-          const Spacer(),
+          const SizedBox(height: 8),
           Text(
             value,
             style: TextStyle(
               color: valueColor ?? Colors.white,
               fontSize: 18,
-              fontWeight: FontWeight.w900,
+              fontWeight: FontWeight.w800,
             ),
           ),
         ],
@@ -1150,141 +1001,140 @@ class _DetailPageState extends State<DetailPage> {
     );
   }
 
-  Widget _miniAnalysisCard() {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.black.withOpacity(0.28),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.white.withOpacity(0.10)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'Mini Analiz',
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 20,
-              fontWeight: FontWeight.w900,
+  Widget _buildHeroCard() {
+    return Stack(
+      children: [
+        Container(
+          width: double.infinity,
+          height: 220,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(20),
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                const Color(0xFF09101E),
+                const Color(0xFF101B32).withOpacity(0.95),
+                const Color(0xFF140B18),
+              ],
             ),
-          ),
-          const SizedBox(height: 14),
-          GridView.count(
-            crossAxisCount: 2,
-            childAspectRatio: 1.65,
-            crossAxisSpacing: 12,
-            mainAxisSpacing: 12,
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            children: [
-              _metricBox('Son fiyat', selectedCoin.lastPriceText),
-              _metricBox(
-                'Funding oranı',
-                selectedCoin.fundingText,
-                valueColor: selectedCoin.fundingRate < 0
-                    ? Colors.redAccent
-                    : Colors.orangeAccent,
-              ),
-              _metricBox('24s Hacim', selectedCoin.volumeText),
-              _metricBox(
-                'Açık pozisyon',
-                selectedCoin.openInterestText,
-                valueColor: Colors.cyanAccent,
+            border: Border.all(color: Colors.white.withOpacity(0.06)),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.25),
+                blurRadius: 20,
+                spreadRadius: 2,
               ),
             ],
           ),
-        ],
-      ),
-    );
-  }
-
-  Widget _pressureCard() {
-    return _sectionCard(
-      title: 'Piyasa Baskısı',
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  'Long %\n${longPercent.toStringAsFixed(1)}%',
-                  style: const TextStyle(
-                    color: Color(0xFF3CFFB2),
-                    fontSize: 15,
-                    fontWeight: FontWeight.w900,
-                    height: 1.35,
-                  ),
-                ),
-              ),
-              Expanded(
-                child: Text(
-                  'Short %\n${shortPercent.toStringAsFixed(1)}%',
-                  textAlign: TextAlign.right,
-                  style: const TextStyle(
-                    color: Colors.redAccent,
-                    fontSize: 15,
-                    fontWeight: FontWeight.w900,
-                    height: 1.35,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Container(
-            height: 16,
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(12),
-              color: Colors.white.withOpacity(0.08),
+        ),
+        Positioned(
+          left: 14,
+          right: 14,
+          bottom: 14,
+          child: Container(
+            padding: const EdgeInsets.all(12),
+            decoration: _glassBox(
+              borderColor: Colors.orangeAccent.withOpacity(0.55),
+              opacity: 0.55,
             ),
             child: Row(
               children: [
-                Expanded(
-                  flex: (longPercent * 10).round(),
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF3CFFB2).withOpacity(0.72),
-                      borderRadius: const BorderRadius.only(
-                        topLeft: Radius.circular(12),
-                        bottomLeft: Radius.circular(12),
-                      ),
+                Container(
+                  width: 58,
+                  height: 58,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: Colors.black.withOpacity(0.55),
+                    border: Border.all(color: Colors.orangeAccent, width: 2.5),
+                  ),
+                  child: Text(
+                    '${heroCoin.score}',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 22,
+                      fontWeight: FontWeight.w900,
                     ),
                   ),
                 ),
+                const SizedBox(width: 12),
                 Expanded(
-                  flex: (shortPercent * 10).round(),
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: Colors.redAccent.withOpacity(0.84),
-                      borderRadius: const BorderRadius.only(
-                        topRight: Radius.circular(12),
-                        bottomRight: Radius.circular(12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'EN GÜÇLÜ SHORT ADAYI',
+                        style: TextStyle(
+                          color: Colors.orangeAccent,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w800,
+                        ),
                       ),
-                    ),
+                      const SizedBox(height: 4),
+                      Text(
+                        heroCoin.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 18,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Funding: ${heroCoin.fundingText} • Değişim: ${heroCoin.changeText}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: Colors.white70,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ],
             ),
           ),
-          const SizedBox(height: 12),
-          Text(
-            pressureText,
-            style: const TextStyle(
-              color: Colors.white70,
-              fontSize: 14,
-              fontWeight: FontWeight.w700,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildScoreBar(int greenFlex, int redFlex) {
+    return Container(
+      height: 14,
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.08),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            flex: greenFlex,
+            child: Container(
+              decoration: BoxDecoration(
+                color: Colors.green.withOpacity(0.65),
+                borderRadius: const BorderRadius.only(
+                  topLeft: Radius.circular(10),
+                  bottomLeft: Radius.circular(10),
+                ),
+              ),
             ),
           ),
-          const SizedBox(height: 8),
-          Text(
-            '5 sn’de bir canlı güncellenir.',
-            style: TextStyle(
-              color: Colors.orangeAccent.withOpacity(0.92),
-              fontSize: 12,
-              fontWeight: FontWeight.w700,
+          Expanded(
+            flex: redFlex,
+            child: Container(
+              decoration: BoxDecoration(
+                color: Colors.redAccent.withOpacity(0.85),
+                borderRadius: const BorderRadius.only(
+                  topRight: Radius.circular(10),
+                  bottomRight: Radius.circular(10),
+                ),
+              ),
             ),
           ),
         ],
@@ -1294,108 +1144,176 @@ class _DetailPageState extends State<DetailPage> {
 
   @override
   Widget build(BuildContext context) {
-    final List<LivePoint> graphPoints = livePoints.isEmpty
-        ? [
-            LivePoint(
-              time: DateTime.now(),
-              fundingPercent: selectedCoin.fundingRate * 100,
-              openInterest: selectedCoin.openInterest,
-              volume24h: selectedCoin.volume24h,
-            ),
-          ]
-        : livePoints;
+    final redFlex = selectedCoin.score.clamp(10, 90);
+    final greenFlex = (100 - redFlex).clamp(10, 90);
 
     return Scaffold(
       body: Stack(
         children: [
           Positioned.fill(
-            child: Image.asset(
-              'assets/bg.png',
-              fit: BoxFit.cover,
-            ),
+            child: Image.asset('assets/bg.png', fit: BoxFit.cover),
           ),
           SafeArea(
             child: SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+              padding: const EdgeInsets.all(16),
               child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(
                     children: [
+                      IconButton(
+                        icon: const Icon(Icons.arrow_back, color: Colors.white),
+                        onPressed: () => Navigator.pop(context),
+                      ),
                       const Spacer(),
-                      _statusChip(),
+                      _liveBadge(detailLoading, readyText: 'Canlı Detay'),
                     ],
                   ),
-                  const SizedBox(height: 14),
-                  _summaryCard(),
+                  const SizedBox(height: 8),
+                  _buildHeroCard(),
+                  const SizedBox(height: 20),
                   if (detailError.isNotEmpty) ...[
-                    const SizedBox(height: 14),
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: Colors.red.withOpacity(0.18),
-                        borderRadius: BorderRadius.circular(14),
-                        border: Border.all(
-                          color: Colors.redAccent.withOpacity(0.5),
-                        ),
-                      ),
-                      child: Text(
-                        detailError,
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
+                    _errorBox(detailError),
+                    const SizedBox(height: 16),
                   ],
-                  const SizedBox(height: 16),
-                  _sectionCard(
-                    title: 'Fiyat Grafiği',
-                    child: SizedBox(
-                      height: 250,
-                      child: candles.isEmpty
-                          ? const Center(
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: _glassBox(
+                      borderColor: Colors.redAccent.withOpacity(0.4),
+                    ),
+                    child: Column(
+                      children: [
+                        Row(
+                          children: [
+                            Expanded(
                               child: Text(
-                                'Mum verisi alınamadı',
-                                style: TextStyle(
-                                  color: Colors.white70,
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w700,
+                                selectedCoin.name,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 22,
+                                  fontWeight: FontWeight.w900,
                                 ),
                               ),
-                            )
-                          : CustomPaint(
-                              painter: LiveCandlePainter(candles: candles),
                             ),
+                            Text(
+                              selectedCoin.changeText,
+                              style: TextStyle(
+                                color: _changeColor(selectedCoin.changePercent),
+                                fontSize: 20,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: Text(
+                            'Short skoru: ${selectedCoin.score} • ${selectedCoin.biasLabel}',
+                            style: const TextStyle(
+                              color: Colors.orangeAccent,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 14),
+                        _buildScoreBar(greenFlex, redFlex),
+                        const SizedBox(height: 10),
+                        Text(
+                          selectedCoin.note,
+                          style: const TextStyle(
+                            color: Colors.white70,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                  const SizedBox(height: 16),
-                  _sectionCard(
-                    title: 'Açık Pozisyon (OI) & Hacim',
-                    child: SizedBox(
-                      height: 230,
-                      child: CustomPaint(
-                        painter: OiVolumePainter(samples: graphPoints),
+                  const SizedBox(height: 20),
+                  GridView.count(
+                    crossAxisCount: 2,
+                    crossAxisSpacing: 12,
+                    mainAxisSpacing: 12,
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    childAspectRatio: 1.45,
+                    children: [
+                      metricBox('Son fiyat', selectedCoin.lastPriceText),
+                      metricBox('Mark price', selectedCoin.markPriceText),
+                      metricBox('Index price', selectedCoin.indexPriceText),
+                      metricBox(
+                        'Funding rate',
+                        selectedCoin.fundingText,
+                        valueColor: selectedCoin.fundingRate < 0
+                            ? Colors.redAccent
+                            : Colors.orangeAccent,
+                      ),
+                      metricBox(
+                        'Short skoru',
+                        '${selectedCoin.score}',
+                        valueColor: Colors.orangeAccent,
+                      ),
+                      metricBox(
+                        'Mark-Index farkı',
+                        _formatPercent(selectedCoin.divergencePercent, digits: 3),
+                        valueColor: Colors.cyanAccent,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 20),
+                  Container(
+                    height: 190,
+                    decoration: _glassBox(
+                      borderColor: Colors.orangeAccent.withOpacity(0.4),
+                    ),
+                    child: CustomPaint(
+                      painter: ChartPainter(
+                        isBullish: selectedCoin.changePercent >= 0,
+                      ),
+                      child: Center(
+                        child: Text(
+                          selectedCoin.biasLabel,
+                          style: const TextStyle(
+                            color: Colors.white54,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
                       ),
                     ),
                   ),
-                  const SizedBox(height: 16),
-                  _sectionCard(
-                    title: 'Funding Oranı',
-                    child: SizedBox(
-                      height: 220,
-                      child: CustomPaint(
-                        painter: FundingPainter(samples: graphPoints),
-                      ),
+                  const SizedBox(height: 20),
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.red.withOpacity(0.15),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: Colors.redAccent.withOpacity(0.6)),
+                    ),
+                    child: Column(
+                      children: [
+                        const Text(
+                          'CANLI DETAY EKRANI',
+                          style: TextStyle(
+                            color: Colors.orangeAccent,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 20,
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        Text(
+                          '${selectedCoin.name} için son fiyat, funding, mark-index farkı ve short skoru canlı güncelleniyor.',
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            color: Colors.white70,
+                            fontSize: 16,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                  const SizedBox(height: 16),
-                  _miniAnalysisCard(),
-                  const SizedBox(height: 16),
-                  _pressureCard(),
+                  const SizedBox(height: 24),
                 ],
               ),
             ),
@@ -1406,352 +1324,69 @@ class _DetailPageState extends State<DetailPage> {
   }
 }
 
-class LiveCandlePainter extends CustomPainter {
-  final List<CandlePoint> candles;
+class ChartPainter extends CustomPainter {
+  final bool isBullish;
 
-  LiveCandlePainter({required this.candles});
+  ChartPainter({required this.isBullish});
 
   @override
   void paint(Canvas canvas, Size size) {
-    const leftPad = 14.0;
-    const rightPad = 56.0;
-    const topPad = 14.0;
-    const bottomPad = 28.0;
-
-    final w = size.width - leftPad - rightPad;
-    final h = size.height - topPad - bottomPad;
-
     final gridPaint = Paint()
       ..color = Colors.white.withOpacity(0.08)
       ..strokeWidth = 1;
 
-    for (int i = 0; i <= 4; i++) {
-      final y = topPad + (h / 4) * i;
-      canvas.drawLine(
-        Offset(leftPad, y),
-        Offset(leftPad + w, y),
-        gridPaint,
-      );
+    for (double i = 0; i <= size.width; i += size.width / 6) {
+      canvas.drawLine(Offset(i, 0), Offset(i, size.height), gridPaint);
+    }
+    for (double i = 0; i <= size.height; i += size.height / 4) {
+      canvas.drawLine(Offset(0, i), Offset(size.width, i), gridPaint);
     }
 
-    final minPrice = candles.map((e) => e.low).reduce(math.min);
-    final maxPrice = candles.map((e) => e.high).reduce(math.max);
-    final diff = (maxPrice - minPrice).abs() < 0.0000001
-        ? 0.000001
-        : (maxPrice - minPrice);
+    final mainColor = isBullish ? Colors.redAccent : Colors.greenAccent;
+    final glowColor = isBullish ? Colors.orangeAccent : Colors.greenAccent;
 
-    double yFromPrice(double value) {
-      final p = (value - minPrice) / diff;
-      return topPad + h - (p * h);
-    }
+    final linePaint = Paint()
+      ..color = mainColor
+      ..strokeWidth = 3
+      ..style = PaintingStyle.stroke;
 
-    final stepX = w / candles.length;
-    final bodyWidth = stepX * 0.48;
-
-    for (int i = 0; i < candles.length; i++) {
-      final c = candles[i];
-      final x = leftPad + stepX * i + stepX / 2;
-      final color = c.close >= c.open
-          ? const Color(0xFF3CFFB2)
-          : Colors.redAccent;
-
-      final wickPaint = Paint()
-        ..color = color
-        ..strokeWidth = 1.4;
-
-      canvas.drawLine(
-        Offset(x, yFromPrice(c.high)),
-        Offset(x, yFromPrice(c.low)),
-        wickPaint,
-      );
-
-      final top = yFromPrice(math.max(c.open, c.close));
-      final bottom = yFromPrice(math.min(c.open, c.close));
-
-      final rect = Rect.fromLTRB(
-        x - bodyWidth / 2,
-        top,
-        x + bodyWidth / 2,
-        math.max(bottom, top + 2),
-      );
-
-      canvas.drawRRect(
-        RRect.fromRectAndRadius(rect, const Radius.circular(2)),
-        Paint()..color = color,
-      );
-    }
-
-    final labelStyle = TextStyle(
-      color: Colors.white.withOpacity(0.65),
-      fontSize: 10,
-      fontWeight: FontWeight.w600,
-    );
-
-    final maxTp = TextPainter(
-      text: TextSpan(text: _formatPrice(maxPrice), style: labelStyle),
-      textDirection: TextDirection.ltr,
-    )..layout();
-
-    final minTp = TextPainter(
-      text: TextSpan(text: _formatPrice(minPrice), style: labelStyle),
-      textDirection: TextDirection.ltr,
-    )..layout();
-
-    maxTp.paint(canvas, Offset(leftPad + w + 6, topPad - 2));
-    minTp.paint(canvas, Offset(leftPad + w + 6, topPad + h - 10));
-  }
-
-  @override
-  bool shouldRepaint(covariant LiveCandlePainter oldDelegate) {
-    return oldDelegate.candles != candles;
-  }
-}
-
-class OiVolumePainter extends CustomPainter {
-  final List<LivePoint> samples;
-
-  OiVolumePainter({required this.samples});
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    const leftPad = 14.0;
-    const rightPad = 14.0;
-    const topPad = 14.0;
-    const bottomPad = 28.0;
-
-    final w = size.width - leftPad - rightPad;
-    final h = size.height - topPad - bottomPad;
-
-    final gridPaint = Paint()
-      ..color = Colors.white.withOpacity(0.08)
-      ..strokeWidth = 1;
-
-    for (int i = 0; i <= 4; i++) {
-      final y = topPad + (h / 4) * i;
-      canvas.drawLine(
-        Offset(leftPad, y),
-        Offset(leftPad + w, y),
-        gridPaint,
-      );
-    }
-
-    final maxVol = samples.map((e) => e.volume24h).fold<double>(1, math.max);
-    double minOi = samples.map((e) => e.openInterest).reduce(math.min);
-    double maxOi = samples.map((e) => e.openInterest).reduce(math.max);
-
-    if ((maxOi - minOi).abs() < 0.000001) {
-      maxOi += 1;
-      minOi -= 1;
-    }
-
-    final stepX = samples.length == 1 ? w : w / samples.length;
-    final barWidth = math.max(6, stepX * 0.52);
-
-    double yFromOi(double value) {
-      final p = (value - minOi) / (maxOi - minOi);
-      return topPad + h - (p * h);
-    }
-
-    for (int i = 0; i < samples.length; i++) {
-      final s = samples[i];
-      final x = samples.length == 1
-          ? leftPad + (w - barWidth) / 2
-          : leftPad + stepX * i + (stepX - barWidth) / 2;
-      final barHeight = (s.volume24h / maxVol) * h;
-
-      canvas.drawRRect(
-        RRect.fromRectAndRadius(
-          Rect.fromLTWH(
-            x,
-            topPad + h - barHeight,
-            barWidth,
-            barHeight,
-          ),
-          const Radius.circular(2),
-        ),
-        Paint()..color = Colors.orangeAccent,
-      );
-    }
+    final glowPaint = Paint()
+      ..color = glowColor.withOpacity(0.35)
+      ..strokeWidth = 8
+      ..style = PaintingStyle.stroke
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8);
 
     final path = Path();
-    for (int i = 0; i < samples.length; i++) {
-      final x = samples.length == 1
-          ? leftPad + w / 2
-          : leftPad + stepX * i + stepX / 2;
-      final y = yFromOi(samples[i].openInterest);
-      if (i == 0) {
-        path.moveTo(x, y);
-      } else {
-        path.lineTo(x, y);
-      }
-    }
 
-    canvas.drawPath(
-      path,
-      Paint()
-        ..color = const Color(0xFF3EA6FF).withOpacity(0.30)
-        ..strokeWidth = 6
-        ..style = PaintingStyle.stroke
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8),
-    );
-
-    canvas.drawPath(
-      path,
-      Paint()
-        ..color = const Color(0xFF3EA6FF)
-        ..strokeWidth = 2.5
-        ..style = PaintingStyle.stroke,
-    );
-
-    final style = TextStyle(
-      color: Colors.white.withOpacity(0.74),
-      fontSize: 11,
-      fontWeight: FontWeight.w700,
-    );
-
-    final tp1 = TextPainter(
-      text: TextSpan(
-        text: '● OI',
-        style: style.copyWith(color: const Color(0xFF3EA6FF)),
-      ),
-      textDirection: TextDirection.ltr,
-    )..layout();
-
-    final tp2 = TextPainter(
-      text: TextSpan(
-        text: '● Hacim',
-        style: style.copyWith(color: Colors.orangeAccent),
-      ),
-      textDirection: TextDirection.ltr,
-    )..layout();
-
-    tp1.paint(canvas, Offset(leftPad + 26, size.height - 18));
-    tp2.paint(canvas, Offset(leftPad + 90, size.height - 18));
-  }
-
-  @override
-  bool shouldRepaint(covariant OiVolumePainter oldDelegate) {
-    return oldDelegate.samples != samples;
-  }
-}
-
-class FundingPainter extends CustomPainter {
-  final List<LivePoint> samples;
-
-  FundingPainter({required this.samples});
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    const leftPad = 14.0;
-    const rightPad = 14.0;
-    const topPad = 14.0;
-    const bottomPad = 28.0;
-
-    final w = size.width - leftPad - rightPad;
-    final h = size.height - topPad - bottomPad;
-
-    final gridPaint = Paint()
-      ..color = Colors.white.withOpacity(0.08)
-      ..strokeWidth = 1;
-
-    for (int i = 0; i <= 4; i++) {
-      final y = topPad + (h / 4) * i;
-      canvas.drawLine(
-        Offset(leftPad, y),
-        Offset(leftPad + w, y),
-        gridPaint,
-      );
-    }
-
-    double minV = samples.map((e) => e.fundingPercent).reduce(math.min);
-    double maxV = samples.map((e) => e.fundingPercent).reduce(math.max);
-
-    if ((maxV - minV).abs() < 0.0001) {
-      maxV += 0.1;
-      minV -= 0.1;
-    }
-
-    double yFromValue(double value) {
-      final p = (value - minV) / (maxV - minV);
-      return topPad + h - (p * h);
-    }
-
-    final zeroY = yFromValue(0);
-    canvas.drawLine(
-      Offset(leftPad, zeroY),
-      Offset(leftPad + w, zeroY),
-      Paint()
-        ..color = Colors.white.withOpacity(0.14)
-        ..strokeWidth = 1,
-    );
-
-    final stepX = samples.length == 1 ? w : w / (samples.length - 1);
-
-    if (samples.length == 1) {
-      final y = yFromValue(samples.first.fundingPercent);
-      canvas.drawCircle(
-        Offset(leftPad + w / 2, y),
-        4,
-        Paint()
-          ..color = samples.first.fundingPercent >= 0
-              ? const Color(0xFF3CFFB2)
-              : Colors.redAccent,
-      );
+    if (isBullish) {
+      path.moveTo(0, size.height * 0.18);
+      path.lineTo(size.width * 0.10, size.height * 0.23);
+      path.lineTo(size.width * 0.20, size.height * 0.29);
+      path.lineTo(size.width * 0.32, size.height * 0.38);
+      path.lineTo(size.width * 0.46, size.height * 0.48);
+      path.lineTo(size.width * 0.60, size.height * 0.57);
+      path.lineTo(size.width * 0.76, size.height * 0.70);
+      path.lineTo(size.width, size.height * 0.86);
     } else {
-      for (int i = 1; i < samples.length; i++) {
-        final prev = samples[i - 1];
-        final curr = samples[i];
-
-        canvas.drawLine(
-          Offset(leftPad + stepX * (i - 1), yFromValue(prev.fundingPercent)),
-          Offset(leftPad + stepX * i, yFromValue(curr.fundingPercent)),
-          Paint()
-            ..color = curr.fundingPercent >= 0
-                ? const Color(0xFF3CFFB2)
-                : Colors.redAccent
-            ..strokeWidth = 3
-            ..style = PaintingStyle.stroke,
-        );
-      }
+      path.moveTo(0, size.height * 0.82);
+      path.lineTo(size.width * 0.12, size.height * 0.74);
+      path.lineTo(size.width * 0.24, size.height * 0.66);
+      path.lineTo(size.width * 0.40, size.height * 0.56);
+      path.lineTo(size.width * 0.58, size.height * 0.41);
+      path.lineTo(size.width * 0.74, size.height * 0.29);
+      path.lineTo(size.width, size.height * 0.16);
     }
 
-    final style = TextStyle(
-      color: Colors.white.withOpacity(0.74),
-      fontSize: 11,
-      fontWeight: FontWeight.w700,
-    );
-
-    final tp1 = TextPainter(
-      text: TextSpan(
-        text: '● Pozitif',
-        style: style.copyWith(color: const Color(0xFF3CFFB2)),
-      ),
-      textDirection: TextDirection.ltr,
-    )..layout();
-
-    final tp2 = TextPainter(
-      text: TextSpan(
-        text: '● Negatif',
-        style: style.copyWith(color: Colors.redAccent),
-      ),
-      textDirection: TextDirection.ltr,
-    )..layout();
-
-    tp1.paint(canvas, Offset(leftPad + 24, size.height - 18));
-    tp2.paint(canvas, Offset(leftPad + 108, size.height - 18));
+    canvas.drawPath(path, glowPaint);
+    canvas.drawPath(path, linePaint);
   }
 
   @override
-  bool shouldRepaint(covariant FundingPainter oldDelegate) {
-    return oldDelegate.samples != samples;
+  bool shouldRepaint(covariant ChartPainter oldDelegate) {
+    return oldDelegate.isBullish != isBullish;
   }
 }
 
-extension _TakeLastExtension<T> on Iterable<T> {
-  Iterable<T> takeLast(int count) {
-    if (count <= 0) return const [];
-    final list = toList();
-    if (count >= list.length) return list;
-    return list.sublist(list.length - count);
-  }
+extension<T> on Iterable<T> {
+  T? get firstOrNull => isEmpty ? null : first;
 }
