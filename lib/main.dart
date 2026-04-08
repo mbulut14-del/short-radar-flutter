@@ -29,9 +29,15 @@ String _formatFunding(double value) {
 
 String _formatCompactNumber(double value) {
   final abs = value.abs();
-  if (abs >= 1000000000) return '${(value / 1000000000).toStringAsFixed(2)}B';
-  if (abs >= 1000000) return '${(value / 1000000).toStringAsFixed(2)}M';
-  if (abs >= 1000) return '${(value / 1000).toStringAsFixed(2)}K';
+  if (abs >= 1000000000) {
+    return '${(value / 1000000000).toStringAsFixed(2)}B';
+  }
+  if (abs >= 1000000) {
+    return '${(value / 1000000).toStringAsFixed(2)}M';
+  }
+  if (abs >= 1000) {
+    return '${(value / 1000).toStringAsFixed(2)}K';
+  }
   return value.toStringAsFixed(2);
 }
 
@@ -66,7 +72,7 @@ class CoinRadarData {
     required String name,
     required double changePercent,
   }) {
-    final score = _calculateScore(
+    final int score = _calculateScore(
       changePercent: changePercent,
       fundingRate: 0,
       markPrice: 0,
@@ -90,15 +96,16 @@ class CoinRadarData {
   }
 
   factory CoinRadarData.fromJson(Map<String, dynamic> json) {
-    final changePercent = _parseDouble(json['change_percentage']);
-    final fundingRate = _parseDouble(json['funding_rate']);
-    final lastPrice = _parseDouble(json['last']);
-    final markPrice = _parseDouble(json['mark_price']);
-    final indexPrice = _parseDouble(json['index_price']);
-    final volume24h = _parseDouble(
+    final double changePercent = _parseDouble(json['change_percentage']);
+    final double fundingRate = _parseDouble(json['funding_rate']);
+    final double lastPrice = _parseDouble(json['last']);
+    final double markPrice = _parseDouble(json['mark_price']);
+    final double indexPrice = _parseDouble(json['index_price']);
+    final double volume24h = _parseDouble(
       json['volume_24h_quote'] ?? json['volume_24h'] ?? 0,
     );
-    final openInterest = _parseDouble(
+
+    final double openInterest = _parseDouble(
       json['open_interest'] ??
           json['total_size'] ??
           json['position_size'] ??
@@ -106,7 +113,7 @@ class CoinRadarData {
           0,
     );
 
-    final score = _calculateScore(
+    final int score = _calculateScore(
       changePercent: changePercent,
       fundingRate: fundingRate,
       markPrice: markPrice,
@@ -157,20 +164,21 @@ class CoinRadarData {
     }
 
     if (indexPrice != 0) {
-      final divergence =
+      final double divergence =
           ((markPrice - indexPrice) / indexPrice).abs() * 100;
       score += math.min(divergence * 22, 14);
     }
 
     if (volume24h > 0) {
-      final volumeBoost = math.max(
+      final double volumeBoost = math.max(
         0,
         math.min((math.log(volume24h + 1) - 10) * 2.2, 10),
       );
       score += volumeBoost;
     }
 
-    return score.clamp(0, 100).round();
+    score = score.clamp(0, 100);
+    return score.round();
   }
 
   static String _biasLabel(int score) {
@@ -188,7 +196,7 @@ class CoinRadarData {
     double markPrice,
     double indexPrice,
   ) {
-    final divergence = indexPrice == 0
+    final double divergence = indexPrice == 0
         ? 0
         : ((markPrice - indexPrice) / indexPrice).abs() * 100;
 
@@ -216,8 +224,15 @@ class CoinRadarData {
   String get changeText => _formatPercent(changePercent);
   String get fundingText => _formatFunding(fundingRate);
   String get lastPriceText => _formatPrice(lastPrice);
+  String get markPriceText => _formatPrice(markPrice);
+  String get indexPriceText => _formatPrice(indexPrice);
   String get volumeText => _formatCompactNumber(volume24h);
-  String get oiText => _formatCompactNumber(openInterest);
+  String get openInterestText => _formatCompactNumber(openInterest);
+
+  double get divergencePercent {
+    if (indexPrice == 0) return 0;
+    return ((markPrice - indexPrice) / indexPrice).abs() * 100;
+  }
 }
 
 class CandlePoint {
@@ -238,13 +253,13 @@ class CandlePoint {
   });
 }
 
-class LiveSample {
+class LivePoint {
   final DateTime time;
   final double fundingPercent;
   final double openInterest;
   final double volume24h;
 
-  const LiveSample({
+  const LivePoint({
     required this.time,
     required this.fundingPercent,
     required this.openInterest,
@@ -288,21 +303,24 @@ class _HomePageState extends State<HomePage> {
   CoinRadarData? radarLeader;
   bool isLoading = true;
   String errorText = '';
-  Timer? refreshTimer;
+  Timer? _refreshTimer;
 
   @override
   void initState() {
     super.initState();
     radarLeader = coins.first;
     fetchCoins();
-    refreshTimer = Timer.periodic(const Duration(seconds: 5), (_) {
-      if (mounted) fetchCoins();
+
+    _refreshTimer = Timer.periodic(const Duration(seconds: 5), (timer) {
+      if (mounted) {
+        fetchCoins();
+      }
     });
   }
 
   @override
   void dispose() {
-    refreshTimer?.cancel();
+    _refreshTimer?.cancel();
     super.dispose();
   }
 
@@ -327,10 +345,11 @@ class _HomePageState extends State<HomePage> {
       }
 
       final List<dynamic> parsed = json.decode(response.body);
-      final allCoins = parsed
-          .whereType<Map>()
-          .map((e) => CoinRadarData.fromJson(Map<String, dynamic>.from(e)))
-          .where((e) => e.name.isNotEmpty)
+
+      final List<CoinRadarData> allCoins = parsed
+          .whereType<Map<String, dynamic>>()
+          .where((e) => (e['contract'] ?? '').toString().isNotEmpty)
+          .map(CoinRadarData.fromJson)
           .toList();
 
       if (allCoins.isEmpty) {
@@ -341,13 +360,13 @@ class _HomePageState extends State<HomePage> {
         return;
       }
 
-      final sortedByChange = [...allCoins]
+      final List<CoinRadarData> sortedByChange = [...allCoins]
         ..sort((a, b) => b.changePercent.compareTo(a.changePercent));
 
-      final sortedByScore = [...allCoins]
+      final List<CoinRadarData> sortedByScore = [...allCoins]
         ..sort((a, b) {
-          final s = b.score.compareTo(a.score);
-          if (s != 0) return s;
+          final int scoreCompare = b.score.compareTo(a.score);
+          if (scoreCompare != 0) return scoreCompare;
           return b.changePercent.compareTo(a.changePercent);
         });
 
@@ -355,6 +374,7 @@ class _HomePageState extends State<HomePage> {
         coins = sortedByChange.take(10).toList();
         radarLeader = sortedByScore.first;
         isLoading = false;
+        errorText = '';
       });
     } catch (_) {
       setState(() {
@@ -364,36 +384,13 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
-  Widget _miniInfo(String title, String value) {
-    return RichText(
-      text: TextSpan(
-        children: [
-          TextSpan(
-            text: '$title: ',
-            style: const TextStyle(
-              color: Colors.white60,
-              fontSize: 11,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          TextSpan(
-            text: value,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 11,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _buildRadarHero() {
-    final leader = radarLeader;
-    if (leader == null) return const SizedBox(height: 150);
+    final CoinRadarData? leader = radarLeader;
+    if (leader == null) {
+      return const SizedBox(height: 150);
+    }
 
-    final scoreColor = leader.score >= 75
+    final Color scoreColor = leader.score >= 75
         ? Colors.redAccent
         : leader.score >= 60
             ? Colors.orangeAccent
@@ -522,13 +519,41 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
+  Widget _miniInfo(String title, String value) {
+    return RichText(
+      text: TextSpan(
+        children: [
+          TextSpan(
+            text: '$title: ',
+            style: const TextStyle(
+              color: Colors.white60,
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          TextSpan(
+            text: value,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 11,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       body: Stack(
         children: [
           Positioned.fill(
-            child: Image.asset('assets/bg.png', fit: BoxFit.cover),
+            child: Image.asset(
+              'assets/bg.png',
+              fit: BoxFit.cover,
+            ),
           ),
           SafeArea(
             child: RefreshIndicator(
@@ -595,6 +620,7 @@ class _HomePageState extends State<HomePage> {
                   ...coins.asMap().entries.map((entry) {
                     final index = entry.key + 1;
                     final coin = entry.value;
+
                     return Padding(
                       padding: const EdgeInsets.only(bottom: 10),
                       child: GestureDetector(
@@ -730,39 +756,44 @@ class _HomePageState extends State<HomePage> {
 class DetailPage extends StatefulWidget {
   final CoinRadarData coinData;
 
-  const DetailPage({super.key, required this.coinData});
+  const DetailPage({
+    super.key,
+    required this.coinData,
+  });
 
   @override
   State<DetailPage> createState() => _DetailPageState();
 }
 
 class _DetailPageState extends State<DetailPage> {
-  Timer? refreshTimer;
+  Timer? _detailTimer;
   bool detailLoading = true;
   String detailError = '';
 
   late CoinRadarData selectedCoin;
-
   List<CandlePoint> candles = [];
-  List<LiveSample> liveSamples = [];
+  List<LivePoint> livePoints = [];
 
   @override
   void initState() {
     super.initState();
     selectedCoin = widget.coinData;
-    fetchAll();
-    refreshTimer = Timer.periodic(const Duration(seconds: 5), (_) {
-      if (mounted) fetchAll();
+    fetchDetail();
+
+    _detailTimer = Timer.periodic(const Duration(seconds: 5), (timer) {
+      if (mounted) {
+        fetchDetail();
+      }
     });
   }
 
   @override
   void dispose() {
-    refreshTimer?.cancel();
+    _detailTimer?.cancel();
     super.dispose();
   }
 
-  Future<void> fetchAll() async {
+  Future<void> fetchDetail() async {
     setState(() {
       detailLoading = true;
       detailError = '';
@@ -771,72 +802,81 @@ class _DetailPageState extends State<DetailPage> {
     try {
       final contract = widget.coinData.name;
 
-      final tickerRes = await http.get(
+      final tickerResponse = await http.get(
         Uri.parse(
           'https://fx-api.gateio.ws/api/v4/futures/usdt/tickers?contract=$contract',
         ),
         headers: {'Accept': 'application/json'},
       );
 
-      if (tickerRes.statusCode != 200) {
+      if (tickerResponse.statusCode != 200) {
         setState(() {
           detailLoading = false;
-          detailError = 'Ticker verisi alınamadı';
+          detailError = 'Detay verisi alınamadı';
         });
         return;
       }
 
-      final tickerParsed = json.decode(tickerRes.body) as List<dynamic>;
+      final List<dynamic> tickerParsed = json.decode(tickerResponse.body);
+
       if (tickerParsed.isEmpty) {
         setState(() {
           detailLoading = false;
-          detailError = 'Coin verisi bulunamadı';
+          detailError = 'Coin detayı bulunamadı';
         });
         return;
       }
 
-      final coin = CoinRadarData.fromJson(
+      final CoinRadarData coin = CoinRadarData.fromJson(
         Map<String, dynamic>.from(tickerParsed.first as Map),
       );
 
-      final candleRes = await http.get(
+      final candleResponse = await http.get(
         Uri.parse(
-          'https://fx-api.gateio.ws/api/v4/futures/usdt/candlesticks?contract=$contract&interval=5m&limit=24',
+          'https://fx-api.gateio.ws/api/v4/futures/usdt/candlesticks?contract=$contract&interval=5m&limit=48',
         ),
         headers: {'Accept': 'application/json'},
       );
 
       List<CandlePoint> parsedCandles = [];
-      if (candleRes.statusCode == 200) {
-        final dynamic candleJson = json.decode(candleRes.body);
+      if (candleResponse.statusCode == 200) {
+        final dynamic candleJson = json.decode(candleResponse.body);
         if (candleJson is List) {
           parsedCandles = candleJson
-              .map((e) => _parseCandleItem(e))
+              .map(_parseCandle)
               .whereType<CandlePoint>()
               .toList()
             ..sort((a, b) => a.time.compareTo(b.time));
         }
       }
 
-      liveSamples.add(
-        LiveSample(
-          time: DateTime.now(),
-          fundingPercent: coin.fundingRate * 100,
-          openInterest: coin.openInterest,
-          volume24h: coin.volume24h,
-        ),
-      );
+      final nextPoints = List<LivePoint>.from(livePoints)
+        ..add(
+          LivePoint(
+            time: DateTime.now(),
+            fundingPercent: coin.fundingRate * 100,
+            openInterest: coin.openInterest,
+            volume24h: coin.volume24h,
+          ),
+        );
 
-      if (liveSamples.length > 24) {
-        liveSamples = liveSamples.sublist(liveSamples.length - 24);
+      while (nextPoints.length > 48) {
+        nextPoints.removeAt(0);
       }
+
+      final normalizedPoints = _normalizeLivePoints(
+        nextPoints,
+        coin.fundingRate * 100,
+        coin.openInterest,
+        coin.volume24h,
+      );
 
       setState(() {
         selectedCoin = coin;
-        if (parsedCandles.isNotEmpty) {
-          candles = parsedCandles;
-        }
+        candles = parsedCandles;
+        livePoints = normalizedPoints;
         detailLoading = false;
+        detailError = '';
       });
     } catch (_) {
       setState(() {
@@ -846,18 +886,53 @@ class _DetailPageState extends State<DetailPage> {
     }
   }
 
-  CandlePoint? _parseCandleItem(dynamic item) {
+  List<LivePoint> _normalizeLivePoints(
+    List<LivePoint> points,
+    double fundingPercent,
+    double openInterest,
+    double volume24h,
+  ) {
+    if (points.length >= 12) return points;
+
+    final now = DateTime.now();
+    final List<LivePoint> seeded = [];
+
+    for (int i = 11; i >= 0; i--) {
+      seeded.add(
+        LivePoint(
+          time: now.subtract(Duration(seconds: i * 5)),
+          fundingPercent: fundingPercent,
+          openInterest: openInterest,
+          volume24h: volume24h,
+        ),
+      );
+    }
+
+    if (points.isEmpty) {
+      return seeded;
+    }
+
+    final int overlap = math.min(points.length, seeded.length);
+    seeded.removeRange(seeded.length - overlap, seeded.length);
+    seeded.addAll(points.takeLast(overlap));
+    return seeded;
+  }
+
+  CandlePoint? _parseCandle(dynamic item) {
     if (item is Map) {
       final map = Map<String, dynamic>.from(item);
-      final t = _parseDouble(
+
+      final double t = _parseDouble(
         map['t'] ?? map['time'] ?? map['timestamp'],
       );
-      final o = _parseDouble(map['o'] ?? map['open']);
-      final h = _parseDouble(map['h'] ?? map['high']);
-      final l = _parseDouble(map['l'] ?? map['low']);
-      final c = _parseDouble(map['c'] ?? map['close']);
-      final v = _parseDouble(map['v'] ?? map['volume']);
+      final double o = _parseDouble(map['o'] ?? map['open']);
+      final double h = _parseDouble(map['h'] ?? map['high']);
+      final double l = _parseDouble(map['l'] ?? map['low']);
+      final double c = _parseDouble(map['c'] ?? map['close']);
+      final double v = _parseDouble(map['v'] ?? map['volume']);
+
       if ([o, h, l, c].every((e) => e == 0)) return null;
+
       return CandlePoint(
         time: DateTime.fromMillisecondsSinceEpoch((t * 1000).round()),
         open: o,
@@ -869,13 +944,15 @@ class _DetailPageState extends State<DetailPage> {
     }
 
     if (item is List && item.length >= 6) {
-      final t = _parseDouble(item[0]);
-      final v = _parseDouble(item[1]);
-      final c = _parseDouble(item[2]);
-      final h = _parseDouble(item[3]);
-      final l = _parseDouble(item[4]);
-      final o = _parseDouble(item[5]);
+      final double t = _parseDouble(item[0]);
+      final double v = _parseDouble(item[1]);
+      final double c = _parseDouble(item[2]);
+      final double h = _parseDouble(item[3]);
+      final double l = _parseDouble(item[4]);
+      final double o = _parseDouble(item[5]);
+
       if ([o, h, l, c].every((e) => e == 0)) return null;
+
       return CandlePoint(
         time: DateTime.fromMillisecondsSinceEpoch((t * 1000).round()),
         open: o,
@@ -1008,7 +1085,10 @@ class _DetailPageState extends State<DetailPage> {
     );
   }
 
-  Widget _sectionCard({required String title, required Widget child}) {
+  Widget _sectionCard({
+    required String title,
+    required Widget child,
+  }) {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(16),
@@ -1110,7 +1190,7 @@ class _DetailPageState extends State<DetailPage> {
               _metricBox('24s Hacim', selectedCoin.volumeText),
               _metricBox(
                 'Açık pozisyon',
-                selectedCoin.oiText,
+                selectedCoin.openInterestText,
                 valueColor: Colors.cyanAccent,
               ),
             ],
@@ -1214,14 +1294,25 @@ class _DetailPageState extends State<DetailPage> {
 
   @override
   Widget build(BuildContext context) {
-    final fundingSamples = liveSamples;
-    final oiSamples = liveSamples;
+    final List<LivePoint> graphPoints = livePoints.isEmpty
+        ? [
+            LivePoint(
+              time: DateTime.now(),
+              fundingPercent: selectedCoin.fundingRate * 100,
+              openInterest: selectedCoin.openInterest,
+              volume24h: selectedCoin.volume24h,
+            ),
+          ]
+        : livePoints;
 
     return Scaffold(
       body: Stack(
         children: [
           Positioned.fill(
-            child: Image.asset('assets/bg.png', fit: BoxFit.cover),
+            child: Image.asset(
+              'assets/bg.png',
+              fit: BoxFit.cover,
+            ),
           ),
           SafeArea(
             child: SingleChildScrollView(
@@ -1265,10 +1356,10 @@ class _DetailPageState extends State<DetailPage> {
                     title: 'Fiyat Grafiği',
                     child: SizedBox(
                       height: 250,
-                      child: candles.length < 8
+                      child: candles.isEmpty
                           ? const Center(
                               child: Text(
-                                'Canlı mum verisi yükleniyor...',
+                                'Mum verisi alınamadı',
                                 style: TextStyle(
                                   color: Colors.white70,
                                   fontSize: 14,
@@ -1286,20 +1377,9 @@ class _DetailPageState extends State<DetailPage> {
                     title: 'Açık Pozisyon (OI) & Hacim',
                     child: SizedBox(
                       height: 230,
-                      child: oiSamples.length < 8
-                          ? const Center(
-                              child: Text(
-                                'Canlı OI verisi birikiyor...',
-                                style: TextStyle(
-                                  color: Colors.white70,
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                            )
-                          : CustomPaint(
-                              painter: OiVolumePainter(samples: oiSamples),
-                            ),
+                      child: CustomPaint(
+                        painter: OiVolumePainter(samples: graphPoints),
+                      ),
                     ),
                   ),
                   const SizedBox(height: 16),
@@ -1307,20 +1387,9 @@ class _DetailPageState extends State<DetailPage> {
                     title: 'Funding Oranı',
                     child: SizedBox(
                       height: 220,
-                      child: fundingSamples.length < 8
-                          ? const Center(
-                              child: Text(
-                                'Canlı funding verisi birikiyor...',
-                                style: TextStyle(
-                                  color: Colors.white70,
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                            )
-                          : CustomPaint(
-                              painter: FundingPainter(samples: fundingSamples),
-                            ),
+                      child: CustomPaint(
+                        painter: FundingPainter(samples: graphPoints),
+                      ),
                     ),
                   ),
                   const SizedBox(height: 16),
@@ -1439,7 +1508,7 @@ class LiveCandlePainter extends CustomPainter {
 }
 
 class OiVolumePainter extends CustomPainter {
-  final List<LiveSample> samples;
+  final List<LivePoint> samples;
 
   OiVolumePainter({required this.samples});
 
@@ -1475,8 +1544,8 @@ class OiVolumePainter extends CustomPainter {
       minOi -= 1;
     }
 
-    final stepX = w / samples.length;
-    final barWidth = stepX * 0.52;
+    final stepX = samples.length == 1 ? w : w / samples.length;
+    final barWidth = math.max(6, stepX * 0.52);
 
     double yFromOi(double value) {
       final p = (value - minOi) / (maxOi - minOi);
@@ -1485,7 +1554,9 @@ class OiVolumePainter extends CustomPainter {
 
     for (int i = 0; i < samples.length; i++) {
       final s = samples[i];
-      final x = leftPad + stepX * i + (stepX - barWidth) / 2;
+      final x = samples.length == 1
+          ? leftPad + (w - barWidth) / 2
+          : leftPad + stepX * i + (stepX - barWidth) / 2;
       final barHeight = (s.volume24h / maxVol) * h;
 
       canvas.drawRRect(
@@ -1504,7 +1575,9 @@ class OiVolumePainter extends CustomPainter {
 
     final path = Path();
     for (int i = 0; i < samples.length; i++) {
-      final x = leftPad + stepX * i + stepX / 2;
+      final x = samples.length == 1
+          ? leftPad + w / 2
+          : leftPad + stepX * i + stepX / 2;
       final y = yFromOi(samples[i].openInterest);
       if (i == 0) {
         path.moveTo(x, y);
@@ -1563,7 +1636,7 @@ class OiVolumePainter extends CustomPainter {
 }
 
 class FundingPainter extends CustomPainter {
-  final List<LiveSample> samples;
+  final List<LivePoint> samples;
 
   FundingPainter({required this.samples});
 
@@ -1612,22 +1685,34 @@ class FundingPainter extends CustomPainter {
         ..strokeWidth = 1,
     );
 
-    final stepX = w / (samples.length - 1);
+    final stepX = samples.length == 1 ? w : w / (samples.length - 1);
 
-    for (int i = 1; i < samples.length; i++) {
-      final prev = samples[i - 1];
-      final curr = samples[i];
-
-      canvas.drawLine(
-        Offset(leftPad + stepX * (i - 1), yFromValue(prev.fundingPercent)),
-        Offset(leftPad + stepX * i, yFromValue(curr.fundingPercent)),
+    if (samples.length == 1) {
+      final y = yFromValue(samples.first.fundingPercent);
+      canvas.drawCircle(
+        Offset(leftPad + w / 2, y),
+        4,
         Paint()
-          ..color = curr.fundingPercent >= 0
+          ..color = samples.first.fundingPercent >= 0
               ? const Color(0xFF3CFFB2)
-              : Colors.redAccent
-          ..strokeWidth = 3
-          ..style = PaintingStyle.stroke,
+              : Colors.redAccent,
       );
+    } else {
+      for (int i = 1; i < samples.length; i++) {
+        final prev = samples[i - 1];
+        final curr = samples[i];
+
+        canvas.drawLine(
+          Offset(leftPad + stepX * (i - 1), yFromValue(prev.fundingPercent)),
+          Offset(leftPad + stepX * i, yFromValue(curr.fundingPercent)),
+          Paint()
+            ..color = curr.fundingPercent >= 0
+                ? const Color(0xFF3CFFB2)
+                : Colors.redAccent
+            ..strokeWidth = 3
+            ..style = PaintingStyle.stroke,
+        );
+      }
     }
 
     final style = TextStyle(
@@ -1659,5 +1744,14 @@ class FundingPainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant FundingPainter oldDelegate) {
     return oldDelegate.samples != samples;
+  }
+}
+
+extension _TakeLastExtension<T> on Iterable<T> {
+  Iterable<T> takeLast(int count) {
+    if (count <= 0) return const [];
+    final list = toList();
+    if (count >= list.length) return list;
+    return list.sublist(list.length - count);
   }
 }
