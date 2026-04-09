@@ -183,11 +183,14 @@ class CoinRadarData {
   }
 
   String get changeText => _formatPercent(changePercent);
-
   String get fundingText => _formatFunding(fundingRate);
 
   double get divergencePercent {
     if (indexPrice == 0) return 0;
     return ((markPrice - indexPrice) / indexPrice).abs() * 100;
   }
+
+  String get lastPriceText => lastPrice == 0 ? '-' : lastPrice.toStringAsFixed(6);
+  String get markPriceText => markPrice == 0 ? '-' : markPrice.toStringAsFixed(6);
+  String get indexPriceText => indexPrice == 0 ? '-' : indexPrice.toStringAsFixed(6);
 }
