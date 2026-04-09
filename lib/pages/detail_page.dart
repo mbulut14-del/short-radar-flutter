@@ -96,7 +96,7 @@ class _DetailPageState extends State<DetailPage>
 
       final candleResponse = await http.get(
         Uri.parse(
-          'https://api.gateio.ws/api/v4/futures/usdt/candlesticks'
+          'https://fx-api.gateio.ws/api/v4/futures/usdt/candlesticks'
           '?contract=${widget.coinData.name}'
           '&interval=$selectedInterval'
           '&limit=200',
@@ -285,7 +285,8 @@ class _DetailPageState extends State<DetailPage>
     if (setup == null) return 0;
     final double entry = setup.entry;
     final double baseRisk = ((setup.stopLoss - entry).abs() / entry) * 100;
-    final double adjustedRisk = math.max(baseRisk / math.max(leverage / 5, 1), 0.10);
+    final double adjustedRisk =
+        math.max(baseRisk / math.max(leverage / 5, 1), 0.10);
     return entry * (1 + adjustedRisk / 100);
   }
 
