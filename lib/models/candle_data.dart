@@ -1,4 +1,3 @@
-
 import 'dart:math' as math;
 
 double _parseDouble(dynamic value) {
@@ -23,24 +22,36 @@ class CandleData {
     required this.open,
   });
 
-  factory CandleData.fromJson(List<dynamic> raw) {
-    return CandleData(
-      timestamp: int.tryParse(raw[0].toString()) ?? 0,
-      volume: _parseDouble(raw[1]),
-      close: _parseDouble(raw[2]),
-      high: _parseDouble(raw[3]),
-      low: _parseDouble(raw[4]),
-      open: _parseDouble(raw[5]),
-    );
+  factory CandleData.fromApi(dynamic raw) {
+    if (raw is List) {
+      return CandleData(
+        timestamp: int.tryParse(raw.isNotEmpty ? raw[0].toString() : '0') ?? 0,
+        volume: _parseDouble(raw.length > 1 ? raw[1] : 0),
+        close: _parseDouble(raw.length > 2 ? raw[2] : 0),
+        high: _parseDouble(raw.length > 3 ? raw[3] : 0),
+        low: _parseDouble(raw.length > 4 ? raw[4] : 0),
+        open: _parseDouble(raw.length > 5 ? raw[5] : 0),
+      );
+    }
+
+    if (raw is Map) {
+      return CandleData(
+        timestamp:
+            int.tryParse((raw['t'] ?? raw['timestamp'] ?? 0).toString()) ?? 0,
+        volume: _parseDouble(raw['v'] ?? raw['volume']),
+        close: _parseDouble(raw['c'] ?? raw['close']),
+        high: _parseDouble(raw['h'] ?? raw['high']),
+        low: _parseDouble(raw['l'] ?? raw['low']),
+        open: _parseDouble(raw['o'] ?? raw['open']),
+      );
+    }
+
+    throw const FormatException('Unsupported candle format');
   }
 
   bool get isBullish => close >= open;
-
   double get bodySize => (close - open).abs();
-
   double get range => (high - low).abs();
-
   double get upperWick => high - math.max(open, close);
-
   double get lowerWick => math.min(open, close) - low;
 }
