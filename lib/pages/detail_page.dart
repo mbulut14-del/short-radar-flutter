@@ -278,6 +278,8 @@ class _DetailPageState extends State<DetailPage>
         coin: detailItem,
       );
 
+      final PumpAnalysis newPumpAnalysis = PumpAnalysis.analyze(zoomCandles);
+
       final List<LossStopRow> newLossRows = _buildLossStopRows(newSetup.entry);
 
       if (!mounted) return;
@@ -286,7 +288,7 @@ class _DetailPageState extends State<DetailPage>
         candles = newCandles;
         visibleCandles = zoomCandles;
         setupResult = newSetup;
-        pumpAnalysis = null;
+        pumpAnalysis = newPumpAnalysis;
         lossStopRows = newLossRows;
         detailLoading = false;
         detailError = '';
