@@ -11,12 +11,39 @@ import '../models/short_setup_result.dart';
 import '../models/pump_analysis.dart';
 import '../painters/candle_chart_painter.dart';
 
+String _formatPrice(double value, {int digits = 6}) {
+  if (value == 0) return '-';
+  return value.toStringAsFixed(digits);
+}
+
+String _formatPercent(double value, {int digits = 2}) {
+  return '${value >= 0 ? '+' : ''}${value.toStringAsFixed(digits)}%';
+}
+
+class LossStopRow {
+  final int leverage;
+  final double currentPrice;
+  final double stop5;
+  final double? stop10;
+  final double? stop15;
+
+  const LossStopRow({
+    required this.leverage,
+    required this.currentPrice,
+    required this.stop5,
+    this.stop10,
+    this.stop15,
+  });
+}
+
 class DetailPage extends StatefulWidget {
   final CoinRadarData coinData;
+  final CoinRadarData? leaderData;
 
   const DetailPage({
     super.key,
     required this.coinData,
+    this.leaderData,
   });
 
   @override
@@ -30,16 +57,20 @@ class _DetailPageState extends State<DetailPage>
   String detailError = '';
   String selectedInterval = '1h';
 
-  late final AnimationController _spinnerController;
+  late AnimationController _spinnerController;
+  late final String contractName;
   late CoinRadarData selectedCoin;
-
   List<CandleData> candles = [];
+  List<CandleData> visibleCandles = [];
   ShortSetupResult? setupResult;
+  PumpAnalysis? pumpAnalysis;
+  List<LossStopRow> lossStopRows = [];
+  bool _isFetchingDetail = false;
 
   @override
   void initState() {
     super.initState();
-
+    contractName = widget.coinData.name;
     selectedCoin = widget.coinData;
 
     _spinnerController = AnimationController(
@@ -47,11 +78,11 @@ class _DetailPageState extends State<DetailPage>
       duration: const Duration(milliseconds: 1100),
     )..repeat();
 
-    fetchDetail(initialLoad: true);
+    fetchDetail();
 
     _detailTimer = Timer.periodic(const Duration(seconds: 5), (_) {
       if (mounted) {
-        fetchDetail(initialLoad: false);
+        fetchDetail(showLoader: false);
       }
     });
   }
@@ -63,49 +94,122 @@ class _DetailPageState extends State<DetailPage>
     super.dispose();
   }
 
-  String _formatPrice(double value, {int digits = 6}) {
-    if (value == 0) return '-';
-    return value.toStringAsFixed(digits);
+  String _apiInterval(String value) {
+    switch (value) {
+      case '12h':
+        return '1d';
+      default:
+        return value;
+    }
   }
 
-  String _formatFunding(double value) {
-    final double percent = value * 100;
-    return '${percent >= 0 ? '+' : ''}${percent.toStringAsFixed(4)}%';
+  double _shortStopByLoss({
+    required double entry,
+    required int leverage,
+    required double accountLossPercent,
+  }) {
+    final adverseMovePercent = accountLossPercent / leverage;
+    return entry * (1 + adverseMovePercent / 100);
   }
 
-  String _formatPercent(double value, {int digits = 2}) {
-    return '${value >= 0 ? '+' : ''}${value.toStringAsFixed(digits)}%';
+  List<LossStopRow> _buildLossStopRows(double entry) {
+    return [
+      LossStopRow(
+        leverage: 3,
+        currentPrice: entry,
+        stop5: _shortStopByLoss(
+          entry: entry,
+          leverage: 3,
+          accountLossPercent: 5,
+        ),
+        stop10: _shortStopByLoss(
+          entry: entry,
+          leverage: 3,
+          accountLossPercent: 10,
+        ),
+        stop15: _shortStopByLoss(
+          entry: entry,
+          leverage: 3,
+          accountLossPercent: 15,
+        ),
+      ),
+      LossStopRow(
+        leverage: 5,
+        currentPrice: entry,
+        stop5: _shortStopByLoss(
+          entry: entry,
+          leverage: 5,
+          accountLossPercent: 5,
+        ),
+        stop10: _shortStopByLoss(
+          entry: entry,
+          leverage: 5,
+          accountLossPercent: 10,
+        ),
+        stop15: _shortStopByLoss(
+          entry: entry,
+          leverage: 5,
+          accountLossPercent: 15,
+        ),
+      ),
+      LossStopRow(
+        leverage: 10,
+        currentPrice: entry,
+        stop5: _shortStopByLoss(
+          entry: entry,
+          leverage: 10,
+          accountLossPercent: 5,
+        ),
+        stop10: null,
+        stop15: null,
+      ),
+    ];
   }
 
-  Future<void> fetchDetail({bool initialLoad = false}) async {
-    if (initialLoad) {
+  Future<void> fetchDetail({bool showLoader = true}) async {
+    if (_isFetchingDetail) return;
+    _isFetchingDetail = true;
+
+    if (showLoader && mounted) {
       setState(() {
         detailLoading = true;
-        detailError = '';
-      });
-    } else {
-      setState(() {
         detailError = '';
       });
     }
 
     try {
-      final tickerResponse = await http.get(
-        Uri.parse('https://fx-api.gateio.ws/api/v4/futures/usdt/tickers'),
-        headers: {'Accept': 'application/json'},
+      final tickerUri = Uri.parse(
+        'https://fx-api.gateio.ws/api/v4/futures/usdt/tickers',
       );
 
-      final candleResponse = await http.get(
-        Uri.parse(
-          'https://fx-api.gateio.ws/api/v4/futures/usdt/candlesticks'
-          '?contract=${widget.coinData.name}'
-          '&interval=$selectedInterval'
-          '&limit=200',
-        ),
-        headers: {'Accept': 'application/json'},
+      final candlesUri = Uri.parse(
+        'https://fx-api.gateio.ws/api/v4/futures/usdt/candlesticks'
+        '?contract=${Uri.encodeQueryComponent(contractName)}'
+        '&interval=${Uri.encodeQueryComponent(_apiInterval(selectedInterval))}'
+        '&limit=120',
       );
 
-      if (tickerResponse.statusCode != 200 || candleResponse.statusCode != 200) {
+      final responses = await Future.wait([
+        http
+            .get(
+              tickerUri,
+              headers: {'Accept': 'application/json'},
+            )
+            .timeout(const Duration(seconds: 10)),
+        http
+            .get(
+              candlesUri,
+              headers: {'Accept': 'application/json'},
+            )
+            .timeout(const Duration(seconds: 10)),
+      ]);
+
+      final tickerResponse = responses[0];
+      final candleResponse = responses[1];
+
+      if (tickerResponse.statusCode != 200 ||
+          candleResponse.statusCode != 200) {
+        if (!mounted) return;
         setState(() {
           detailLoading = false;
           detailError = 'Detay verisi alınamadı';
@@ -116,10 +220,11 @@ class _DetailPageState extends State<DetailPage>
       final dynamic parsedTicker = json.decode(tickerResponse.body);
       final dynamic parsedCandles = json.decode(candleResponse.body);
 
-      if (parsedTicker is! List) {
+      if (parsedTicker is! List || parsedCandles is! List) {
+        if (!mounted) return;
         setState(() {
           detailLoading = false;
-          detailError = 'Ticker veri formatı hatalı';
+          detailError = 'API veri formatı beklenen gibi değil';
         });
         return;
       }
@@ -132,52 +237,74 @@ class _DetailPageState extends State<DetailPage>
 
       CoinRadarData? detailItem;
       for (final coin in allCoins) {
-        if (coin.name == widget.coinData.name) {
+        if (coin.name == contractName) {
           detailItem = coin;
           break;
         }
       }
 
-      if (detailItem == null) {
-        setState(() {
-          detailLoading = false;
-          detailError = 'Coin detayı bulunamadı';
-        });
-        return;
-      }
+      detailItem ??= selectedCoin;
 
-      final List<CandleData> newCandles = <CandleData>[];
-
-      if (parsedCandles is List) {
-        for (final raw in parsedCandles) {
-          try {
-            newCandles.add(CandleData.fromApi(raw));
-          } catch (_) {}
-        }
+      final List<CandleData> newCandles = [];
+      for (final raw in parsedCandles) {
+        try {
+          newCandles.add(CandleData.fromApi(raw));
+        } catch (_) {}
       }
 
       newCandles.sort((a, b) => a.timestamp.compareTo(b.timestamp));
 
-      ShortSetupResult? newSetup;
-      if (newCandles.length >= 5) {
-        newSetup = _buildShortSetup(
-          candles: newCandles,
-          coin: detailItem,
-        );
+      if (newCandles.isEmpty) {
+        if (!mounted) return;
+        setState(() {
+          selectedCoin = detailItem!;
+          candles = [];
+          visibleCandles = [];
+          setupResult = null;
+          pumpAnalysis = null;
+          lossStopRows = [];
+          detailLoading = false;
+          detailError = 'Grafik verisi bulunamadı';
+        });
+        return;
       }
 
+      final List<CandleData> zoomCandles = newCandles.length > 10
+          ? newCandles.sublist(newCandles.length - 10)
+          : newCandles;
+
+      final ShortSetupResult newSetup = _buildShortSetup(
+        candles: zoomCandles,
+        coin: detailItem,
+      );
+
+      final List<LossStopRow> newLossRows = _buildLossStopRows(newSetup.entry);
+
+      if (!mounted) return;
       setState(() {
         selectedCoin = detailItem!;
         candles = newCandles;
+        visibleCandles = zoomCandles;
         setupResult = newSetup;
+        pumpAnalysis = null;
+        lossStopRows = newLossRows;
         detailLoading = false;
         detailError = '';
       });
+    } on TimeoutException {
+      if (!mounted) return;
+      setState(() {
+        detailLoading = false;
+        detailError = 'İstek zaman aşımına uğradı';
+      });
     } catch (_) {
+      if (!mounted) return;
       setState(() {
         detailLoading = false;
         detailError = 'Detay verisi alınamadı';
       });
+    } finally {
+      _isFetchingDetail = false;
     }
   }
 
@@ -185,15 +312,17 @@ class _DetailPageState extends State<DetailPage>
     required List<CandleData> candles,
     required CoinRadarData coin,
   }) {
-    final List<CandleData> recent =
-        candles.length > 24 ? candles.sublist(candles.length - 24) : candles;
+    final List<CandleData> recent = candles.length > 10
+        ? candles.sublist(candles.length - 10)
+        : candles;
 
     final CandleData last = recent.last;
     final CandleData prev =
-        recent.length > 1 ? recent[recent.length - 2] : recent.last;
+        recent.length >= 2 ? recent[recent.length - 2] : last;
 
-    final List<CandleData> swingWindow =
-        recent.length > 12 ? recent.sublist(recent.length - 12) : recent;
+    final List<CandleData> swingWindow = recent.length > 5
+        ? recent.sublist(recent.length - 5)
+        : recent;
 
     final double swingHigh = swingWindow.map((e) => e.high).reduce(math.max);
     final double swingLow = swingWindow.map((e) => e.low).reduce(math.min);
@@ -201,51 +330,54 @@ class _DetailPageState extends State<DetailPage>
     final double avgRange =
         recent.map((e) => e.range).reduce((a, b) => a + b) / recent.length;
 
-    final double priceRisePercent = recent.first.open == 0
-        ? 0
-        : ((last.close - recent.first.open) / recent.first.open) * 100;
+    final double firstOpen = recent.first.open == 0 ? 1 : recent.first.open;
+    final double priceRisePercent =
+        ((last.close - recent.first.open) / firstOpen) * 100;
 
     final bool nearResistance =
-        swingHigh > 0 && ((swingHigh - last.close) / swingHigh) * 100 < 1.25;
+        swingHigh > 0 && ((swingHigh - last.close) / swingHigh) * 100 < 1.40;
 
-    final bool weakening =
-        last.close <= prev.close || last.bodySize <= prev.bodySize;
+    final bool weakening = recent.length < 2
+        ? false
+        : (last.close <= prev.close || last.bodySize <= prev.bodySize);
 
     final bool upperWickSignal =
-        last.range > 0 && last.upperWick > last.bodySize * 0.9;
+        last.range > 0 && last.upperWick > last.bodySize * 0.75;
 
     final bool lowerHigh = recent.length >= 3 &&
         recent[recent.length - 2].high < recent[recent.length - 3].high;
 
-    final bool divergenceWide = coin.divergencePercent > 0.12;
+    final bool divergenceWide = coin.divergencePercent > 0.08;
     final bool fundingPositive = coin.fundingRate > 0;
-    final bool pumpStrong = priceRisePercent > 2.0 || coin.changePercent > 4.0;
+    final bool pumpStrong = priceRisePercent > 1.4 || coin.changePercent > 4.0;
 
     int strength = 0;
     final List<String> reasons = [];
 
     if (pumpStrong) {
-      strength += 20;
+      strength += 18;
       reasons.add('Son mumlarda yukarı yönlü şişme var.');
     }
     if (fundingPositive) {
-      strength += coin.fundingRate > 0.0001 ? 18 : 10;
+      strength += coin.fundingRate > 0.0001 ? 14 : 8;
       reasons.add('Funding pozitif, long tarafı kalabalık.');
+    } else {
+      strength -= 10;
     }
     if (divergenceWide) {
       strength += 14;
       reasons.add('Mark-index farkı genişlemiş durumda.');
     }
     if (nearResistance) {
-      strength += 18;
-      reasons.add('Fiyat son tepe/direnç bölgesine yakın.');
+      strength += 16;
+      reasons.add('Fiyat yakın direnç bölgesinde.');
     }
     if (upperWickSignal) {
       strength += 16;
       reasons.add('Son mumda üst fitil satış baskısı gösteriyor.');
     }
     if (weakening) {
-      strength += 10;
+      strength += 12;
       reasons.add('Kısa vadeli ivme zayıflıyor.');
     }
     if (lowerHigh) {
@@ -253,28 +385,33 @@ class _DetailPageState extends State<DetailPage>
       reasons.add('Son yapıda lower-high oluşumu var.');
     }
 
+    final double structuralStop = swingHigh * 1.003;
+    final double percentCapStop = last.close * 1.028;
+    final double stop = math.min(
+      math.max(structuralStop, last.close * 1.008),
+      percentCapStop,
+    );
+
+    final double entry = last.close;
+    final double target1 = math.max(entry - (stop - entry) * 1.25, 0);
+    final double target2 = math.max(entry - (stop - entry) * 2.0, 0);
+
+    final double risk =
+        math.max(stop - entry, math.max(entry * 0.001, 0.0000001));
+    final double reward =
+        math.max(entry - target2, math.max(entry * 0.001, 0.0000001));
+    final double rr = reward / risk;
+
     String status;
-    if (strength >= 70) {
+    if (rr < 1 || coin.fundingRate < 0) {
+      status = 'Zayıf';
+    } else if (strength >= 68 && rr >= 1.5) {
       status = 'Güçlü';
-    } else if (strength >= 45) {
+    } else if (strength >= 42 && rr >= 1.1) {
       status = 'Orta';
     } else {
       status = 'Zayıf';
     }
-
-    final double volatilityBuffer =
-        math.max(avgRange * 0.35, last.close * 0.002);
-
-    final double entry = last.close;
-    final double stopLoss = swingHigh + volatilityBuffer;
-    final double supportSpan =
-        math.max(avgRange * 1.2, (entry - swingLow).abs());
-    final double target1 = entry - supportSpan * 0.55;
-    final double target2 = entry - supportSpan;
-
-    final double risk = math.max(stopLoss - entry, entry * 0.001);
-    final double reward = math.max(entry - target2, entry * 0.001);
-    final double rr = reward / risk;
 
     final String summary = reasons.isNotEmpty
         ? reasons.take(2).join(' ')
@@ -282,7 +419,7 @@ class _DetailPageState extends State<DetailPage>
 
     return ShortSetupResult(
       entry: entry,
-      stopLoss: stopLoss,
+      stopLoss: stop,
       target1: target1,
       target2: target2,
       rr: rr,
@@ -294,68 +431,8 @@ class _DetailPageState extends State<DetailPage>
     );
   }
 
-  double _stopForLeverage(double leverage) {
-    final setup = setupResult;
-    if (setup == null) return 0;
-    final double entry = setup.entry;
-    final double baseRisk = ((setup.stopLoss - entry).abs() / entry) * 100;
-    final double adjustedRisk =
-        math.max(baseRisk / math.max(leverage / 5, 1), 0.10);
-    return entry * (1 + adjustedRisk / 100);
-  }
-
-  double _liqForShort(double leverage) {
-    final setup = setupResult;
-    if (setup == null) return 0;
-    final double entry = setup.entry;
-    final double liqPercent = 100 / leverage;
-    return entry * (1 + liqPercent / 100);
-  }
-
-  double _stopDistancePercent() {
-    final setup = setupResult;
-    if (setup == null || setup.entry == 0) return 0;
-    return ((setup.stopLoss - setup.entry) / setup.entry) * 100;
-  }
-
-  double _targetDistancePercent() {
-    final setup = setupResult;
-    if (setup == null || setup.entry == 0) return 0;
-    return ((setup.entry - setup.target2) / setup.entry) * 100;
-  }
-
-  String _riskLevelText() {
-    final double stopDistance = _stopDistancePercent().abs();
-    if (stopDistance <= 3) return 'Kontrollü';
-    if (stopDistance <= 6) return 'Orta';
-    return 'Yüksek';
-  }
-
-  Color _riskLevelColor() {
-    final String level = _riskLevelText();
-    if (level == 'Kontrollü') return Colors.greenAccent;
-    if (level == 'Orta') return Colors.orangeAccent;
-    return Colors.redAccent;
-  }
-
-  String _setupQualityText() {
-    final setup = setupResult;
-    if (setup == null) return 'Zayıf';
-    if (setup.rr >= 2) return 'Güçlü';
-    if (setup.rr >= 1.2) return 'Orta';
-    return 'Zayıf';
-  }
-
-  Color _setupQualityColor() {
-    final String q = _setupQualityText();
-    if (q == 'Güçlü') return Colors.greenAccent;
-    if (q == 'Orta') return Colors.orangeAccent;
-    return Colors.redAccent;
-  }
-
   Widget _spinnerRing() {
     Color color = Colors.greenAccent;
-
     if (detailError.isNotEmpty) {
       color = Colors.redAccent;
     } else if (detailLoading) {
@@ -380,15 +457,12 @@ class _DetailPageState extends State<DetailPage>
     final bool active = selectedInterval == value;
 
     return GestureDetector(
-      onTap: () {
+      onTap: () async {
         if (selectedInterval == value) return;
-
         setState(() {
           selectedInterval = value;
-          detailLoading = true;
         });
-
-        fetchDetail(initialLoad: true);
+        await fetchDetail();
       },
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
@@ -422,9 +496,7 @@ class _DetailPageState extends State<DetailPage>
       decoration: BoxDecoration(
         color: Colors.black.withOpacity(0.36),
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(
-          color: Colors.white.withOpacity(0.10),
-        ),
+        border: Border.all(color: Colors.white.withOpacity(0.10)),
       ),
       child: child,
     );
@@ -461,16 +533,12 @@ class _DetailPageState extends State<DetailPage>
               ),
               const Spacer(),
               Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 6,
-                ),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                 decoration: BoxDecoration(
                   color: statusColor.withOpacity(0.14),
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                    color: statusColor.withOpacity(0.55),
-                  ),
+                  border: Border.all(color: statusColor.withOpacity(0.55)),
                 ),
                 child: Text(
                   setup.status,
@@ -552,73 +620,178 @@ class _DetailPageState extends State<DetailPage>
     );
   }
 
-  Widget _buildLeveragePanel() {
-    if (setupResult == null) return const SizedBox.shrink();
+  Widget _buildLossHeaderBox(
+    String text, {
+    Color borderColor = Colors.orangeAccent,
+    Color textColor = Colors.orangeAccent,
+  }) {
+    return Container(
+      height: 44,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: Colors.black.withOpacity(0.22),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: borderColor.withOpacity(0.8)),
+      ),
+      child: Text(
+        text,
+        textAlign: TextAlign.center,
+        style: TextStyle(
+          color: textColor,
+          fontSize: 12,
+          fontWeight: FontWeight.w800,
+        ),
+      ),
+    );
+  }
 
+  Widget _buildLossStopPanel() {
     return _cardShell(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text(
-            'KALDIRAÇ STOP / LIQ',
+            'ZARAR BAZLI STOP',
             style: TextStyle(
               color: Colors.white70,
               fontSize: 12,
-              fontWeight: FontWeight.w800,
+              fontWeight: FontWeight.w900,
             ),
           ),
-          const SizedBox(height: 14),
-          _levRow('5x', _stopForLeverage(5), _liqForShort(5)),
-          const SizedBox(height: 10),
-          _levRow('10x', _stopForLeverage(10), _liqForShort(10)),
-          const SizedBox(height: 10),
-          _levRow('20x', _stopForLeverage(20), _liqForShort(20)),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              const SizedBox(width: 66),
+              Expanded(
+                child: _buildLossHeaderBox(
+                  'Güncel fiyat',
+                  borderColor: Colors.redAccent,
+                  textColor: Colors.redAccent,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(child: _buildLossHeaderBox('%5 zarar')),
+              const SizedBox(width: 8),
+              Expanded(child: _buildLossHeaderBox('%10 zarar')),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _buildLossHeaderBox(
+                  '%15 zarar',
+                  borderColor: Colors.redAccent,
+                  textColor: Colors.redAccent,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          ...lossStopRows.asMap().entries.map((entry) {
+            final int index = entry.key;
+            final LossStopRow row = entry.value;
+            final bool isLast = index == lossStopRows.length - 1;
+
+            return Column(
+              children: [
+                Row(
+                  children: [
+                    SizedBox(
+                      width: 66,
+                      child: Text(
+                        '${row.leverage}x',
+                        style: const TextStyle(
+                          color: Colors.orangeAccent,
+                          fontSize: 18,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                    ),
+                    Expanded(
+                      child: Text(
+                        _formatPrice(row.currentPrice),
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          color: Colors.redAccent,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        _formatPrice(row.stop5),
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        row.stop10 == null ? '-' : _formatPrice(row.stop10!),
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        row.stop15 == null ? '-' : _formatPrice(row.stop15!),
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: row.stop15 == null
+                              ? Colors.white54
+                              : Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                if (!isLast) ...[
+                  const SizedBox(height: 12),
+                  Divider(
+                    height: 1,
+                    thickness: 1,
+                    color: Colors.white.withOpacity(0.08),
+                  ),
+                  const SizedBox(height: 12),
+                ],
+              ],
+            );
+          }),
         ],
       ),
     );
   }
 
-  Widget _levRow(String lev, double stop, double liq) {
-    return Row(
-      children: [
-        SizedBox(
-          width: 42,
-          child: Text(
-            lev,
-            style: const TextStyle(
-              color: Colors.orangeAccent,
-              fontSize: 16,
-              fontWeight: FontWeight.w900,
-            ),
-          ),
-        ),
-        Expanded(
-          child: Text(
-            'Stop: ${_formatPrice(stop)}',
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 14,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-        ),
-        Text(
-          'Liq: ${_formatPrice(liq)}',
-          style: const TextStyle(
-            color: Colors.redAccent,
-            fontSize: 14,
-            fontWeight: FontWeight.w800,
-          ),
-        ),
-      ],
-    );
-  }
-
   Widget _buildRiskPanel() {
-    if (setupResult == null) return const SizedBox.shrink();
+    final ShortSetupResult setup = setupResult!;
+    final double stopDistancePercent =
+        ((setup.stopLoss - setup.entry) / setup.entry) * 100;
+    final double targetDistancePercent =
+        ((setup.entry - setup.target2) / setup.entry) * 100;
 
-    final double stopDistance = _stopDistancePercent();
-    final double targetDistance = _targetDistancePercent();
+    Color riskColor;
+    String riskText;
+
+    if (setup.rr >= 1.5 && stopDistancePercent <= 3.0) {
+      riskColor = Colors.greenAccent;
+      riskText = 'Kontrollü';
+    } else if (setup.rr >= 1.0 && stopDistancePercent <= 4.5) {
+      riskColor = Colors.orangeAccent;
+      riskText = 'Orta';
+    } else {
+      riskColor = Colors.redAccent;
+      riskText = 'Yüksek';
+    }
 
     return _cardShell(
       child: Column(
@@ -632,57 +805,32 @@ class _DetailPageState extends State<DetailPage>
               fontWeight: FontWeight.w800,
             ),
           ),
-          const SizedBox(height: 14),
-          _riskRow(
+          const SizedBox(height: 12),
+          _setupRow(
             'Stop mesafesi',
-            _formatPercent(stopDistance),
-            Colors.redAccent,
+            _formatPercent(stopDistancePercent),
+            valueColor: Colors.redAccent,
           ),
-          const SizedBox(height: 10),
-          _riskRow(
+          const SizedBox(height: 8),
+          _setupRow(
             'Hedef mesafesi',
-            _formatPercent(targetDistance),
-            Colors.greenAccent,
+            _formatPercent(targetDistancePercent),
+            valueColor: Colors.greenAccent,
           ),
-          const SizedBox(height: 10),
-          _riskRow(
+          const SizedBox(height: 8),
+          _setupRow(
             'Risk seviyesi',
-            _riskLevelText(),
-            _riskLevelColor(),
+            riskText,
+            valueColor: riskColor,
           ),
-          const SizedBox(height: 10),
-          _riskRow(
-            'Teknik güç',
-            _setupQualityText(),
-            _setupQualityColor(),
+          const SizedBox(height: 8),
+          _setupRow(
+            'Tahmini yön',
+            setup.status,
+            valueColor: riskColor,
           ),
         ],
       ),
-    );
-  }
-
-  Widget _riskRow(String label, String value, Color valueColor) {
-    return Row(
-      children: [
-        Expanded(
-          child: Text(
-            label,
-            style: const TextStyle(
-              color: Colors.white70,
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ),
-        Text(
-          value,
-          style: TextStyle(
-            color: valueColor,
-            fontSize: 15,
-            fontWeight: FontWeight.w900,
-          ),
-        ),
-      ],
     );
   }
 
@@ -717,9 +865,7 @@ class _DetailPageState extends State<DetailPage>
       decoration: BoxDecoration(
         color: Colors.black.withOpacity(0.30),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: Colors.white.withOpacity(0.12),
-        ),
+        border: Border.all(color: Colors.white.withOpacity(0.12)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -795,42 +941,30 @@ class _DetailPageState extends State<DetailPage>
     );
   }
 
-  Widget _buildNoChartCard() {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: Colors.black.withOpacity(0.35),
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(
-          color: Colors.orangeAccent.withOpacity(0.35),
-        ),
-      ),
-      child: const Text(
-        'Bu coin için şu an grafik verisi yok.',
-        textAlign: TextAlign.center,
-        style: TextStyle(
-          color: Colors.white70,
-          fontSize: 14,
-          fontWeight: FontWeight.w700,
-        ),
-      ),
+  Widget _buildCenterState({
+    required Widget child,
+  }) {
+    return SizedBox(
+      height: 420,
+      child: Center(child: child),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    final bool hasSetup = setupResult != null;
-    final bool hasCandles = candles.isNotEmpty;
+    final bool hasData = setupResult != null && visibleCandles.isNotEmpty;
 
     return Scaffold(
       backgroundColor: Colors.black,
       body: Stack(
         children: [
           Positioned.fill(
-            child: Image.asset(
-              'assets/bg.png',
-              fit: BoxFit.cover,
+            child: Container(
+              color: Colors.black,
+              child: Image.asset(
+                'assets/bg.png',
+                fit: BoxFit.cover,
+              ),
             ),
           ),
           SafeArea(
@@ -842,7 +976,7 @@ class _DetailPageState extends State<DetailPage>
                     children: [
                       Expanded(
                         child: Text(
-                          selectedCoin.name,
+                          contractName,
                           style: const TextStyle(
                             color: Colors.white,
                             fontSize: 22,
@@ -854,35 +988,6 @@ class _DetailPageState extends State<DetailPage>
                     ],
                   ),
                   const SizedBox(height: 18),
-                  if (detailError.isNotEmpty) ...[
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: Colors.red.withOpacity(0.18),
-                        borderRadius: BorderRadius.circular(14),
-                        border: Border.all(
-                          color: Colors.redAccent.withOpacity(0.5),
-                        ),
-                      ),
-                      child: Text(
-                        detailError,
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 14),
-                  ],
-                  if (hasSetup) ...[
-                    _buildSetupStatusCard(),
-                    const SizedBox(height: 12),
-                    _buildShortSetupCard(),
-                    const SizedBox(height: 14),
-                  ],
                   Wrap(
                     spacing: 10,
                     runSpacing: 10,
@@ -895,7 +1000,65 @@ class _DetailPageState extends State<DetailPage>
                     ],
                   ),
                   const SizedBox(height: 14),
-                  if (hasCandles)
+                  if (detailError.isNotEmpty && !hasData)
+                    _buildCenterState(
+                      child: Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: Colors.red.withOpacity(0.18),
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(
+                            color: Colors.redAccent.withOpacity(0.5),
+                          ),
+                        ),
+                        child: Text(
+                          detailError,
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    )
+                  else if (detailLoading && !hasData)
+                    _buildCenterState(
+                      child: const CircularProgressIndicator(
+                        strokeWidth: 2.2,
+                        valueColor:
+                            AlwaysStoppedAnimation<Color>(Colors.orangeAccent),
+                      ),
+                    )
+                  else if (hasData) ...[
+                    if (detailError.isNotEmpty) ...[
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.red.withOpacity(0.18),
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(
+                            color: Colors.redAccent.withOpacity(0.5),
+                          ),
+                        ),
+                        child: Text(
+                          detailError,
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                    ],
+                    _buildSetupStatusCard(),
+                    const SizedBox(height: 12),
+                    _buildShortSetupCard(),
+                    const SizedBox(height: 12),
                     Container(
                       height: 280,
                       padding: const EdgeInsets.fromLTRB(10, 10, 10, 12),
@@ -907,41 +1070,60 @@ class _DetailPageState extends State<DetailPage>
                         ),
                       ),
                       child: CustomPaint(
-                        painter: CandleChartPainter(candles: candles),
+                        painter: CandleChartPainter(candles: visibleCandles),
                         child: const SizedBox.expand(),
                       ),
-                    )
-                  else
-                    _buildNoChartCard(),
-                  const SizedBox(height: 18),
-                  GridView.count(
-                    crossAxisCount: 2,
-                    crossAxisSpacing: 12,
-                    mainAxisSpacing: 12,
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    childAspectRatio: 1.45,
-                    children: [
-                      metricBox('Son fiyat', _formatPrice(selectedCoin.lastPrice)),
-                      metricBox('Mark price', _formatPrice(selectedCoin.markPrice)),
-                      metricBox('Index price', _formatPrice(selectedCoin.indexPrice)),
-                      metricBox(
-                        'Funding rate',
-                        _formatFunding(selectedCoin.fundingRate),
-                        valueColor: selectedCoin.fundingRate < 0
-                            ? Colors.redAccent
-                            : Colors.orangeAccent,
-                      ),
-                    ],
-                  ),
-                  if (hasSetup) ...[
+                    ),
                     const SizedBox(height: 18),
-                    _buildLeveragePanel(),
+                    GridView.count(
+                      crossAxisCount: 2,
+                      crossAxisSpacing: 12,
+                      mainAxisSpacing: 12,
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      childAspectRatio: 1.45,
+                      children: [
+                        metricBox('Son fiyat', selectedCoin.lastPriceText),
+                        metricBox('Mark price', selectedCoin.markPriceText),
+                        metricBox('Index price', selectedCoin.indexPriceText),
+                        metricBox(
+                          'Funding rate',
+                          selectedCoin.fundingText,
+                          valueColor: selectedCoin.fundingRate < 0
+                              ? Colors.redAccent
+                              : Colors.orangeAccent,
+                        ),
+                      ],
+                    ),
                     const SizedBox(height: 18),
+                    _buildLossStopPanel(),
+                    const SizedBox(height: 12),
                     _buildRiskPanel(),
                     const SizedBox(height: 18),
                     _buildWhyCard(),
-                  ],
+                  ] else
+                    _buildCenterState(
+                      child: Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: Colors.orange.withOpacity(0.14),
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(
+                            color: Colors.orangeAccent.withOpacity(0.45),
+                          ),
+                        ),
+                        child: const Text(
+                          'Detay verisi bekleniyor...',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ),
                 ],
               ),
             ),
