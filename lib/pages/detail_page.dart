@@ -12,6 +12,7 @@ import '../models/pump_analysis.dart';
 import '../painters/candle_chart_painter.dart';
 import '../widgets/price_box.dart';
 import '../widgets/setup_status_card.dart';
+import '../widgets/short_setup_card.dart';
 
 String _formatPrice(double value, {int digits = 6}) {
   if (value == 0) return '-';
