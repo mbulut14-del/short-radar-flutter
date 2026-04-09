@@ -1,4 +1,3 @@
-
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math' as math;
@@ -90,7 +89,7 @@ class _DetailPageState extends State<DetailPage>
           'https://api.gateio.ws/api/v4/futures/usdt/candlesticks'
           '?contract=${widget.coinData.name}'
           '&interval=$selectedInterval'
-          '&limit=120',
+          '&limit=200',
         ),
         headers: {'Accept': 'application/json'},
       );
@@ -135,10 +134,13 @@ class _DetailPageState extends State<DetailPage>
           .reversed
           .toList();
 
-      if (newCandles.length < 20) {
+      if (newCandles.isEmpty) {
         setState(() {
+          selectedCoin = detailItem!;
+          candles = [];
+          setupResult = null;
           detailLoading = false;
-          detailError = 'Grafik verisi yetersiz';
+          detailError = '';
         });
         return;
       }
@@ -171,7 +173,7 @@ class _DetailPageState extends State<DetailPage>
         candles.length > 24 ? candles.sublist(candles.length - 24) : candles;
 
     final CandleData last = recent.last;
-    final CandleData prev = recent[recent.length - 2];
+    final CandleData prev = recent.length > 1 ? recent[recent.length - 2] : recent.last;
 
     final List<CandleData> swingWindow =
         recent.length > 12 ? recent.sublist(recent.length - 12) : recent;
@@ -183,7 +185,7 @@ class _DetailPageState extends State<DetailPage>
         recent.map((e) => e.range).reduce((a, b) => a + b) / recent.length;
 
     final double priceRisePercent =
-        ((last.close - recent.first.open) / recent.first.open) * 100;
+        recent.first.open == 0 ? 0 : ((last.close - recent.first.open) / recent.first.open) * 100;
 
     final bool nearResistance =
         swingHigh > 0 && ((swingHigh - last.close) / swingHigh) * 100 < 1.25;
@@ -581,9 +583,33 @@ class _DetailPageState extends State<DetailPage>
     );
   }
 
+  Widget _buildNoChartCard() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.black.withOpacity(0.35),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+          color: Colors.orangeAccent.withOpacity(0.35),
+        ),
+      ),
+      child: const Text(
+        'Bu coin için şu an grafik verisi yok.',
+        textAlign: TextAlign.center,
+        style: TextStyle(
+          color: Colors.white70,
+          fontSize: 14,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final bool hasData = setupResult != null && candles.isNotEmpty;
+    final bool hasSetup = setupResult != null;
+    final bool hasCandles = candles.isNotEmpty;
 
     return Scaffold(
       body: Stack(
@@ -638,23 +664,25 @@ class _DetailPageState extends State<DetailPage>
                     ),
                     const SizedBox(height: 14),
                   ],
-                  if (hasData) ...[
+                  if (hasSetup) ...[
                     _buildSetupStatusCard(),
                     const SizedBox(height: 12),
                     _buildShortSetupCard(),
                     const SizedBox(height: 14),
-                    Wrap(
-                      spacing: 10,
-                      runSpacing: 10,
-                      alignment: WrapAlignment.center,
-                      children: [
-                        _timeframeChip('1h'),
-                        _timeframeChip('4h'),
-                        _timeframeChip('8h'),
-                        _timeframeChip('12h'),
-                      ],
-                    ),
-                    const SizedBox(height: 14),
+                  ],
+                  Wrap(
+                    spacing: 10,
+                    runSpacing: 10,
+                    alignment: WrapAlignment.center,
+                    children: [
+                      _timeframeChip('1h'),
+                      _timeframeChip('4h'),
+                      _timeframeChip('8h'),
+                      _timeframeChip('12h'),
+                    ],
+                  ),
+                  const SizedBox(height: 14),
+                  if (hasCandles)
                     Container(
                       height: 280,
                       padding: const EdgeInsets.fromLTRB(10, 10, 10, 12),
@@ -669,37 +697,40 @@ class _DetailPageState extends State<DetailPage>
                         painter: CandleChartPainter(candles: candles),
                         child: const SizedBox.expand(),
                       ),
-                    ),
-                    const SizedBox(height: 18),
-                    GridView.count(
-                      crossAxisCount: 2,
-                      crossAxisSpacing: 12,
-                      mainAxisSpacing: 12,
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      childAspectRatio: 1.45,
-                      children: [
-                        metricBox('Son fiyat', _formatPrice(selectedCoin.lastPrice)),
-                        metricBox('Mark price', _formatPrice(selectedCoin.markPrice)),
-                        metricBox('Index price', _formatPrice(selectedCoin.indexPrice)),
-                        metricBox(
-                          'Funding rate',
-                          _formatFunding(selectedCoin.fundingRate),
-                          valueColor: selectedCoin.fundingRate < 0
-                              ? Colors.redAccent
-                              : Colors.orangeAccent,
-                        ),
-                      ],
-                    ),
+                    )
+                  else
+                    _buildNoChartCard(),
+                  const SizedBox(height: 18),
+                  GridView.count(
+                    crossAxisCount: 2,
+                    crossAxisSpacing: 12,
+                    mainAxisSpacing: 12,
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    childAspectRatio: 1.45,
+                    children: [
+                      metricBox('Son fiyat', _formatPrice(selectedCoin.lastPrice)),
+                      metricBox('Mark price', _formatPrice(selectedCoin.markPrice)),
+                      metricBox('Index price', _formatPrice(selectedCoin.indexPrice)),
+                      metricBox(
+                        'Funding rate',
+                        _formatFunding(selectedCoin.fundingRate),
+                        valueColor: selectedCoin.fundingRate < 0
+                            ? Colors.redAccent
+                            : Colors.orangeAccent,
+                      ),
+                    ],
+                  ),
+                  if (hasSetup) ...[
                     const SizedBox(height: 18),
                     _buildWhyCard(),
-                  ] else if (detailLoading) ...[
-                    const SizedBox(height: 80),
+                  ],
+                  if (detailLoading && !hasSetup && !hasCandles) ...[
+                    const SizedBox(height: 40),
                     const CircularProgressIndicator(
                       strokeWidth: 2.2,
-                      valueColor: AlwaysStoppedAnimation<Color>(
-                        Colors.orangeAccent,
-                      ),
+                      valueColor:
+                          AlwaysStoppedAnimation<Color>(Colors.orangeAccent),
                     ),
                   ],
                 ],
