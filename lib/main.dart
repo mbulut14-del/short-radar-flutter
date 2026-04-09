@@ -1118,21 +1118,30 @@ class _DetailPageState extends State<DetailPage>
     }
 
     try {
+      final tickerUri = Uri.parse(
+        'https://fx-api.gateio.ws/api/v4/futures/usdt/tickers',
+      );
+
+      final candlesUri = Uri.https(
+        'api.gateio.ws',
+        '/api/v4/futures/usdt/candlesticks',
+        {
+          'contract': selectedCoin.name,
+          'interval': selectedInterval,
+          'limit': '120',
+        },
+      );
+
       final responses = await Future.wait([
         http
             .get(
-              Uri.parse('https://fx-api.gateio.ws/api/v4/futures/usdt/tickers'),
+              tickerUri,
               headers: {'Accept': 'application/json'},
             )
             .timeout(const Duration(seconds: 10)),
         http
             .get(
-              Uri.parse(
-                'https://api.gateio.ws/api/v4/futures/usdt/candlesticks'
-                '?contract=${selectedCoin.name}'
-                '&interval=$selectedInterval'
-                '&limit=120',
-              ),
+              candlesUri,
               headers: {'Accept': 'application/json'},
             )
             .timeout(const Duration(seconds: 10)),
@@ -1192,11 +1201,14 @@ class _DetailPageState extends State<DetailPage>
           .reversed
           .toList();
 
-      if (newCandles.length < 20) {
+      if (newCandles.isEmpty) {
         if (!mounted) return;
         setState(() {
+          selectedCoin = detailItem!;
+          candles = [];
+          setupResult = null;
           detailLoading = false;
-          detailError = 'Grafik verisi yetersiz';
+          detailError = 'Grafik verisi bulunamadı';
         });
         return;
       }
@@ -1240,25 +1252,35 @@ class _DetailPageState extends State<DetailPage>
         : candles;
 
     final CandleData last = recent.last;
-    final CandleData prev = recent[recent.length - 2];
+    final CandleData prev = recent.length >= 2 ? recent[recent.length - 2] : last;
+
     final List<CandleData> swingWindow = recent.length > 12
         ? recent.sublist(recent.length - 12)
         : recent;
 
     final double swingHigh = swingWindow.map((e) => e.high).reduce(math.max);
     final double swingLow = swingWindow.map((e) => e.low).reduce(math.min);
-    final double avgRange =
-        recent.map((e) => e.range).reduce((a, b) => a + b) / recent.length;
+
+    final double avgRange = recent.isEmpty
+        ? 0
+        : recent.map((e) => e.range).reduce((a, b) => a + b) / recent.length;
+
+    final double firstOpen = recent.first.open == 0 ? 1 : recent.first.open;
     final double priceRisePercent =
-        ((last.close - recent.first.open) / recent.first.open) * 100;
+        ((last.close - recent.first.open) / firstOpen) * 100;
+
     final bool nearResistance =
         swingHigh > 0 && ((swingHigh - last.close) / swingHigh) * 100 < 1.25;
+
     final bool weakening =
-        last.close <= prev.close || last.bodySize <= prev.bodySize;
+        recent.length < 2 ? false : (last.close <= prev.close || last.bodySize <= prev.bodySize);
+
     final bool upperWickSignal =
         last.range > 0 && last.upperWick > last.bodySize * 0.9;
+
     final bool lowerHigh = recent.length >= 3 &&
         recent[recent.length - 2].high < recent[recent.length - 3].high;
+
     final bool divergenceWide = coin.divergencePercent > 0.12;
     final bool fundingPositive = coin.fundingRate > 0;
     final bool pumpStrong = priceRisePercent > 2.0 || coin.changePercent > 4.0;
@@ -1295,6 +1317,10 @@ class _DetailPageState extends State<DetailPage>
       reasons.add('Son yapıda lower-high oluşumu var.');
     }
 
+    if (recent.length < 6) {
+      reasons.add('Grafik geçmişi kısa, setup daha temkinli okunmalı.');
+    }
+
     String status;
     if (strength >= 70) {
       status = 'Güçlü';
@@ -1304,17 +1330,24 @@ class _DetailPageState extends State<DetailPage>
       status = 'Zayıf';
     }
 
-    final double volatilityBuffer =
-        math.max(avgRange * 0.35, last.close * 0.002);
-    final double entry = last.close;
-    final double stop = swingHigh + volatilityBuffer;
-    final double supportSpan =
-        math.max(avgRange * 1.2, (entry - swingLow).abs());
-    final double target1 = entry - supportSpan * 0.55;
-    final double target2 = entry - supportSpan;
+    final double volatilityBuffer = math.max(
+      avgRange * 0.35,
+      last.close * 0.002,
+    );
 
-    final double risk = math.max(stop - entry, entry * 0.001);
-    final double reward = math.max(entry - target2, entry * 0.001);
+    final double entry = last.close;
+    final double stop = math.max(swingHigh + volatilityBuffer, entry * 1.002);
+
+    final double supportSpan = math.max(
+      avgRange > 0 ? avgRange * 1.2 : entry * 0.01,
+      (entry - swingLow).abs() > 0 ? (entry - swingLow).abs() : entry * 0.008,
+    );
+
+    final double target1 = math.max(entry - supportSpan * 0.55, 0);
+    final double target2 = math.max(entry - supportSpan, 0);
+
+    final double risk = math.max(stop - entry, math.max(entry * 0.001, 0.0000001));
+    final double reward = math.max(entry - target2, math.max(entry * 0.001, 0.0000001));
     final double rr = reward / risk;
 
     final String summary = reasons.isNotEmpty
