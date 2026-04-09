@@ -466,6 +466,7 @@ class _SplashScreenState extends State<SplashScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: Colors.black,
       body: Container(
         decoration: const BoxDecoration(
           gradient: RadialGradient(
@@ -563,6 +564,7 @@ class _HomePageState extends State<HomePage> {
   bool isLoading = true;
   String errorText = '';
   Timer? _refreshTimer;
+  bool _isFetching = false;
 
   @override
   void initState() {
@@ -584,26 +586,44 @@ class _HomePageState extends State<HomePage> {
   }
 
   Future<void> fetchCoins() async {
-    setState(() {
-      isLoading = true;
-      errorText = '';
-    });
+    if (_isFetching) return;
+    _isFetching = true;
+
+    if (mounted) {
+      setState(() {
+        isLoading = true;
+        errorText = '';
+      });
+    }
 
     try {
-      final response = await http.get(
-        Uri.parse('https://fx-api.gateio.ws/api/v4/futures/usdt/tickers'),
-        headers: {'Accept': 'application/json'},
-      );
+      final response = await http
+          .get(
+            Uri.parse('https://fx-api.gateio.ws/api/v4/futures/usdt/tickers'),
+            headers: {'Accept': 'application/json'},
+          )
+          .timeout(const Duration(seconds: 10));
 
       if (response.statusCode != 200) {
-        setState(() {
-          isLoading = false;
-          errorText = 'Canlı veri alınamadı';
-        });
+        if (mounted) {
+          setState(() {
+            isLoading = false;
+            errorText = 'Canlı veri alınamadı';
+          });
+        }
         return;
       }
 
-      final List<dynamic> parsed = json.decode(response.body);
+      final dynamic parsed = json.decode(response.body);
+      if (parsed is! List) {
+        if (mounted) {
+          setState(() {
+            isLoading = false;
+            errorText = 'API veri formatı hatalı';
+          });
+        }
+        return;
+      }
 
       final List<CoinRadarData> allCoins = parsed
           .whereType<Map<String, dynamic>>()
@@ -612,10 +632,12 @@ class _HomePageState extends State<HomePage> {
           .toList();
 
       if (allCoins.isEmpty) {
-        setState(() {
-          isLoading = false;
-          errorText = 'Canlı veri boş döndü';
-        });
+        if (mounted) {
+          setState(() {
+            isLoading = false;
+            errorText = 'Canlı veri boş döndü';
+          });
+        }
         return;
       }
 
@@ -629,17 +651,30 @@ class _HomePageState extends State<HomePage> {
           return b.changePercent.compareTo(a.changePercent);
         });
 
-      setState(() {
-        coins = sortedByChange.take(10).toList();
-        radarLeader = sortedByScore.first;
-        isLoading = false;
-        errorText = '';
-      });
+      if (mounted) {
+        setState(() {
+          coins = sortedByChange.take(10).toList();
+          radarLeader = sortedByScore.first;
+          isLoading = false;
+          errorText = '';
+        });
+      }
+    } on TimeoutException {
+      if (mounted) {
+        setState(() {
+          isLoading = false;
+          errorText = 'İstek zaman aşımına uğradı';
+        });
+      }
     } catch (_) {
-      setState(() {
-        isLoading = false;
-        errorText = 'Canlı veri alınamadı';
-      });
+      if (mounted) {
+        setState(() {
+          isLoading = false;
+          errorText = 'Canlı veri alınamadı';
+        });
+      }
+    } finally {
+      _isFetching = false;
     }
   }
 
@@ -806,12 +841,16 @@ class _HomePageState extends State<HomePage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: Colors.black,
       body: Stack(
         children: [
           Positioned.fill(
-            child: Image.asset(
-              'assets/bg.png',
-              fit: BoxFit.cover,
+            child: Container(
+              color: Colors.black,
+              child: Image.asset(
+                'assets/bg.png',
+                fit: BoxFit.cover,
+              ),
             ),
           ),
           SafeArea(
@@ -1040,6 +1079,7 @@ class _DetailPageState extends State<DetailPage>
   late CoinRadarData selectedCoin;
   List<CandleData> candles = [];
   ShortSetupResult? setupResult;
+  bool _isFetchingDetail = false;
 
   @override
   void initState() {
@@ -1049,10 +1089,12 @@ class _DetailPageState extends State<DetailPage>
       vsync: this,
       duration: const Duration(milliseconds: 1100),
     )..repeat();
+
     fetchDetail();
+
     _detailTimer = Timer.periodic(const Duration(seconds: 5), (_) {
       if (mounted) {
-        fetchDetail();
+        fetchDetail(showLoader: false);
       }
     });
   }
@@ -1064,29 +1106,43 @@ class _DetailPageState extends State<DetailPage>
     super.dispose();
   }
 
-  Future<void> fetchDetail() async {
-    setState(() {
-      detailLoading = true;
-      detailError = '';
-    });
+  Future<void> fetchDetail({bool showLoader = true}) async {
+    if (_isFetchingDetail) return;
+    _isFetchingDetail = true;
+
+    if (showLoader && mounted) {
+      setState(() {
+        detailLoading = true;
+        detailError = '';
+      });
+    }
 
     try {
-      final tickerResponse = await http.get(
-        Uri.parse('https://fx-api.gateio.ws/api/v4/futures/usdt/tickers'),
-        headers: {'Accept': 'application/json'},
-      );
+      final responses = await Future.wait([
+        http
+            .get(
+              Uri.parse('https://fx-api.gateio.ws/api/v4/futures/usdt/tickers'),
+              headers: {'Accept': 'application/json'},
+            )
+            .timeout(const Duration(seconds: 10)),
+        http
+            .get(
+              Uri.parse(
+                'https://api.gateio.ws/api/v4/futures/usdt/candlesticks'
+                '?contract=${selectedCoin.name}'
+                '&interval=$selectedInterval'
+                '&limit=120',
+              ),
+              headers: {'Accept': 'application/json'},
+            )
+            .timeout(const Duration(seconds: 10)),
+      ]);
 
-      final candleResponse = await http.get(
-        Uri.parse(
-          'https://api.gateio.ws/api/v4/futures/usdt/candlesticks'
-          '?contract=${widget.coinData.name}'
-          '&interval=$selectedInterval'
-          '&limit=120',
-        ),
-        headers: {'Accept': 'application/json'},
-      );
+      final tickerResponse = responses[0];
+      final candleResponse = responses[1];
 
       if (tickerResponse.statusCode != 200 || candleResponse.statusCode != 200) {
+        if (!mounted) return;
         setState(() {
           detailLoading = false;
           detailError = 'Detay verisi alınamadı';
@@ -1094,8 +1150,17 @@ class _DetailPageState extends State<DetailPage>
         return;
       }
 
-      final List<dynamic> parsedTicker = json.decode(tickerResponse.body);
-      final List<dynamic> parsedCandles = json.decode(candleResponse.body);
+      final dynamic parsedTicker = json.decode(tickerResponse.body);
+      final dynamic parsedCandles = json.decode(candleResponse.body);
+
+      if (parsedTicker is! List || parsedCandles is! List) {
+        if (!mounted) return;
+        setState(() {
+          detailLoading = false;
+          detailError = 'API veri formatı beklenen gibi değil';
+        });
+        return;
+      }
 
       final List<CoinRadarData> allCoins = parsedTicker
           .whereType<Map<String, dynamic>>()
@@ -1105,13 +1170,14 @@ class _DetailPageState extends State<DetailPage>
 
       CoinRadarData? detailItem;
       for (final coin in allCoins) {
-        if (coin.name == widget.coinData.name) {
+        if (coin.name == selectedCoin.name) {
           detailItem = coin;
           break;
         }
       }
 
       if (detailItem == null) {
+        if (!mounted) return;
         setState(() {
           detailLoading = false;
           detailError = 'Coin detayı bulunamadı';
@@ -1127,6 +1193,7 @@ class _DetailPageState extends State<DetailPage>
           .toList();
 
       if (newCandles.length < 20) {
+        if (!mounted) return;
         setState(() {
           detailLoading = false;
           detailError = 'Grafik verisi yetersiz';
@@ -1139,6 +1206,7 @@ class _DetailPageState extends State<DetailPage>
         coin: detailItem,
       );
 
+      if (!mounted) return;
       setState(() {
         selectedCoin = detailItem!;
         candles = newCandles;
@@ -1146,11 +1214,20 @@ class _DetailPageState extends State<DetailPage>
         detailLoading = false;
         detailError = '';
       });
+    } on TimeoutException {
+      if (!mounted) return;
+      setState(() {
+        detailLoading = false;
+        detailError = 'İstek zaman aşımına uğradı';
+      });
     } catch (_) {
+      if (!mounted) return;
       setState(() {
         detailLoading = false;
         detailError = 'Detay verisi alınamadı';
       });
+    } finally {
+      _isFetchingDetail = false;
     }
   }
 
@@ -1161,20 +1238,17 @@ class _DetailPageState extends State<DetailPage>
     final List<CandleData> recent = candles.length > 24
         ? candles.sublist(candles.length - 24)
         : candles;
+
     final CandleData last = recent.last;
     final CandleData prev = recent[recent.length - 2];
     final List<CandleData> swingWindow = recent.length > 12
         ? recent.sublist(recent.length - 12)
         : recent;
 
-    final double swingHigh =
-        swingWindow.map((e) => e.high).reduce(math.max);
-    final double swingLow =
-        swingWindow.map((e) => e.low).reduce(math.min);
-    final double avgRange = recent
-            .map((e) => e.range)
-            .reduce((a, b) => a + b) /
-        recent.length;
+    final double swingHigh = swingWindow.map((e) => e.high).reduce(math.max);
+    final double swingLow = swingWindow.map((e) => e.low).reduce(math.min);
+    final double avgRange =
+        recent.map((e) => e.range).reduce((a, b) => a + b) / recent.length;
     final double priceRisePercent =
         ((last.close - recent.first.open) / recent.first.open) * 100;
     final bool nearResistance =
@@ -1230,10 +1304,12 @@ class _DetailPageState extends State<DetailPage>
       status = 'Zayıf';
     }
 
-    final double volatilityBuffer = math.max(avgRange * 0.35, last.close * 0.002);
+    final double volatilityBuffer =
+        math.max(avgRange * 0.35, last.close * 0.002);
     final double entry = last.close;
     final double stop = swingHigh + volatilityBuffer;
-    final double supportSpan = math.max(avgRange * 1.2, (entry - swingLow).abs());
+    final double supportSpan =
+        math.max(avgRange * 1.2, (entry - swingLow).abs());
     final double target1 = entry - supportSpan * 0.55;
     final double target2 = entry - supportSpan;
 
@@ -1285,12 +1361,12 @@ class _DetailPageState extends State<DetailPage>
     final bool active = selectedInterval == value;
 
     return GestureDetector(
-      onTap: () {
+      onTap: () async {
         if (selectedInterval == value) return;
         setState(() {
           selectedInterval = value;
         });
-        fetchDetail();
+        await fetchDetail();
       },
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
@@ -1555,17 +1631,30 @@ class _DetailPageState extends State<DetailPage>
     );
   }
 
+  Widget _buildCenterState({
+    required Widget child,
+  }) {
+    return SizedBox(
+      height: 420,
+      child: Center(child: child),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final bool hasData = setupResult != null && candles.isNotEmpty;
 
     return Scaffold(
+      backgroundColor: Colors.black,
       body: Stack(
         children: [
           Positioned.fill(
-            child: Image.asset(
-              'assets/bg.png',
-              fit: BoxFit.cover,
+            child: Container(
+              color: Colors.black,
+              child: Image.asset(
+                'assets/bg.png',
+                fit: BoxFit.cover,
+              ),
             ),
           ),
           SafeArea(
@@ -1589,45 +1678,76 @@ class _DetailPageState extends State<DetailPage>
                     ],
                   ),
                   const SizedBox(height: 18),
-                  if (detailError.isNotEmpty) ...[
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: Colors.red.withOpacity(0.18),
-                        borderRadius: BorderRadius.circular(14),
-                        border: Border.all(
-                          color: Colors.redAccent.withOpacity(0.5),
+                  Wrap(
+                    spacing: 10,
+                    runSpacing: 10,
+                    alignment: WrapAlignment.center,
+                    children: [
+                      _timeframeChip('1h'),
+                      _timeframeChip('4h'),
+                      _timeframeChip('8h'),
+                      _timeframeChip('12h'),
+                    ],
+                  ),
+                  const SizedBox(height: 14),
+                  if (detailError.isNotEmpty && !hasData)
+                    _buildCenterState(
+                      child: Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: Colors.red.withOpacity(0.18),
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(
+                            color: Colors.redAccent.withOpacity(0.5),
+                          ),
+                        ),
+                        child: Text(
+                          detailError,
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
                       ),
-                      child: Text(
-                        detailError,
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
+                    )
+                  else if (detailLoading && !hasData)
+                    _buildCenterState(
+                      child: const CircularProgressIndicator(
+                        strokeWidth: 2.2,
+                        valueColor:
+                            AlwaysStoppedAnimation<Color>(Colors.orangeAccent),
+                      ),
+                    )
+                  else if (hasData) ...[
+                    if (detailError.isNotEmpty) ...[
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.red.withOpacity(0.18),
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(
+                            color: Colors.redAccent.withOpacity(0.5),
+                          ),
+                        ),
+                        child: Text(
+                          detailError,
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
                       ),
-                    ),
-                    const SizedBox(height: 14),
-                  ],
-                  if (hasData) ...[
+                      const SizedBox(height: 14),
+                    ],
                     _buildSetupStatusCard(),
                     const SizedBox(height: 12),
                     _buildShortSetupCard(),
-                    const SizedBox(height: 14),
-                    Wrap(
-                      spacing: 10,
-                      runSpacing: 10,
-                      alignment: WrapAlignment.center,
-                      children: [
-                        _timeframeChip('1h'),
-                        _timeframeChip('4h'),
-                        _timeframeChip('8h'),
-                        _timeframeChip('12h'),
-                      ],
-                    ),
                     const SizedBox(height: 14),
                     Container(
                       height: 280,
@@ -1667,14 +1787,29 @@ class _DetailPageState extends State<DetailPage>
                     ),
                     const SizedBox(height: 18),
                     _buildWhyCard(),
-                  ] else if (detailLoading) ...[
-                    const SizedBox(height: 80),
-                    const CircularProgressIndicator(
-                      strokeWidth: 2.2,
-                      valueColor:
-                          AlwaysStoppedAnimation<Color>(Colors.orangeAccent),
+                  ] else
+                    _buildCenterState(
+                      child: Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: Colors.orange.withOpacity(0.14),
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(
+                            color: Colors.orangeAccent.withOpacity(0.45),
+                          ),
+                        ),
+                        child: const Text(
+                          'Detay verisi bekleniyor...',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
                     ),
-                  ],
                 ],
               ),
             ),
@@ -1720,10 +1855,14 @@ class CandleChartPainter extends CustomPainter {
       final CandleData candle = candles[i];
       final double centerX = (i * candleSpace) + candleSpace / 2;
 
-      final double highY = (1 - ((candle.high - minPrice) / priceRange)) * size.height;
-      final double lowY = (1 - ((candle.low - minPrice) / priceRange)) * size.height;
-      final double openY = (1 - ((candle.open - minPrice) / priceRange)) * size.height;
-      final double closeY = (1 - ((candle.close - minPrice) / priceRange)) * size.height;
+      final double highY =
+          (1 - ((candle.high - minPrice) / priceRange)) * size.height;
+      final double lowY =
+          (1 - ((candle.low - minPrice) / priceRange)) * size.height;
+      final double openY =
+          (1 - ((candle.open - minPrice) / priceRange)) * size.height;
+      final double closeY =
+          (1 - ((candle.close - minPrice) / priceRange)) * size.height;
 
       final bool bullish = candle.isBullish;
       final Color candleColor =
