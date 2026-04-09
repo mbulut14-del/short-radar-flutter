@@ -112,8 +112,16 @@ class _DetailPageState extends State<DetailPage>
         return;
       }
 
-      final List<dynamic> parsedTicker = json.decode(tickerResponse.body);
-      final List<dynamic> parsedCandles = json.decode(candleResponse.body);
+      final dynamic parsedTicker = json.decode(tickerResponse.body);
+      final dynamic parsedCandles = json.decode(candleResponse.body);
+
+      if (parsedTicker is! List) {
+        setState(() {
+          detailLoading = false;
+          detailError = 'Ticker veri formatı hatalı';
+        });
+        return;
+      }
 
       final List<CoinRadarData> allCoins = parsedTicker
           .whereType<Map<String, dynamic>>()
@@ -137,12 +145,17 @@ class _DetailPageState extends State<DetailPage>
         return;
       }
 
-      final List<CandleData> newCandles = parsedCandles
-          .whereType<List<dynamic>>()
-          .map(CandleData.fromJson)
-          .toList()
-          .reversed
-          .toList();
+      final List<CandleData> newCandles = <CandleData>[];
+
+      if (parsedCandles is List) {
+        for (final raw in parsedCandles) {
+          try {
+            newCandles.add(CandleData.fromApi(raw));
+          } catch (_) {}
+        }
+      }
+
+      newCandles.sort((a, b) => a.timestamp.compareTo(b.timestamp));
 
       ShortSetupResult? newSetup;
       if (newCandles.length >= 5) {
@@ -810,6 +823,7 @@ class _DetailPageState extends State<DetailPage>
     final bool hasCandles = candles.isNotEmpty;
 
     return Scaffold(
+      backgroundColor: Colors.black,
       body: Stack(
         children: [
           Positioned.fill(
