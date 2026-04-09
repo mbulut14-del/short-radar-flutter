@@ -224,15 +224,30 @@ class CandleData {
     required this.open,
   });
 
-  factory CandleData.fromJson(Map<String, dynamic> raw) {
-    return CandleData(
-      timestamp: int.tryParse(raw['t'].toString()) ?? 0,
-      volume: _parseDouble(raw['v']),
-      close: _parseDouble(raw['c']),
-      high: _parseDouble(raw['h']),
-      low: _parseDouble(raw['l']),
-      open: _parseDouble(raw['o']),
-    );
+  factory CandleData.fromApi(dynamic raw) {
+    if (raw is List) {
+      return CandleData(
+        timestamp: int.tryParse(raw.isNotEmpty ? raw[0].toString() : '0') ?? 0,
+        volume: _parseDouble(raw.length > 1 ? raw[1] : 0),
+        close: _parseDouble(raw.length > 2 ? raw[2] : 0),
+        high: _parseDouble(raw.length > 3 ? raw[3] : 0),
+        low: _parseDouble(raw.length > 4 ? raw[4] : 0),
+        open: _parseDouble(raw.length > 5 ? raw[5] : 0),
+      );
+    }
+
+    if (raw is Map) {
+      return CandleData(
+        timestamp: int.tryParse((raw['t'] ?? raw['timestamp'] ?? 0).toString()) ?? 0,
+        volume: _parseDouble(raw['v'] ?? raw['volume']),
+        close: _parseDouble(raw['c'] ?? raw['close']),
+        high: _parseDouble(raw['h'] ?? raw['high']),
+        low: _parseDouble(raw['l'] ?? raw['low']),
+        open: _parseDouble(raw['o'] ?? raw['open']),
+      );
+    }
+
+    throw const FormatException('Unsupported candle format');
   }
 
   bool get isBullish => close >= open;
@@ -1196,12 +1211,14 @@ class _DetailPageState extends State<DetailPage>
 
       detailItem ??= selectedCoin;
 
-      final List<CandleData> newCandles = parsedCandles
-          .whereType<Map<String, dynamic>>()
-          .map(CandleData.fromJson)
-          .toList()
-          .reversed
-          .toList();
+      final List<CandleData> newCandles = [];
+      for (final raw in parsedCandles) {
+        try {
+          newCandles.add(CandleData.fromApi(raw));
+        } catch (_) {}
+      }
+
+      newCandles.sort((a, b) => a.timestamp.compareTo(b.timestamp));
 
       if (newCandles.isEmpty) {
         if (!mounted) return;
@@ -1263,8 +1280,8 @@ class _DetailPageState extends State<DetailPage>
     final double swingHigh = swingWindow.map((e) => e.high).reduce(math.max);
     final double swingLow = swingWindow.map((e) => e.low).reduce(math.min);
 
-    final double avgRange = recent.map((e) => e.range).reduce((a, b) => a + b) /
-        recent.length;
+    final double avgRange =
+        recent.map((e) => e.range).reduce((a, b) => a + b) / recent.length;
 
     final double firstOpen = recent.first.open == 0 ? 1 : recent.first.open;
     final double priceRisePercent =
@@ -1273,8 +1290,9 @@ class _DetailPageState extends State<DetailPage>
     final bool nearResistance =
         swingHigh > 0 && ((swingHigh - last.close) / swingHigh) * 100 < 1.25;
 
-    final bool weakening =
-        recent.length < 2 ? false : (last.close <= prev.close || last.bodySize <= prev.bodySize);
+    final bool weakening = recent.length < 2
+        ? false
+        : (last.close <= prev.close || last.bodySize <= prev.bodySize);
 
     final bool upperWickSignal =
         last.range > 0 && last.upperWick > last.bodySize * 0.9;
@@ -1347,8 +1365,10 @@ class _DetailPageState extends State<DetailPage>
     final double target1 = math.max(entry - supportSpan * 0.55, 0);
     final double target2 = math.max(entry - supportSpan, 0);
 
-    final double risk = math.max(stop - entry, math.max(entry * 0.001, 0.0000001));
-    final double reward = math.max(entry - target2, math.max(entry * 0.001, 0.0000001));
+    final double risk =
+        math.max(stop - entry, math.max(entry * 0.001, 0.0000001));
+    final double reward =
+        math.max(entry - target2, math.max(entry * 0.001, 0.0000001));
     final double rr = reward / risk;
 
     final String summary = reasons.isNotEmpty
