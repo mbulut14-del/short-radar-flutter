@@ -1,3 +1,10 @@
+import 'dart:math' as math;
+
+double _parseDouble(dynamic value) {
+  if (value == null) return 0.0;
+  return double.tryParse(value.toString()) ?? 0.0;
+}
+
 class CandleData {
   final int timestamp;
   final double volume;
@@ -40,6 +47,10 @@ class CandleData {
     }
 
     throw const FormatException('Unsupported candle format');
+  }
+
+  factory CandleData.fromJson(dynamic raw) {
+    return CandleData.fromApi(raw);
   }
 
   bool get isBullish => close >= open;
