@@ -13,6 +13,7 @@ import '../painters/candle_chart_painter.dart';
 import '../widgets/price_box.dart';
 import '../widgets/setup_status_card.dart';
 import '../widgets/short_setup_card.dart';
+import '../widgets/risk_panel_card.dart';
 
 String _formatPrice(double value, {int digits = 6}) {
   if (value == 0) return '-';
@@ -655,93 +656,6 @@ class _DetailPageState extends State<DetailPage>
     );
   }
 
-  Widget _buildRiskPanel() {
-    final ShortSetupResult setup = setupResult!;
-    final double stopDistancePercent =
-        ((setup.stopLoss - setup.entry) / setup.entry) * 100;
-    final double targetDistancePercent =
-        ((setup.entry - setup.target2) / setup.entry) * 100;
-
-    Color riskColor;
-    String riskText;
-
-    if (setup.rr >= 1.5 && stopDistancePercent <= 3.0) {
-      riskColor = Colors.greenAccent;
-      riskText = 'Kontrollü';
-    } else if (setup.rr >= 1.0 && stopDistancePercent <= 4.5) {
-      riskColor = Colors.orangeAccent;
-      riskText = 'Orta';
-    } else {
-      riskColor = Colors.redAccent;
-      riskText = 'Yüksek';
-    }
-
-    return _cardShell(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'GERÇEK RİSK PANELİ',
-            style: TextStyle(
-              color: Colors.white70,
-              fontSize: 12,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-          const SizedBox(height: 12),
-          _setupRow(
-            'Stop mesafesi',
-            _formatPercent(stopDistancePercent),
-            valueColor: Colors.redAccent,
-          ),
-          const SizedBox(height: 8),
-          _setupRow(
-            'Hedef mesafesi',
-            _formatPercent(targetDistancePercent),
-            valueColor: Colors.greenAccent,
-          ),
-          const SizedBox(height: 8),
-          _setupRow(
-            'Risk seviyesi',
-            riskText,
-            valueColor: riskColor,
-          ),
-          const SizedBox(height: 8),
-          _setupRow(
-            'Tahmini yön',
-            setup.status,
-            valueColor: riskColor,
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _setupRow(String label, String value, {Color? valueColor}) {
-    return Row(
-      children: [
-        Expanded(
-          child: Text(
-            label,
-            style: const TextStyle(
-              color: Colors.white70,
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ),
-        Text(
-          value,
-          style: TextStyle(
-            color: valueColor ?? Colors.white,
-            fontSize: 15,
-            fontWeight: FontWeight.w900,
-          ),
-        ),
-      ],
-    );
-  }
-
   Widget _buildWhyCard() {
     final List<String> reasons = setupResult!.reasons.take(4).toList();
 
@@ -969,7 +883,9 @@ class _DetailPageState extends State<DetailPage>
                     const SizedBox(height: 18),
                     _buildLossStopPanel(),
                     const SizedBox(height: 12),
-                    _buildRiskPanel(),
+                    RiskPanelCard(
+                      result: setupResult!,
+                    ),
                     const SizedBox(height: 18),
                     _buildWhyCard(),
                   ] else
