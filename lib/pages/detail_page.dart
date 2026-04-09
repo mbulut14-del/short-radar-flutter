@@ -46,11 +46,11 @@ class _DetailPageState extends State<DetailPage>
       duration: const Duration(milliseconds: 1100),
     )..repeat();
 
-    fetchDetail();
+    fetchDetail(initialLoad: true);
 
     _detailTimer = Timer.periodic(const Duration(seconds: 5), (_) {
       if (mounted) {
-        fetchDetail();
+        fetchDetail(initialLoad: false);
       }
     });
   }
@@ -72,11 +72,21 @@ class _DetailPageState extends State<DetailPage>
     return '${percent >= 0 ? '+' : ''}${percent.toStringAsFixed(4)}%';
   }
 
-  Future<void> fetchDetail() async {
-    setState(() {
-      detailLoading = true;
-      detailError = '';
-    });
+  String _formatPercent(double value, {int digits = 2}) {
+    return '${value >= 0 ? '+' : ''}${value.toStringAsFixed(digits)}%';
+  }
+
+  Future<void> fetchDetail({bool initialLoad = false}) async {
+    if (initialLoad) {
+      setState(() {
+        detailLoading = true;
+        detailError = '';
+      });
+    } else {
+      setState(() {
+        detailError = '';
+      });
+    }
 
     try {
       final tickerResponse = await http.get(
@@ -134,21 +144,13 @@ class _DetailPageState extends State<DetailPage>
           .reversed
           .toList();
 
-      if (newCandles.isEmpty) {
-        setState(() {
-          selectedCoin = detailItem!;
-          candles = [];
-          setupResult = null;
-          detailLoading = false;
-          detailError = '';
-        });
-        return;
+      ShortSetupResult? newSetup;
+      if (newCandles.length >= 5) {
+        newSetup = _buildShortSetup(
+          candles: newCandles,
+          coin: detailItem,
+        );
       }
-
-      final ShortSetupResult newSetup = _buildShortSetup(
-        candles: newCandles,
-        coin: detailItem,
-      );
 
       setState(() {
         selectedCoin = detailItem!;
@@ -173,7 +175,8 @@ class _DetailPageState extends State<DetailPage>
         candles.length > 24 ? candles.sublist(candles.length - 24) : candles;
 
     final CandleData last = recent.last;
-    final CandleData prev = recent.length > 1 ? recent[recent.length - 2] : recent.last;
+    final CandleData prev =
+        recent.length > 1 ? recent[recent.length - 2] : recent.last;
 
     final List<CandleData> swingWindow =
         recent.length > 12 ? recent.sublist(recent.length - 12) : recent;
@@ -184,8 +187,9 @@ class _DetailPageState extends State<DetailPage>
     final double avgRange =
         recent.map((e) => e.range).reduce((a, b) => a + b) / recent.length;
 
-    final double priceRisePercent =
-        recent.first.open == 0 ? 0 : ((last.close - recent.first.open) / recent.first.open) * 100;
+    final double priceRisePercent = recent.first.open == 0
+        ? 0
+        : ((last.close - recent.first.open) / recent.first.open) * 100;
 
     final bool nearResistance =
         swingHigh > 0 && ((swingHigh - last.close) / swingHigh) * 100 < 1.25;
@@ -276,6 +280,64 @@ class _DetailPageState extends State<DetailPage>
     );
   }
 
+  double _stopForLeverage(double leverage) {
+    final setup = setupResult;
+    if (setup == null) return 0;
+    final double entry = setup.entry;
+    final double baseRisk = ((setup.stopLoss - entry).abs() / entry) * 100;
+    final double adjustedRisk = math.max(baseRisk / math.max(leverage / 5, 1), 0.10);
+    return entry * (1 + adjustedRisk / 100);
+  }
+
+  double _liqForShort(double leverage) {
+    final setup = setupResult;
+    if (setup == null) return 0;
+    final double entry = setup.entry;
+    final double liqPercent = 100 / leverage;
+    return entry * (1 + liqPercent / 100);
+  }
+
+  double _stopDistancePercent() {
+    final setup = setupResult;
+    if (setup == null || setup.entry == 0) return 0;
+    return ((setup.stopLoss - setup.entry) / setup.entry) * 100;
+  }
+
+  double _targetDistancePercent() {
+    final setup = setupResult;
+    if (setup == null || setup.entry == 0) return 0;
+    return ((setup.entry - setup.target2) / setup.entry) * 100;
+  }
+
+  String _riskLevelText() {
+    final double stopDistance = _stopDistancePercent().abs();
+    if (stopDistance <= 3) return 'Kontrollü';
+    if (stopDistance <= 6) return 'Orta';
+    return 'Yüksek';
+  }
+
+  Color _riskLevelColor() {
+    final String level = _riskLevelText();
+    if (level == 'Kontrollü') return Colors.greenAccent;
+    if (level == 'Orta') return Colors.orangeAccent;
+    return Colors.redAccent;
+  }
+
+  String _setupQualityText() {
+    final setup = setupResult;
+    if (setup == null) return 'Zayıf';
+    if (setup.rr >= 2) return 'Güçlü';
+    if (setup.rr >= 1.2) return 'Orta';
+    return 'Zayıf';
+  }
+
+  Color _setupQualityColor() {
+    final String q = _setupQualityText();
+    if (q == 'Güçlü') return Colors.greenAccent;
+    if (q == 'Orta') return Colors.orangeAccent;
+    return Colors.redAccent;
+  }
+
   Widget _spinnerRing() {
     Color color = Colors.greenAccent;
 
@@ -308,9 +370,10 @@ class _DetailPageState extends State<DetailPage>
 
         setState(() {
           selectedInterval = value;
+          detailLoading = true;
         });
 
-        fetchDetail();
+        fetchDetail(initialLoad: true);
       },
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
@@ -471,6 +534,140 @@ class _DetailPageState extends State<DetailPage>
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildLeveragePanel() {
+    if (setupResult == null) return const SizedBox.shrink();
+
+    return _cardShell(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'KALDIRAÇ STOP / LIQ',
+            style: TextStyle(
+              color: Colors.white70,
+              fontSize: 12,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: 14),
+          _levRow('5x', _stopForLeverage(5), _liqForShort(5)),
+          const SizedBox(height: 10),
+          _levRow('10x', _stopForLeverage(10), _liqForShort(10)),
+          const SizedBox(height: 10),
+          _levRow('20x', _stopForLeverage(20), _liqForShort(20)),
+        ],
+      ),
+    );
+  }
+
+  Widget _levRow(String lev, double stop, double liq) {
+    return Row(
+      children: [
+        SizedBox(
+          width: 42,
+          child: Text(
+            lev,
+            style: const TextStyle(
+              color: Colors.orangeAccent,
+              fontSize: 16,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+        ),
+        Expanded(
+          child: Text(
+            'Stop: ${_formatPrice(stop)}',
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 14,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
+        Text(
+          'Liq: ${_formatPrice(liq)}',
+          style: const TextStyle(
+            color: Colors.redAccent,
+            fontSize: 14,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildRiskPanel() {
+    if (setupResult == null) return const SizedBox.shrink();
+
+    final double stopDistance = _stopDistancePercent();
+    final double targetDistance = _targetDistancePercent();
+
+    return _cardShell(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'GERÇEK RİSK PANELİ',
+            style: TextStyle(
+              color: Colors.white70,
+              fontSize: 12,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: 14),
+          _riskRow(
+            'Stop mesafesi',
+            _formatPercent(stopDistance),
+            Colors.redAccent,
+          ),
+          const SizedBox(height: 10),
+          _riskRow(
+            'Hedef mesafesi',
+            _formatPercent(targetDistance),
+            Colors.greenAccent,
+          ),
+          const SizedBox(height: 10),
+          _riskRow(
+            'Risk seviyesi',
+            _riskLevelText(),
+            _riskLevelColor(),
+          ),
+          const SizedBox(height: 10),
+          _riskRow(
+            'Teknik güç',
+            _setupQualityText(),
+            _setupQualityColor(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _riskRow(String label, String value, Color valueColor) {
+    return Row(
+      children: [
+        Expanded(
+          child: Text(
+            label,
+            style: const TextStyle(
+              color: Colors.white70,
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+        Text(
+          value,
+          style: TextStyle(
+            color: valueColor,
+            fontSize: 15,
+            fontWeight: FontWeight.w900,
+          ),
+        ),
+      ],
     );
   }
 
@@ -723,15 +920,11 @@ class _DetailPageState extends State<DetailPage>
                   ),
                   if (hasSetup) ...[
                     const SizedBox(height: 18),
+                    _buildLeveragePanel(),
+                    const SizedBox(height: 18),
+                    _buildRiskPanel(),
+                    const SizedBox(height: 18),
                     _buildWhyCard(),
-                  ],
-                  if (detailLoading && !hasSetup && !hasCandles) ...[
-                    const SizedBox(height: 40),
-                    const CircularProgressIndicator(
-                      strokeWidth: 2.2,
-                      valueColor:
-                          AlwaysStoppedAnimation<Color>(Colors.orangeAccent),
-                    ),
                   ],
                 ],
               ),
