@@ -503,52 +503,6 @@ class _DetailPageState extends State<DetailPage>
     );
   }
 
-  Widget _buildShortSetupCard() {
-    final ShortSetupResult setup = setupResult!;
-
-    return _cardShell(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'SHORT SETUP',
-            style: TextStyle(
-              color: Colors.white70,
-              fontSize: 12,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-          const SizedBox(height: 12),
-          _setupRow('Giriş', _formatPrice(setup.entry)),
-          const SizedBox(height: 8),
-          _setupRow(
-            'Stop loss',
-            _formatPrice(setup.stopLoss),
-            valueColor: Colors.redAccent,
-          ),
-          const SizedBox(height: 8),
-          _setupRow(
-            'Hedef 1',
-            _formatPrice(setup.target1),
-            valueColor: Colors.greenAccent,
-          ),
-          const SizedBox(height: 8),
-          _setupRow(
-            'Hedef 2',
-            _formatPrice(setup.target2),
-            valueColor: Colors.greenAccent,
-          ),
-          const SizedBox(height: 8),
-          _setupRow(
-            'Risk / Ödül',
-            setup.rr.toStringAsFixed(2),
-            valueColor: Colors.orangeAccent,
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _buildLossHeaderBox(
     String text, {
     Color borderColor = Colors.orangeAccent,
@@ -788,39 +742,6 @@ class _DetailPageState extends State<DetailPage>
     );
   }
 
-  Widget metricBox(String title, String value, {Color? valueColor}) {
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: Colors.black.withOpacity(0.30),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white.withOpacity(0.12)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            title,
-            style: const TextStyle(
-              color: Colors.white70,
-              fontSize: 13,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            value,
-            style: TextStyle(
-              color: valueColor ?? Colors.white,
-              fontSize: 18,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _buildWhyCard() {
     final List<String> reasons = setupResult!.reasons.take(4).toList();
 
@@ -986,7 +907,13 @@ class _DetailPageState extends State<DetailPage>
                     ],
                     SetupStatusCard(setup: setupResult!),
                     const SizedBox(height: 12),
-                    _buildShortSetupCard(),
+                    ShortSetupCard(
+                      entry: _formatPrice(setupResult!.entry),
+                      stopLoss: _formatPrice(setupResult!.stopLoss),
+                      target1: _formatPrice(setupResult!.target1),
+                      target2: _formatPrice(setupResult!.target2),
+                      rr: setupResult!.rr.toStringAsFixed(2),
+                    ),
                     const SizedBox(height: 12),
                     Container(
                       height: 280,
@@ -1030,6 +957,7 @@ class _DetailPageState extends State<DetailPage>
                             value: selectedCoin.indexPriceText,
                           ),
                         ),
+                        const SizedBox(width: 8),
                         Expanded(
                           child: PriceBox(
                             title: 'Funding rate',
