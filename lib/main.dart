@@ -224,14 +224,14 @@ class CandleData {
     required this.open,
   });
 
-  factory CandleData.fromJson(List<dynamic> raw) {
+  factory CandleData.fromJson(Map<String, dynamic> raw) {
     return CandleData(
-      timestamp: int.tryParse(raw[0].toString()) ?? 0,
-      volume: _parseDouble(raw[1]),
-      close: _parseDouble(raw[2]),
-      high: _parseDouble(raw[3]),
-      low: _parseDouble(raw[4]),
-      open: _parseDouble(raw[5]),
+      timestamp: int.tryParse(raw['t'].toString()) ?? 0,
+      volume: _parseDouble(raw['v']),
+      close: _parseDouble(raw['c']),
+      high: _parseDouble(raw['h']),
+      low: _parseDouble(raw['l']),
+      open: _parseDouble(raw['o']),
     );
   }
 
@@ -1076,6 +1076,7 @@ class _DetailPageState extends State<DetailPage>
   String selectedInterval = '1h';
 
   late AnimationController _spinnerController;
+  late final String contractName;
   late CoinRadarData selectedCoin;
   List<CandleData> candles = [];
   ShortSetupResult? setupResult;
@@ -1084,7 +1085,9 @@ class _DetailPageState extends State<DetailPage>
   @override
   void initState() {
     super.initState();
+    contractName = widget.coinData.name;
     selectedCoin = widget.coinData;
+
     _spinnerController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1100),
@@ -1106,6 +1109,15 @@ class _DetailPageState extends State<DetailPage>
     super.dispose();
   }
 
+  String _apiInterval(String value) {
+    switch (value) {
+      case '12h':
+        return '1d';
+      default:
+        return value;
+    }
+  }
+
   Future<void> fetchDetail({bool showLoader = true}) async {
     if (_isFetchingDetail) return;
     _isFetchingDetail = true;
@@ -1122,14 +1134,11 @@ class _DetailPageState extends State<DetailPage>
         'https://fx-api.gateio.ws/api/v4/futures/usdt/tickers',
       );
 
-      final candlesUri = Uri.https(
-        'api.gateio.ws',
-        '/api/v4/futures/usdt/candlesticks',
-        {
-          'contract': selectedCoin.name,
-          'interval': selectedInterval,
-          'limit': '120',
-        },
+      final candlesUri = Uri.parse(
+        'https://fx-api.gateio.ws/api/v4/futures/usdt/candlesticks'
+        '?contract=${Uri.encodeQueryComponent(contractName)}'
+        '&interval=${Uri.encodeQueryComponent(_apiInterval(selectedInterval))}'
+        '&limit=120',
       );
 
       final responses = await Future.wait([
@@ -1179,23 +1188,16 @@ class _DetailPageState extends State<DetailPage>
 
       CoinRadarData? detailItem;
       for (final coin in allCoins) {
-        if (coin.name == selectedCoin.name) {
+        if (coin.name == contractName) {
           detailItem = coin;
           break;
         }
       }
 
-      if (detailItem == null) {
-        if (!mounted) return;
-        setState(() {
-          detailLoading = false;
-          detailError = 'Coin detayı bulunamadı';
-        });
-        return;
-      }
+      detailItem ??= selectedCoin;
 
       final List<CandleData> newCandles = parsedCandles
-          .whereType<List<dynamic>>()
+          .whereType<Map<String, dynamic>>()
           .map(CandleData.fromJson)
           .toList()
           .reversed
@@ -1261,9 +1263,8 @@ class _DetailPageState extends State<DetailPage>
     final double swingHigh = swingWindow.map((e) => e.high).reduce(math.max);
     final double swingLow = swingWindow.map((e) => e.low).reduce(math.min);
 
-    final double avgRange = recent.isEmpty
-        ? 0
-        : recent.map((e) => e.range).reduce((a, b) => a + b) / recent.length;
+    final double avgRange = recent.map((e) => e.range).reduce((a, b) => a + b) /
+        recent.length;
 
     final double firstOpen = recent.first.open == 0 ? 1 : recent.first.open;
     final double priceRisePercent =
@@ -1699,7 +1700,7 @@ class _DetailPageState extends State<DetailPage>
                     children: [
                       Expanded(
                         child: Text(
-                          selectedCoin.name,
+                          contractName,
                           style: const TextStyle(
                             color: Colors.white,
                             fontSize: 22,
