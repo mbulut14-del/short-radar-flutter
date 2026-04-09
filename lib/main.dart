@@ -238,7 +238,8 @@ class CandleData {
 
     if (raw is Map) {
       return CandleData(
-        timestamp: int.tryParse((raw['t'] ?? raw['timestamp'] ?? 0).toString()) ?? 0,
+        timestamp:
+            int.tryParse((raw['t'] ?? raw['timestamp'] ?? 0).toString()) ?? 0,
         volume: _parseDouble(raw['v'] ?? raw['volume']),
         close: _parseDouble(raw['c'] ?? raw['close']),
         high: _parseDouble(raw['h'] ?? raw['high']),
@@ -279,17 +280,19 @@ class ShortSetupResult {
   });
 }
 
-class LeverageRiskItem {
+class LossStopRow {
   final int leverage;
-  final double stopPrice;
-  final double liquidationPrice;
-  final double adverseMovePercent;
+  final double currentPrice;
+  final double stop5;
+  final double? stop10;
+  final double? stop15;
 
-  const LeverageRiskItem({
+  const LossStopRow({
     required this.leverage,
-    required this.stopPrice,
-    required this.liquidationPrice,
-    required this.adverseMovePercent,
+    required this.currentPrice,
+    required this.stop5,
+    this.stop10,
+    this.stop15,
   });
 }
 
@@ -1027,7 +1030,8 @@ class _HomePageState extends State<HomePage> {
                                 const SizedBox(width: 14),
                                 Expanded(
                                   child: Column(
-                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    mainAxisAlignment:
+                                        MainAxisAlignment.center,
                                     crossAxisAlignment:
                                         CrossAxisAlignment.start,
                                     children: [
@@ -1110,7 +1114,7 @@ class _DetailPageState extends State<DetailPage>
   List<CandleData> candles = [];
   List<CandleData> visibleCandles = [];
   ShortSetupResult? setupResult;
-  List<LeverageRiskItem> leverageItems = [];
+  List<LossStopRow> lossStopRows = [];
   bool _isFetchingDetail = false;
 
   @override
@@ -1149,44 +1153,67 @@ class _DetailPageState extends State<DetailPage>
     }
   }
 
-  double _shortRiskStopPrice({
+  double _shortStopByLoss({
     required double entry,
     required int leverage,
-    double riskPercent = 10,
+    required double accountLossPercent,
   }) {
-    final movePercent = riskPercent / leverage;
-    return entry * (1 + movePercent / 100);
+    final adverseMovePercent = accountLossPercent / leverage;
+    return entry * (1 + adverseMovePercent / 100);
   }
 
-  double _estimatedShortLiquidationPrice({
-    required double entry,
-    required int leverage,
-  }) {
-    final approxPercent = 100 / leverage;
-    final safetyHaircut = approxPercent * 0.90;
-    return entry * (1 + safetyHaircut / 100);
-  }
-
-  List<LeverageRiskItem> _buildLeverageItems(double entry) {
-    const levels = [5, 10, 20];
-    return levels.map((lev) {
-      final stop = _shortRiskStopPrice(
-        entry: entry,
-        leverage: lev,
-        riskPercent: 10,
-      );
-      final liq = _estimatedShortLiquidationPrice(
-        entry: entry,
-        leverage: lev,
-      );
-      final adverseMovePercent = ((stop - entry) / entry) * 100;
-      return LeverageRiskItem(
-        leverage: lev,
-        stopPrice: stop,
-        liquidationPrice: liq,
-        adverseMovePercent: adverseMovePercent,
-      );
-    }).toList();
+  List<LossStopRow> _buildLossStopRows(double entry) {
+    return [
+      LossStopRow(
+        leverage: 3,
+        currentPrice: entry,
+        stop5: _shortStopByLoss(
+          entry: entry,
+          leverage: 3,
+          accountLossPercent: 5,
+        ),
+        stop10: _shortStopByLoss(
+          entry: entry,
+          leverage: 3,
+          accountLossPercent: 10,
+        ),
+        stop15: _shortStopByLoss(
+          entry: entry,
+          leverage: 3,
+          accountLossPercent: 15,
+        ),
+      ),
+      LossStopRow(
+        leverage: 5,
+        currentPrice: entry,
+        stop5: _shortStopByLoss(
+          entry: entry,
+          leverage: 5,
+          accountLossPercent: 5,
+        ),
+        stop10: _shortStopByLoss(
+          entry: entry,
+          leverage: 5,
+          accountLossPercent: 10,
+        ),
+        stop15: _shortStopByLoss(
+          entry: entry,
+          leverage: 5,
+          accountLossPercent: 15,
+        ),
+      ),
+      LossStopRow(
+        leverage: 10,
+        currentPrice: entry,
+        stop5: _shortStopByLoss(
+          entry: entry,
+          leverage: 10,
+          accountLossPercent: 5,
+        ),
+        stop10: null,
+        stop15: null,
+      ),
+    ];
   }
 
   Future<void> fetchDetail({bool showLoader = true}) async {
@@ -1230,7 +1257,8 @@ class _DetailPageState extends State<DetailPage>
       final tickerResponse = responses[0];
       final candleResponse = responses[1];
 
-      if (tickerResponse.statusCode != 200 || candleResponse.statusCode != 200) {
+      if (tickerResponse.statusCode != 200 ||
+          candleResponse.statusCode != 200) {
         if (!mounted) return;
         setState(() {
           detailLoading = false;
@@ -1283,7 +1311,7 @@ class _DetailPageState extends State<DetailPage>
           candles = [];
           visibleCandles = [];
           setupResult = null;
-          leverageItems = [];
+          lossStopRows = [];
           detailLoading = false;
           detailError = 'Grafik verisi bulunamadı';
         });
@@ -1299,8 +1327,7 @@ class _DetailPageState extends State<DetailPage>
         coin: detailItem,
       );
 
-      final List<LeverageRiskItem> newLeverageItems =
-          _buildLeverageItems(newSetup.entry);
+      final List<LossStopRow> newLossRows = _buildLossStopRows(newSetup.entry);
 
       if (!mounted) return;
       setState(() {
@@ -1308,7 +1335,7 @@ class _DetailPageState extends State<DetailPage>
         candles = newCandles;
         visibleCandles = zoomCandles;
         setupResult = newSetup;
-        leverageItems = newLeverageItems;
+        lossStopRows = newLossRows;
         detailLoading = false;
         detailError = '';
       });
@@ -1338,7 +1365,8 @@ class _DetailPageState extends State<DetailPage>
         : candles;
 
     final CandleData last = recent.last;
-    final CandleData prev = recent.length >= 2 ? recent[recent.length - 2] : last;
+    final CandleData prev =
+        recent.length >= 2 ? recent[recent.length - 2] : last;
 
     final List<CandleData> swingWindow = recent.length > 5
         ? recent.sublist(recent.length - 5)
@@ -1640,61 +1668,153 @@ class _DetailPageState extends State<DetailPage>
     );
   }
 
-  Widget _buildLeveragePanel() {
+  Widget _buildLossHeaderBox(
+    String text, {
+    Color borderColor = Colors.orangeAccent,
+    Color textColor = Colors.orangeAccent,
+  }) {
+    return Container(
+      height: 44,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: Colors.black.withOpacity(0.22),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: borderColor.withOpacity(0.8)),
+      ),
+      child: Text(
+        text,
+        textAlign: TextAlign.center,
+        style: TextStyle(
+          color: textColor,
+          fontSize: 12,
+          fontWeight: FontWeight.w800,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLossStopPanel() {
     return _cardShell(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text(
-            'KALDIRAÇ STOP / LIQ',
+            'ZARAR BAZLI STOP',
             style: TextStyle(
               color: Colors.white70,
               fontSize: 12,
-              fontWeight: FontWeight.w800,
+              fontWeight: FontWeight.w900,
             ),
           ),
           const SizedBox(height: 12),
-          ...leverageItems.map(
-            (item) => Padding(
-              padding: const EdgeInsets.only(bottom: 10),
-              child: Row(
-                children: [
-                  SizedBox(
-                    width: 42,
-                    child: Text(
-                      '${item.leverage}x',
-                      style: const TextStyle(
-                        color: Colors.orangeAccent,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w900,
-                      ),
-                    ),
-                  ),
-                  Expanded(
-                    child: Text(
-                      'Stop: ${_formatPrice(item.stopPrice)}',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ),
-                  Expanded(
-                    child: Text(
-                      'Liq: ${_formatPrice(item.liquidationPrice)}',
-                      textAlign: TextAlign.right,
-                      style: const TextStyle(
-                        color: Colors.redAccent,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                  ),
-                ],
+          Row(
+            children: [
+              const SizedBox(width: 66),
+              Expanded(
+                child: _buildLossHeaderBox(
+                  'Güncel fiyat',
+                  borderColor: Colors.redAccent,
+                  textColor: Colors.redAccent,
+                ),
               ),
-            ),
+              const SizedBox(width: 8),
+              Expanded(child: _buildLossHeaderBox('%5 zarar')),
+              const SizedBox(width: 8),
+              Expanded(child: _buildLossHeaderBox('%10 zarar')),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _buildLossHeaderBox(
+                  '%15 zarar',
+                  borderColor: Colors.redAccent,
+                  textColor: Colors.redAccent,
+                ),
+              ),
+            ],
           ),
+          const SizedBox(height: 12),
+          ...lossStopRows.asMap().entries.map((entry) {
+            final int index = entry.key;
+            final LossStopRow row = entry.value;
+            final bool isLast = index == lossStopRows.length - 1;
+
+            return Column(
+              children: [
+                Row(
+                  children: [
+                    SizedBox(
+                      width: 66,
+                      child: Text(
+                        '${row.leverage}x',
+                        style: const TextStyle(
+                          color: Colors.orangeAccent,
+                          fontSize: 18,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                    ),
+                    Expanded(
+                      child: Text(
+                        _formatPrice(row.currentPrice),
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          color: Colors.redAccent,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        _formatPrice(row.stop5),
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        row.stop10 == null ? '-' : _formatPrice(row.stop10!),
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        row.stop15 == null ? '-' : _formatPrice(row.stop15!),
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: row.stop15 == null
+                              ? Colors.white54
+                              : Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                if (!isLast) ...[
+                  const SizedBox(height: 12),
+                  Divider(
+                    height: 1,
+                    thickness: 1,
+                    color: Colors.white.withOpacity(0.08),
+                  ),
+                  const SizedBox(height: 12),
+                ],
+              ],
+            );
+          }),
         ],
       ),
     );
@@ -2024,7 +2144,7 @@ class _DetailPageState extends State<DetailPage>
                       ],
                     ),
                     const SizedBox(height: 18),
-                    _buildLeveragePanel(),
+                    _buildLossStopPanel(),
                     const SizedBox(height: 12),
                     _buildRiskPanel(),
                     const SizedBox(height: 18),
