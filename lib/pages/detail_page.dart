@@ -8,6 +8,7 @@ import 'package:http/http.dart' as http;
 import '../models/candle_data.dart';
 import '../models/coin_radar_data.dart';
 import '../models/short_setup_result.dart';
+import '../models/pump_analysis.dart';
 import '../painters/candle_chart_painter.dart';
 
 class DetailPage extends StatefulWidget {
