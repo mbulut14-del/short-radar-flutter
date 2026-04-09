@@ -11,6 +11,7 @@ import '../models/short_setup_result.dart';
 import '../models/pump_analysis.dart';
 import '../painters/candle_chart_painter.dart';
 import '../widgets/price_box.dart';
+import '../widgets/setup_status_card.dart';
 
 String _formatPrice(double value, {int digits = 6}) {
   if (value == 0) return '-';
@@ -328,10 +329,6 @@ class _DetailPageState extends State<DetailPage>
         : recent;
 
     final double swingHigh = swingWindow.map((e) => e.high).reduce(math.max);
-    final double swingLow = swingWindow.map((e) => e.low).reduce(math.min);
-
-    final double avgRange =
-        recent.map((e) => e.range).reduce((a, b) => a + b) / recent.length;
 
     final double firstOpen = recent.first.open == 0 ? 1 : recent.first.open;
     final double priceRisePercent =
@@ -502,78 +499,6 @@ class _DetailPageState extends State<DetailPage>
         border: Border.all(color: Colors.white.withOpacity(0.10)),
       ),
       child: child,
-    );
-  }
-
-  Widget _buildSetupStatusCard() {
-    final ShortSetupResult setup = setupResult!;
-
-    Color statusColor;
-    switch (setup.status) {
-      case 'Güçlü':
-        statusColor = Colors.redAccent;
-        break;
-      case 'Orta':
-        statusColor = Colors.orangeAccent;
-        break;
-      default:
-        statusColor = Colors.amberAccent;
-    }
-
-    return _cardShell(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const Text(
-                'SETUP DURUMU',
-                style: TextStyle(
-                  color: Colors.white70,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-              const Spacer(),
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                decoration: BoxDecoration(
-                  color: statusColor.withOpacity(0.14),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: statusColor.withOpacity(0.55)),
-                ),
-                child: Text(
-                  setup.status,
-                  style: TextStyle(
-                    color: statusColor,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          Text(
-            'RR: ${setup.rr.toStringAsFixed(2)}',
-            style: const TextStyle(
-              color: Colors.orangeAccent,
-              fontSize: 18,
-              fontWeight: FontWeight.w900,
-            ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            setup.summary,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ],
-      ),
     );
   }
 
@@ -1058,7 +983,7 @@ class _DetailPageState extends State<DetailPage>
                       ),
                       const SizedBox(height: 14),
                     ],
-                    _buildSetupStatusCard(),
+                    SetupStatusCard(setup: setupResult!),
                     const SizedBox(height: 12),
                     _buildShortSetupCard(),
                     const SizedBox(height: 12),
@@ -1078,23 +1003,37 @@ class _DetailPageState extends State<DetailPage>
                       ),
                     ),
                     const SizedBox(height: 18),
-                    GridView.count(
-                      crossAxisCount: 2,
-                      crossAxisSpacing: 12,
-                      mainAxisSpacing: 12,
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      childAspectRatio: 1.45,
+                    Row(
                       children: [
-                        metricBox('Son fiyat', selectedCoin.lastPriceText),
-                        metricBox('Mark price', selectedCoin.markPriceText),
-                        metricBox('Index price', selectedCoin.indexPriceText),
-                        metricBox(
-                          'Funding rate',
-                          selectedCoin.fundingText,
-                          valueColor: selectedCoin.fundingRate < 0
-                              ? Colors.redAccent
-                              : Colors.orangeAccent,
+                        Expanded(
+                          child: PriceBox(
+                            title: 'Son fiyat',
+                            value: selectedCoin.lastPriceText,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: PriceBox(
+                            title: 'Mark price',
+                            value: selectedCoin.markPriceText,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: PriceBox(
+                            title: 'Index price',
+                            value: selectedCoin.indexPriceText,
+                          ),
+                        ),
+                        Expanded(
+                          child: PriceBox(
+                            title: 'Funding rate',
+                            value: selectedCoin.fundingText,
+                          ),
                         ),
                       ],
                     ),
