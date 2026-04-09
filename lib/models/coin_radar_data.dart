@@ -1,9 +1,17 @@
-
 import 'dart:math' as math;
 
 double _parseDouble(dynamic value) {
   if (value == null) return 0.0;
   return double.tryParse(value.toString()) ?? 0.0;
+}
+
+String _formatPercent(double value, {int digits = 2}) {
+  return '${value >= 0 ? '+' : ''}${value.toStringAsFixed(digits)}%';
+}
+
+String _formatFunding(double value) {
+  final percent = value * 100;
+  return '${percent >= 0 ? '+' : ''}${percent.toStringAsFixed(4)}%';
 }
 
 class CoinRadarData {
@@ -173,6 +181,10 @@ class CoinRadarData {
     }
     return 'Şimdilik net short baskısı zayıf.';
   }
+
+  String get changeText => _formatPercent(changePercent);
+
+  String get fundingText => _formatFunding(fundingRate);
 
   double get divergencePercent {
     if (indexPrice == 0) return 0;
