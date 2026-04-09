@@ -1,6 +1,6 @@
-
 import 'dart:async';
 import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
@@ -15,7 +15,19 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
-  List<CoinRadarData> coins = [];
+  List<CoinRadarData> coins = [
+    CoinRadarData.seed(name: 'KOMA_USDT', changePercent: 58.22),
+    CoinRadarData.seed(name: 'BULLA_USDT', changePercent: 44.77),
+    CoinRadarData.seed(name: 'PLAY_USDT', changePercent: 34.27),
+    CoinRadarData.seed(name: 'APR_USDT', changePercent: 31.12),
+    CoinRadarData.seed(name: 'TRU_USDT', changePercent: 28.90),
+    CoinRadarData.seed(name: 'DOGE_USDT', changePercent: 25.61),
+    CoinRadarData.seed(name: 'SOL_USDT', changePercent: 22.10),
+    CoinRadarData.seed(name: 'ETH_USDT', changePercent: 19.85),
+    CoinRadarData.seed(name: 'BTC_USDT', changePercent: 17.40),
+    CoinRadarData.seed(name: 'XRP_USDT', changePercent: 15.12),
+  ];
+
   CoinRadarData? radarLeader;
   bool isLoading = true;
   String errorText = '';
@@ -24,10 +36,13 @@ class _HomePageState extends State<HomePage> {
   @override
   void initState() {
     super.initState();
+    radarLeader = coins.first;
     fetchCoins();
 
     _refreshTimer = Timer.periodic(const Duration(seconds: 5), (_) {
-      if (mounted) fetchCoins();
+      if (mounted) {
+        fetchCoins();
+      }
     });
   }
 
@@ -38,91 +53,401 @@ class _HomePageState extends State<HomePage> {
   }
 
   Future<void> fetchCoins() async {
+    setState(() {
+      isLoading = true;
+      errorText = '';
+    });
+
     try {
       final response = await http.get(
         Uri.parse('https://fx-api.gateio.ws/api/v4/futures/usdt/tickers'),
+        headers: {'Accept': 'application/json'},
       );
 
-      final List parsed = json.decode(response.body);
+      if (response.statusCode != 200) {
+        setState(() {
+          isLoading = false;
+          errorText = 'Canlı veri alınamadı';
+        });
+        return;
+      }
 
-      final List<CoinRadarData> all = parsed
-          .map((e) => CoinRadarData.fromJson(e))
+      final List<dynamic> parsed = json.decode(response.body);
+
+      final List<CoinRadarData> allCoins = parsed
+          .whereType<Map<String, dynamic>>()
+          .where((e) => (e['contract'] ?? '').toString().isNotEmpty)
+          .map(CoinRadarData.fromJson)
           .toList();
 
-      all.sort((a, b) => b.score.compareTo(a.score));
+      if (allCoins.isEmpty) {
+        setState(() {
+          isLoading = false;
+          errorText = 'Canlı veri boş döndü';
+        });
+        return;
+      }
+
+      final List<CoinRadarData> sortedByChange = [...allCoins]
+        ..sort((a, b) => b.changePercent.compareTo(a.changePercent));
+
+      final List<CoinRadarData> sortedByScore = [...allCoins]
+        ..sort((a, b) {
+          final int scoreCompare = b.score.compareTo(a.score);
+          if (scoreCompare != 0) return scoreCompare;
+          return b.changePercent.compareTo(a.changePercent);
+        });
 
       setState(() {
-        coins = all.take(10).toList();
-        radarLeader = all.first;
+        coins = sortedByChange.take(10).toList();
+        radarLeader = sortedByScore.first;
         isLoading = false;
+        errorText = '';
       });
-    } catch (e) {
+    } catch (_) {
       setState(() {
-        errorText = 'Veri alınamadı';
         isLoading = false;
+        errorText = 'Canlı veri alınamadı';
       });
     }
   }
 
-  Widget radarCard() {
-    if (radarLeader == null) return const SizedBox();
-
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.black.withOpacity(0.5),
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Column(
+  Widget _miniInfo(String title, String value) {
+    return RichText(
+      text: TextSpan(
         children: [
-          Text(
-            radarLeader!.name,
+          TextSpan(
+            text: '$title: ',
             style: const TextStyle(
-              color: Colors.white,
-              fontSize: 22,
-              fontWeight: FontWeight.bold,
+              color: Colors.white60,
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
             ),
           ),
-          const SizedBox(height: 6),
-          Text(
-            radarLeader!.biasLabel,
-            style: const TextStyle(color: Colors.orangeAccent),
+          TextSpan(
+            text: value,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 11,
+              fontWeight: FontWeight.w800,
+            ),
           ),
         ],
       ),
     );
   }
 
-  Widget coinItem(CoinRadarData coin) {
-    return GestureDetector(
-      onTap: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (_) => DetailPage(coinData: coin),
-          ),
-        );
-      },
-      child: Container(
-        margin: const EdgeInsets.symmetric(vertical: 6),
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: Colors.black.withOpacity(0.4),
-          borderRadius: BorderRadius.circular(16),
-        ),
-        child: Row(
-          children: [
-            Expanded(
+  Widget _buildRadarHero() {
+    final CoinRadarData? leader = radarLeader;
+    if (leader == null) {
+      return const SizedBox(height: 150);
+    }
+
+    final Color scoreColor = leader.score >= 75
+        ? Colors.redAccent
+        : leader.score >= 60
+            ? Colors.orangeAccent
+            : leader.score >= 45
+                ? Colors.amberAccent
+                : Colors.greenAccent;
+
+    return SizedBox(
+      height: 150,
+      child: Stack(
+        children: [
+          Positioned(
+            top: 0,
+            right: 0,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: Colors.black.withOpacity(0.55),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: isLoading ? Colors.orangeAccent : Colors.greenAccent,
+                ),
+              ),
               child: Text(
-                coin.name,
-                style: const TextStyle(color: Colors.white),
+                isLoading ? 'Yükleniyor' : 'Canlı Veri',
+                style: TextStyle(
+                  color: isLoading ? Colors.orangeAccent : Colors.greenAccent,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
             ),
-            Text(
-              '${coin.score}',
-              style: const TextStyle(color: Colors.orangeAccent),
+          ),
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 0,
+            child: Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: Colors.black.withOpacity(0.55),
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(
+                  color: scoreColor.withOpacity(0.75),
+                  width: 1.4,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: scoreColor.withOpacity(0.18),
+                    blurRadius: 18,
+                    spreadRadius: 1,
+                  ),
+                ],
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    width: 74,
+                    height: 74,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Colors.black.withOpacity(0.55),
+                      border: Border.all(color: scoreColor, width: 3),
+                      boxShadow: [
+                        BoxShadow(
+                          color: scoreColor.withOpacity(0.35),
+                          blurRadius: 16,
+                          spreadRadius: 2,
+                        ),
+                      ],
+                    ),
+                    alignment: Alignment.center,
+                    child: Text(
+                      '${leader.score}',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 26,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'EN GÜÇLÜ SHORT ADAYI',
+                          style: TextStyle(
+                            color: scoreColor,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          leader.name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 20,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Wrap(
+                          spacing: 10,
+                          runSpacing: 6,
+                          children: [
+                            _miniInfo('Skor', '${leader.score}'),
+                            _miniInfo('Değişim', leader.changeText),
+                            _miniInfo('Funding', leader.fundingText),
+                            _miniInfo('Bias', leader.biasLabel),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
             ),
-          ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildInfoCard() {
+    if (radarLeader == null) return const SizedBox.shrink();
+
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.black.withOpacity(0.32),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: Colors.orangeAccent.withOpacity(0.45),
+        ),
+      ),
+      child: Row(
+        children: [
+          const Icon(
+            Icons.radar_rounded,
+            color: Colors.orangeAccent,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              radarLeader!.note,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildErrorCard() {
+    if (errorText.isEmpty) return const SizedBox.shrink();
+
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: Colors.red.withOpacity(0.18),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: Colors.redAccent.withOpacity(0.5),
+        ),
+      ),
+      child: Text(
+        errorText,
+        textAlign: TextAlign.center,
+        style: const TextStyle(
+          color: Colors.white,
+          fontSize: 13,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCoinCard(int index, CoinRadarData coin) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: GestureDetector(
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => DetailPage(coinData: coin),
+            ),
+          );
+        },
+        child: Container(
+          height: 86,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(22),
+            gradient: const LinearGradient(
+              begin: Alignment.centerLeft,
+              end: Alignment.centerRight,
+              colors: [
+                Color(0xFF07122A),
+                Color(0xFF091933),
+                Color(0xFF07122A),
+              ],
+            ),
+            border: Border.all(
+              color: const Color(0xFF3EA6FF),
+              width: 1.4,
+            ),
+            boxShadow: const [
+              BoxShadow(
+                color: Color(0x663EA6FF),
+                blurRadius: 10,
+                spreadRadius: 1,
+              ),
+              BoxShadow(
+                color: Color(0x3300FFFF),
+                blurRadius: 18,
+                spreadRadius: 1,
+              ),
+            ],
+          ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14),
+            child: Row(
+              children: [
+                Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: const Color(0xFF123D9B),
+                    border: Border.all(
+                      color: const Color(0xFF5AA8FF),
+                      width: 1.6,
+                    ),
+                    boxShadow: const [
+                      BoxShadow(
+                        color: Color(0x663EA6FF),
+                        blurRadius: 8,
+                        spreadRadius: 1,
+                      ),
+                    ],
+                  ),
+                  alignment: Alignment.center,
+                  child: Text(
+                    '$index',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 19,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        coin.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 17,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Short skoru: ${coin.score} • ${coin.biasLabel}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: Colors.white.withOpacity(0.72),
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Text(
+                  coin.changeText,
+                  style: TextStyle(
+                    color: coin.changePercent < 0
+                        ? Colors.redAccent
+                        : const Color(0xFF3CFFB2),
+                    fontSize: 16,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );
@@ -131,24 +456,39 @@ class _HomePageState extends State<HomePage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.black,
-      body: isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : Padding(
-              padding: const EdgeInsets.all(14),
-              child: Column(
+      body: Stack(
+        children: [
+          Positioned.fill(
+            child: Image.asset(
+              'assets/bg.png',
+              fit: BoxFit.cover,
+            ),
+          ),
+          SafeArea(
+            child: RefreshIndicator(
+              onRefresh: fetchCoins,
+              child: ListView(
+                padding: const EdgeInsets.all(12),
                 children: [
-                  const SizedBox(height: 40),
-                  radarCard(),
-                  const SizedBox(height: 20),
-                  Expanded(
-                    child: ListView(
-                      children: coins.map(coinItem).toList(),
-                    ),
-                  ),
+                  _buildRadarHero(),
+                  const SizedBox(height: 12),
+                  _buildInfoCard(),
+                  if (errorText.isNotEmpty) ...[
+                    const SizedBox(height: 10),
+                    _buildErrorCard(),
+                  ],
+                  const SizedBox(height: 12),
+                  ...coins.asMap().entries.map((entry) {
+                    final int index = entry.key + 1;
+                    final CoinRadarData coin = entry.value;
+                    return _buildCoinCard(index, coin);
+                  }),
                 ],
               ),
             ),
+          ),
+        ],
+      ),
     );
   }
 }
