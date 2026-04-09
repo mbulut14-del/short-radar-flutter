@@ -10,6 +10,7 @@ import '../models/coin_radar_data.dart';
 import '../models/short_setup_result.dart';
 import '../models/pump_analysis.dart';
 import '../painters/candle_chart_painter.dart';
+import '../widgets/price_box.dart';
 
 String _formatPrice(double value, {int digits = 6}) {
   if (value == 0) return '-';
