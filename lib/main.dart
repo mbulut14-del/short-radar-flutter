@@ -279,6 +279,20 @@ class ShortSetupResult {
   });
 }
 
+class LeverageRiskItem {
+  final int leverage;
+  final double stopPrice;
+  final double liquidationPrice;
+  final double adverseMovePercent;
+
+  const LeverageRiskItem({
+    required this.leverage,
+    required this.stopPrice,
+    required this.liquidationPrice,
+    required this.adverseMovePercent,
+  });
+}
+
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
@@ -1094,7 +1108,9 @@ class _DetailPageState extends State<DetailPage>
   late final String contractName;
   late CoinRadarData selectedCoin;
   List<CandleData> candles = [];
+  List<CandleData> visibleCandles = [];
   ShortSetupResult? setupResult;
+  List<LeverageRiskItem> leverageItems = [];
   bool _isFetchingDetail = false;
 
   @override
@@ -1131,6 +1147,46 @@ class _DetailPageState extends State<DetailPage>
       default:
         return value;
     }
+  }
+
+  double _shortRiskStopPrice({
+    required double entry,
+    required int leverage,
+    double riskPercent = 10,
+  }) {
+    final movePercent = riskPercent / leverage;
+    return entry * (1 + movePercent / 100);
+  }
+
+  double _estimatedShortLiquidationPrice({
+    required double entry,
+    required int leverage,
+  }) {
+    final approxPercent = 100 / leverage;
+    final safetyHaircut = approxPercent * 0.90;
+    return entry * (1 + safetyHaircut / 100);
+  }
+
+  List<LeverageRiskItem> _buildLeverageItems(double entry) {
+    const levels = [5, 10, 20];
+    return levels.map((lev) {
+      final stop = _shortRiskStopPrice(
+        entry: entry,
+        leverage: lev,
+        riskPercent: 10,
+      );
+      final liq = _estimatedShortLiquidationPrice(
+        entry: entry,
+        leverage: lev,
+      );
+      final adverseMovePercent = ((stop - entry) / entry) * 100;
+      return LeverageRiskItem(
+        leverage: lev,
+        stopPrice: stop,
+        liquidationPrice: liq,
+        adverseMovePercent: adverseMovePercent,
+      );
+    }).toList();
   }
 
   Future<void> fetchDetail({bool showLoader = true}) async {
@@ -1225,23 +1281,34 @@ class _DetailPageState extends State<DetailPage>
         setState(() {
           selectedCoin = detailItem!;
           candles = [];
+          visibleCandles = [];
           setupResult = null;
+          leverageItems = [];
           detailLoading = false;
           detailError = 'Grafik verisi bulunamadı';
         });
         return;
       }
 
+      final List<CandleData> zoomCandles = newCandles.length > 10
+          ? newCandles.sublist(newCandles.length - 10)
+          : newCandles;
+
       final ShortSetupResult newSetup = _buildShortSetup(
-        candles: newCandles,
+        candles: zoomCandles,
         coin: detailItem,
       );
+
+      final List<LeverageRiskItem> newLeverageItems =
+          _buildLeverageItems(newSetup.entry);
 
       if (!mounted) return;
       setState(() {
         selectedCoin = detailItem!;
         candles = newCandles;
+        visibleCandles = zoomCandles;
         setupResult = newSetup;
+        leverageItems = newLeverageItems;
         detailLoading = false;
         detailError = '';
       });
@@ -1266,15 +1333,15 @@ class _DetailPageState extends State<DetailPage>
     required List<CandleData> candles,
     required CoinRadarData coin,
   }) {
-    final List<CandleData> recent = candles.length > 24
-        ? candles.sublist(candles.length - 24)
+    final List<CandleData> recent = candles.length > 10
+        ? candles.sublist(candles.length - 10)
         : candles;
 
     final CandleData last = recent.last;
     final CandleData prev = recent.length >= 2 ? recent[recent.length - 2] : last;
 
-    final List<CandleData> swingWindow = recent.length > 12
-        ? recent.sublist(recent.length - 12)
+    final List<CandleData> swingWindow = recent.length > 5
+        ? recent.sublist(recent.length - 5)
         : recent;
 
     final double swingHigh = swingWindow.map((e) => e.high).reduce(math.max);
@@ -1288,47 +1355,49 @@ class _DetailPageState extends State<DetailPage>
         ((last.close - recent.first.open) / firstOpen) * 100;
 
     final bool nearResistance =
-        swingHigh > 0 && ((swingHigh - last.close) / swingHigh) * 100 < 1.25;
+        swingHigh > 0 && ((swingHigh - last.close) / swingHigh) * 100 < 1.40;
 
     final bool weakening = recent.length < 2
         ? false
         : (last.close <= prev.close || last.bodySize <= prev.bodySize);
 
     final bool upperWickSignal =
-        last.range > 0 && last.upperWick > last.bodySize * 0.9;
+        last.range > 0 && last.upperWick > last.bodySize * 0.75;
 
     final bool lowerHigh = recent.length >= 3 &&
         recent[recent.length - 2].high < recent[recent.length - 3].high;
 
-    final bool divergenceWide = coin.divergencePercent > 0.12;
+    final bool divergenceWide = coin.divergencePercent > 0.08;
     final bool fundingPositive = coin.fundingRate > 0;
-    final bool pumpStrong = priceRisePercent > 2.0 || coin.changePercent > 4.0;
+    final bool pumpStrong = priceRisePercent > 1.4 || coin.changePercent > 4.0;
 
     int strength = 0;
     final List<String> reasons = [];
 
     if (pumpStrong) {
-      strength += 20;
+      strength += 18;
       reasons.add('Son mumlarda yukarı yönlü şişme var.');
     }
     if (fundingPositive) {
-      strength += coin.fundingRate > 0.0001 ? 18 : 10;
+      strength += coin.fundingRate > 0.0001 ? 14 : 8;
       reasons.add('Funding pozitif, long tarafı kalabalık.');
+    } else {
+      strength -= 10;
     }
     if (divergenceWide) {
       strength += 14;
       reasons.add('Mark-index farkı genişlemiş durumda.');
     }
     if (nearResistance) {
-      strength += 18;
-      reasons.add('Fiyat son tepe/direnç bölgesine yakın.');
+      strength += 16;
+      reasons.add('Fiyat yakın direnç bölgesinde.');
     }
     if (upperWickSignal) {
       strength += 16;
       reasons.add('Son mumda üst fitil satış baskısı gösteriyor.');
     }
     if (weakening) {
-      strength += 10;
+      strength += 12;
       reasons.add('Kısa vadeli ivme zayıflıyor.');
     }
     if (lowerHigh) {
@@ -1336,40 +1405,33 @@ class _DetailPageState extends State<DetailPage>
       reasons.add('Son yapıda lower-high oluşumu var.');
     }
 
-    if (recent.length < 6) {
-      reasons.add('Grafik geçmişi kısa, setup daha temkinli okunmalı.');
-    }
-
-    String status;
-    if (strength >= 70) {
-      status = 'Güçlü';
-    } else if (strength >= 45) {
-      status = 'Orta';
-    } else {
-      status = 'Zayıf';
-    }
-
-    final double volatilityBuffer = math.max(
-      avgRange * 0.35,
-      last.close * 0.002,
+    final double structuralStop = swingHigh * 1.003;
+    final double percentCapStop = last.close * 1.028;
+    final double stop = math.min(
+      math.max(structuralStop, last.close * 1.008),
+      percentCapStop,
     );
 
     final double entry = last.close;
-    final double stop = math.max(swingHigh + volatilityBuffer, entry * 1.002);
-
-    final double supportSpan = math.max(
-      avgRange > 0 ? avgRange * 1.2 : entry * 0.01,
-      (entry - swingLow).abs() > 0 ? (entry - swingLow).abs() : entry * 0.008,
-    );
-
-    final double target1 = math.max(entry - supportSpan * 0.55, 0);
-    final double target2 = math.max(entry - supportSpan, 0);
+    final double target1 = math.max(entry - (stop - entry) * 1.25, 0);
+    final double target2 = math.max(entry - (stop - entry) * 2.0, 0);
 
     final double risk =
         math.max(stop - entry, math.max(entry * 0.001, 0.0000001));
     final double reward =
         math.max(entry - target2, math.max(entry * 0.001, 0.0000001));
     final double rr = reward / risk;
+
+    String status;
+    if (rr < 1 || coin.fundingRate < 0) {
+      status = 'Zayıf';
+    } else if (strength >= 68 && rr >= 1.5) {
+      status = 'Güçlü';
+    } else if (strength >= 42 && rr >= 1.1) {
+      status = 'Orta';
+    } else {
+      status = 'Zayıf';
+    }
 
     final String summary = reasons.isNotEmpty
         ? reasons.take(2).join(' ')
@@ -1578,6 +1640,128 @@ class _DetailPageState extends State<DetailPage>
     );
   }
 
+  Widget _buildLeveragePanel() {
+    return _cardShell(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'KALDIRAÇ STOP / LIQ',
+            style: TextStyle(
+              color: Colors.white70,
+              fontSize: 12,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: 12),
+          ...leverageItems.map(
+            (item) => Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: Row(
+                children: [
+                  SizedBox(
+                    width: 42,
+                    child: Text(
+                      '${item.leverage}x',
+                      style: const TextStyle(
+                        color: Colors.orangeAccent,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ),
+                  Expanded(
+                    child: Text(
+                      'Stop: ${_formatPrice(item.stopPrice)}',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                  Expanded(
+                    child: Text(
+                      'Liq: ${_formatPrice(item.liquidationPrice)}',
+                      textAlign: TextAlign.right,
+                      style: const TextStyle(
+                        color: Colors.redAccent,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRiskPanel() {
+    final ShortSetupResult setup = setupResult!;
+    final double stopDistancePercent =
+        ((setup.stopLoss - setup.entry) / setup.entry) * 100;
+    final double targetDistancePercent =
+        ((setup.entry - setup.target2) / setup.entry) * 100;
+
+    Color riskColor;
+    String riskText;
+
+    if (setup.rr >= 1.5 && stopDistancePercent <= 3.0) {
+      riskColor = Colors.greenAccent;
+      riskText = 'Kontrollü';
+    } else if (setup.rr >= 1.0 && stopDistancePercent <= 4.5) {
+      riskColor = Colors.orangeAccent;
+      riskText = 'Orta';
+    } else {
+      riskColor = Colors.redAccent;
+      riskText = 'Yüksek';
+    }
+
+    return _cardShell(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'GERÇEK RİSK PANELİ',
+            style: TextStyle(
+              color: Colors.white70,
+              fontSize: 12,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: 12),
+          _setupRow(
+            'Stop mesafesi',
+            _formatPercent(stopDistancePercent),
+            valueColor: Colors.redAccent,
+          ),
+          const SizedBox(height: 8),
+          _setupRow(
+            'Hedef mesafesi',
+            _formatPercent(targetDistancePercent),
+            valueColor: Colors.greenAccent,
+          ),
+          const SizedBox(height: 8),
+          _setupRow(
+            'Risk seviyesi',
+            riskText,
+            valueColor: riskColor,
+          ),
+          const SizedBox(height: 8),
+          _setupRow(
+            'Tahmini yön',
+            setup.status,
+            valueColor: riskColor,
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _setupRow(String label, String value, {Color? valueColor}) {
     return Row(
       children: [
@@ -1696,7 +1880,7 @@ class _DetailPageState extends State<DetailPage>
 
   @override
   Widget build(BuildContext context) {
-    final bool hasData = setupResult != null && candles.isNotEmpty;
+    final bool hasData = setupResult != null && visibleCandles.isNotEmpty;
 
     return Scaffold(
       backgroundColor: Colors.black,
@@ -1802,7 +1986,7 @@ class _DetailPageState extends State<DetailPage>
                     _buildSetupStatusCard(),
                     const SizedBox(height: 12),
                     _buildShortSetupCard(),
-                    const SizedBox(height: 14),
+                    const SizedBox(height: 12),
                     Container(
                       height: 280,
                       padding: const EdgeInsets.fromLTRB(10, 10, 10, 12),
@@ -1814,7 +1998,7 @@ class _DetailPageState extends State<DetailPage>
                         ),
                       ),
                       child: CustomPaint(
-                        painter: CandleChartPainter(candles: candles),
+                        painter: CandleChartPainter(candles: visibleCandles),
                         child: const SizedBox.expand(),
                       ),
                     ),
@@ -1839,6 +2023,10 @@ class _DetailPageState extends State<DetailPage>
                         ),
                       ],
                     ),
+                    const SizedBox(height: 18),
+                    _buildLeveragePanel(),
+                    const SizedBox(height: 12),
+                    _buildRiskPanel(),
                     const SizedBox(height: 18),
                     _buildWhyCard(),
                   ] else
@@ -1885,7 +2073,11 @@ class CandleChartPainter extends CustomPainter {
 
     final double maxPrice = candles.map((e) => e.high).reduce(math.max);
     final double minPrice = candles.map((e) => e.low).reduce(math.min);
-    final double priceRange = math.max(maxPrice - minPrice, 0.0000001);
+    final double rawRange = math.max(maxPrice - minPrice, 0.0000001);
+    final double padding = rawRange * 0.12;
+    final double chartMax = maxPrice + padding;
+    final double chartMin = math.max(minPrice - padding, 0);
+    final double priceRange = math.max(chartMax - chartMin, 0.0000001);
 
     final Paint gridPaint = Paint()
       ..color = Colors.white.withOpacity(0.07)
@@ -1896,27 +2088,55 @@ class CandleChartPainter extends CustomPainter {
       canvas.drawLine(Offset(0, y), Offset(size.width, y), gridPaint);
     }
 
-    for (int i = 0; i <= 5; i++) {
-      final double x = size.width * i / 5;
+    for (int i = 0; i <= 4; i++) {
+      final double x = size.width * i / 4;
       canvas.drawLine(Offset(x, 0), Offset(x, size.height), gridPaint);
     }
 
+    const double rightLabelSpace = 28;
+    final double chartWidth = size.width - rightLabelSpace;
     final int visibleCount = candles.length;
-    final double candleSpace = size.width / visibleCount;
-    final double bodyWidth = math.max(candleSpace * 0.62, 2.2);
+    final double candleSpace = chartWidth / visibleCount;
+    final double bodyWidth = math.max(candleSpace * 0.56, 5.0);
+
+    final List<Offset> maPoints = [];
+    for (int i = 0; i < visibleCount; i++) {
+      final int start = math.max(0, i - 4);
+      final List<CandleData> slice = candles.sublist(start, i + 1);
+      final double ma =
+          slice.map((e) => e.close).reduce((a, b) => a + b) / slice.length;
+      final double x = (i * candleSpace) + candleSpace / 2;
+      final double y = (1 - ((ma - chartMin) / priceRange)) * size.height;
+      maPoints.add(Offset(x, y));
+    }
+
+    final Paint maPaint = Paint()
+      ..color = Colors.orangeAccent.withOpacity(0.85)
+      ..strokeWidth = 2
+      ..style = PaintingStyle.stroke;
+
+    final Path maPath = Path();
+    for (int i = 0; i < maPoints.length; i++) {
+      if (i == 0) {
+        maPath.moveTo(maPoints[i].dx, maPoints[i].dy);
+      } else {
+        maPath.lineTo(maPoints[i].dx, maPoints[i].dy);
+      }
+    }
+    canvas.drawPath(maPath, maPaint);
 
     for (int i = 0; i < visibleCount; i++) {
       final CandleData candle = candles[i];
       final double centerX = (i * candleSpace) + candleSpace / 2;
 
       final double highY =
-          (1 - ((candle.high - minPrice) / priceRange)) * size.height;
+          (1 - ((candle.high - chartMin) / priceRange)) * size.height;
       final double lowY =
-          (1 - ((candle.low - minPrice) / priceRange)) * size.height;
+          (1 - ((candle.low - chartMin) / priceRange)) * size.height;
       final double openY =
-          (1 - ((candle.open - minPrice) / priceRange)) * size.height;
+          (1 - ((candle.open - chartMin) / priceRange)) * size.height;
       final double closeY =
-          (1 - ((candle.close - minPrice) / priceRange)) * size.height;
+          (1 - ((candle.close - chartMin) / priceRange)) * size.height;
 
       final bool bullish = candle.isBullish;
       final Color candleColor =
@@ -1924,7 +2144,7 @@ class CandleChartPainter extends CustomPainter {
 
       final Paint wickPaint = Paint()
         ..color = candleColor
-        ..strokeWidth = 1.2;
+        ..strokeWidth = 1.5;
 
       canvas.drawLine(
         Offset(centerX, highY),
@@ -1938,15 +2158,46 @@ class CandleChartPainter extends CustomPainter {
         centerX - bodyWidth / 2,
         rectTop,
         bodyWidth,
-        math.max(rectBottom - rectTop, 1.4),
+        math.max(rectBottom - rectTop, 2),
       );
 
       final Paint bodyPaint = Paint()..color = candleColor;
       canvas.drawRRect(
-        RRect.fromRectAndRadius(bodyRect, const Radius.circular(1.8)),
+        RRect.fromRectAndRadius(bodyRect, const Radius.circular(2)),
         bodyPaint,
       );
     }
+
+    final CandleData last = candles.last;
+    final double priceLineY =
+        (1 - ((last.close - chartMin) / priceRange)) * size.height;
+
+    final Paint priceLinePaint = Paint()
+      ..color = Colors.orangeAccent.withOpacity(0.55)
+      ..strokeWidth = 1.2;
+
+    canvas.drawLine(
+      Offset(0, priceLineY),
+      Offset(chartWidth, priceLineY),
+      priceLinePaint,
+    );
+
+    final textPainter = TextPainter(
+      text: TextSpan(
+        text: _formatPrice(last.close),
+        style: const TextStyle(
+          color: Colors.orangeAccent,
+          fontSize: 10,
+          fontWeight: FontWeight.w800,
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout();
+
+    textPainter.paint(
+      canvas,
+      Offset(chartWidth + 2, math.max(0, priceLineY - 8)),
+    );
   }
 
   @override
