@@ -87,7 +87,7 @@ class EntryTiming {
     } else if (earlySignal && score >= 50) {
       signal = 'Hazırlan';
       ready = false;
-    } else if (score >= 55) {
+    } else if (score >= 55 && !earlySignal) {
       signal = 'Hazır';
       ready = false;
     } else {
