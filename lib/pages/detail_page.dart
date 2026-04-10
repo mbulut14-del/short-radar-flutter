@@ -277,11 +277,8 @@ class _DetailPageState extends State<DetailPage>
     final bool upperWickSignal =
         last.range > 0 && last.upperWick > last.bodySize * 0.75;
 
-    final bool lowerHigh =
-        recent.length >= 3 && prev.high < prev2.high;
-
+    final bool lowerHigh = recent.length >= 3 && prev.high < prev2.high;
     final bool closeBelowPrev = last.close < prev.close;
-
     final bool failedBreakout =
         last.high > prev.high && last.close < prev.high;
 
@@ -367,36 +364,51 @@ class _DetailPageState extends State<DetailPage>
     );
 
     final double entry = last.close;
-    final double target1 = math.max(entry - (stop - entry) * 1.25, 0);
-    final double target2 = math.max(entry - (stop - entry) * 2.0, 0);
-
     final double risk =
         math.max(stop - entry, math.max(entry * 0.001, 0.0000001));
-    final double reward =
-        math.max(entry - target2, math.max(entry * 0.001, 0.0000001));
-    final double rr = reward / risk;
 
     if (strength < 0) strength = 0;
     if (strength > 100) strength = 100;
 
     final bool hardReject =
-        rr < 1.0 ||
+        rrFallbackGuard(risk) ||
         !fundingPositive ||
         (lastGreenAndStrong && coreSignals < 2) ||
         (pumpStrong && coreSignals == 0);
 
-    String status;
+    final double rrMultiplier;
+    if (strength >= 85) {
+      rrMultiplier = 2.4;
+    } else if (strength >= 75) {
+      rrMultiplier = 2.2;
+    } else if (strength >= 65) {
+      rrMultiplier = 2.0;
+    } else if (strength >= 55) {
+      rrMultiplier = 1.8;
+    } else if (strength >= 45) {
+      rrMultiplier = 1.6;
+    } else {
+      rrMultiplier = 1.4;
+    }
 
-    if (hardReject) {
+    final double target1 = math.max(entry - (risk * 1.10), 0);
+    final double target2 = math.max(entry - (risk * rrMultiplier), 0);
+
+    final double reward =
+        math.max(entry - target2, math.max(entry * 0.001, 0.0000001));
+    final double rr = reward / risk;
+
+    String status;
+    if (hardReject || rr < 1.0) {
       status = 'Zayıf';
     } else if (coreSignals >= 3 &&
         confirmSignals >= 2 &&
-        rr >= 1.4 &&
+        rr >= 1.5 &&
         strength >= 68) {
       status = 'Güçlü';
     } else if (coreSignals >= 2 &&
         confirmSignals >= 1 &&
-        rr >= 1.1 &&
+        rr >= 1.15 &&
         strength >= 42) {
       status = 'Orta';
     } else {
@@ -424,6 +436,10 @@ class _DetailPageState extends State<DetailPage>
           ? reasons
           : ['Veri var ama güçlü teyit sayısı şu an düşük.'],
     );
+  }
+
+  bool rrFallbackGuard(double risk) {
+    return risk <= 0;
   }
 
   Widget _spinnerRing() {
