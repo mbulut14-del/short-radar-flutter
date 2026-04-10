@@ -29,22 +29,6 @@ String _formatPercent(double value, {int digits = 2}) {
   return '${value >= 0 ? '+' : ''}${value.toStringAsFixed(digits)}%';
 }
 
-class LossStopRow {
-  final int leverage;
-  final double currentPrice;
-  final double stop5;
-  final double? stop10;
-  final double? stop15;
-
-  const LossStopRow({
-    required this.leverage,
-    required this.currentPrice,
-    required this.stop5,
-    this.stop10,
-    this.stop15,
-  });
-}
-
 class DetailPage extends StatefulWidget {
   final CoinRadarData coinData;
   final CoinRadarData? leaderData;
@@ -77,7 +61,6 @@ class _DetailPageState extends State<DetailPage>
   PumpAnalysisResult? pumpAnalysis;
   EntryTimingResult? entryTiming;
 
-  List<LossStopRow> lossStopRows = [];
   bool _isFetchingDetail = false;
 
   @override
@@ -114,69 +97,6 @@ class _DetailPageState extends State<DetailPage>
       default:
         return value;
     }
-  }
-
-  double _shortStopByLoss({
-    required double entry,
-    required int leverage,
-    required double accountLossPercent,
-  }) {
-    final adverseMovePercent = accountLossPercent / leverage;
-    return entry * (1 + adverseMovePercent / 100);
-  }
-
-  List<LossStopRow> _buildLossStopRows(double entry) {
-    return [
-      LossStopRow(
-        leverage: 3,
-        currentPrice: entry,
-        stop5: _shortStopByLoss(
-          entry: entry,
-          leverage: 3,
-          accountLossPercent: 5,
-        ),
-        stop10: _shortStopByLoss(
-          entry: entry,
-          leverage: 3,
-          accountLossPercent: 10,
-        ),
-        stop15: _shortStopByLoss(
-          entry: entry,
-          leverage: 3,
-          accountLossPercent: 15,
-        ),
-      ),
-      LossStopRow(
-        leverage: 5,
-        currentPrice: entry,
-        stop5: _shortStopByLoss(
-          entry: entry,
-          leverage: 5,
-          accountLossPercent: 5,
-        ),
-        stop10: _shortStopByLoss(
-          entry: entry,
-          leverage: 5,
-          accountLossPercent: 10,
-        ),
-        stop15: _shortStopByLoss(
-          entry: entry,
-          leverage: 5,
-          accountLossPercent: 15,
-        ),
-      ),
-      LossStopRow(
-        leverage: 10,
-        currentPrice: entry,
-        stop5: _shortStopByLoss(
-          entry: entry,
-          leverage: 10,
-          accountLossPercent: 5,
-        ),
-        stop10: null,
-        stop15: null,
-      ),
-    ];
   }
 
   Future<void> fetchDetail({bool showLoader = true}) async {
@@ -276,7 +196,6 @@ class _DetailPageState extends State<DetailPage>
           setupResult = null;
           pumpAnalysis = null;
           entryTiming = null;
-          lossStopRows = [];
           detailLoading = false;
           detailError = 'Grafik verisi bulunamadı';
         });
@@ -298,8 +217,6 @@ class _DetailPageState extends State<DetailPage>
       final EntryTimingResult newEntryTiming =
           EntryTiming.analyze(zoomCandles);
 
-      final List<LossStopRow> newLossRows = _buildLossStopRows(newSetup.entry);
-
       if (!mounted) return;
       setState(() {
         selectedCoin = detailItem!;
@@ -308,7 +225,6 @@ class _DetailPageState extends State<DetailPage>
         setupResult = newSetup;
         pumpAnalysis = newPumpAnalysis;
         entryTiming = newEntryTiming;
-        lossStopRows = newLossRows;
         detailLoading = false;
         detailError = '';
       });
@@ -516,158 +432,6 @@ class _DetailPageState extends State<DetailPage>
         border: Border.all(color: Colors.white.withOpacity(0.10)),
       ),
       child: child,
-    );
-  }
-
-  Widget _buildLossHeaderBox(
-    String text, {
-    Color borderColor = Colors.orangeAccent,
-    Color textColor = Colors.orangeAccent,
-  }) {
-    return Container(
-      height: 44,
-      alignment: Alignment.center,
-      decoration: BoxDecoration(
-        color: Colors.black.withOpacity(0.22),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: borderColor.withOpacity(0.8)),
-      ),
-      child: Text(
-        text,
-        textAlign: TextAlign.center,
-        style: TextStyle(
-          color: textColor,
-          fontSize: 12,
-          fontWeight: FontWeight.w800,
-        ),
-      ),
-    );
-  }
-
-  Widget _buildLossStopPanel() {
-    return _cardShell(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'ZARAR BAZLI STOP',
-            style: TextStyle(
-              color: Colors.white70,
-              fontSize: 12,
-              fontWeight: FontWeight.w900,
-            ),
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              const SizedBox(width: 66),
-              Expanded(
-                child: _buildLossHeaderBox(
-                  'Güncel fiyat',
-                  borderColor: Colors.redAccent,
-                  textColor: Colors.redAccent,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(child: _buildLossHeaderBox('%5 zarar')),
-              const SizedBox(width: 8),
-              Expanded(child: _buildLossHeaderBox('%10 zarar')),
-              const SizedBox(width: 8),
-              Expanded(
-                child: _buildLossHeaderBox(
-                  '%15 zarar',
-                  borderColor: Colors.redAccent,
-                  textColor: Colors.redAccent,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          ...lossStopRows.asMap().entries.map((entry) {
-            final int index = entry.key;
-            final LossStopRow row = entry.value;
-            final bool isLast = index == lossStopRows.length - 1;
-
-            return Column(
-              children: [
-                Row(
-                  children: [
-                    SizedBox(
-                      width: 66,
-                      child: Text(
-                        '${row.leverage}x',
-                        style: const TextStyle(
-                          color: Colors.orangeAccent,
-                          fontSize: 18,
-                          fontWeight: FontWeight.w900,
-                        ),
-                      ),
-                    ),
-                    Expanded(
-                      child: Text(
-                        _formatPrice(row.currentPrice),
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(
-                          color: Colors.redAccent,
-                          fontSize: 16,
-                          fontWeight: FontWeight.w900,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        _formatPrice(row.stop5),
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 16,
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        row.stop10 == null ? '-' : _formatPrice(row.stop10!),
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 16,
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        row.stop15 == null ? '-' : _formatPrice(row.stop15!),
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          color: row.stop15 == null
-                              ? Colors.white54
-                              : Colors.white,
-                          fontSize: 16,
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                if (!isLast) ...[
-                  const SizedBox(height: 12),
-                  Divider(
-                    height: 1,
-                    thickness: 1,
-                    color: Colors.white.withOpacity(0.08),
-                  ),
-                  const SizedBox(height: 12),
-                ],
-              ],
-            );
-          }),
-        ],
-      ),
     );
   }
 
@@ -902,8 +666,6 @@ class _DetailPageState extends State<DetailPage>
                       ],
                     ),
                     const SizedBox(height: 18),
-                    _buildLossStopPanel(),
-                    const SizedBox(height: 12),
                     RiskPanelCard(
                       result: setupResult!,
                     ),
