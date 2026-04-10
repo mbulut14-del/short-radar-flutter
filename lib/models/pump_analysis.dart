@@ -86,13 +86,32 @@ class PumpAnalysis {
     if (pumpScore > 100) pumpScore = 100;
     if (entryScore > 100) entryScore = 100;
 
-    String pumpType;
-    if (pumpScore >= 70) {
-      pumpType = 'Fake pump';
-    } else if (pumpScore >= 45) {
-      pumpType = 'İzlenmeli';
-    } else {
-      pumpType = 'Gerçek pump';
+    String pumpType = 'Belirsiz';
+
+    final int greenCount = recent.where((c) => c.isBullish).length;
+    final double runPercent =
+        ((last.high - recent.first.open) / recent.first.open) * 100;
+
+    final bool spikePump =
+        runPercent > 3 && upperWickHeavy && weakClose;
+
+    final bool trendPump =
+        greenCount >= 5 &&
+        !upperWickHeavy &&
+        !lastRedAfterRun &&
+        !momentumLoss;
+
+    final bool distributionPump =
+        strongRun &&
+        (upperWickHeavy || failedBreakout) &&
+        (lastRedAfterRun || momentumLoss || weakClose || lowerHigh);
+
+    if (distributionPump) {
+      pumpType = 'Distribution';
+    } else if (spikePump) {
+      pumpType = 'Spike';
+    } else if (trendPump) {
+      pumpType = 'Trend';
     }
 
     String entrySignal;
