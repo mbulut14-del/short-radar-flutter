@@ -18,7 +18,7 @@ import '../widgets/price_box.dart';
 import '../widgets/pump_analysis_card.dart';
 import '../widgets/risk_panel_card.dart';
 import '../widgets/setup_status_card.dart';
-import '../widgets/short_setup_card.dart';
+import '../widgets/short_setup_logic.dart';
 
 class DetailPage extends StatefulWidget {
   final CoinRadarData coinData;
@@ -202,7 +202,7 @@ class _DetailPageState extends State<DetailPage>
           ? newCandles.sublist(newCandles.length - 40)
           : newCandles;
 
-      final ShortSetupResult newSetup = _buildShortSetup(
+      final ShortSetupResult newSetup = _buildShortSetupResult(
         candles: zoomCandles,
         coin: detailItem,
       );
@@ -241,7 +241,7 @@ class _DetailPageState extends State<DetailPage>
     }
   }
 
-  ShortSetupResult _buildShortSetup({
+  ShortSetupResult _buildShortSetupResult({
     required List<CandleData> candles,
     required CoinRadarData coin,
   }) {
@@ -677,14 +677,22 @@ class _DetailPageState extends State<DetailPage>
                     if (entryTiming != null)
                       EntryTimingCard(result: entryTiming!),
                     const SizedBox(height: 12),
-                    ShortSetupCard(
-                      entry: _formatPrice(setupResult!.entry),
-                      stopLoss: _formatPrice(setupResult!.stopLoss),
-                      target1: _formatPrice(setupResult!.target1),
-                      target2: _formatPrice(setupResult!.target2),
-                      rr: setupResult!.rr.toStringAsFixed(2),
-                      riskPercent:
-                          '${(((setupResult!.stopLoss - setupResult!.entry) / setupResult!.entry) * 100).toStringAsFixed(2)}%',
+                    _cardShell(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'SHORT SETUP',
+                            style: TextStyle(
+                              color: Colors.white70,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          buildShortSetup(setupResult!),
+                        ],
+                      ),
                     ),
                     const SizedBox(height: 12),
                     CandleChartWidget(
