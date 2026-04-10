@@ -32,6 +32,15 @@ jobs:
       - name: Android proje olustur
         run: flutter create . --project-name short_radar_flutter --platforms=android
 
+      # 🔥 EKLEDİĞİMİZ KRİTİK BLOK
+      - name: Android klasörünü kaydet
+        run: |
+          git config --global user.name "github-actions"
+          git config --global user.email "actions@github.com"
+          git add android
+          git commit -m "android klasörü eklendi" || echo "No changes"
+          git push
+
       - name: Android dosyalarini listele
         run: find android -maxdepth 4 -type f
 
