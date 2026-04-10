@@ -9,6 +9,7 @@ import '../models/candle_data.dart';
 import '../models/coin_radar_data.dart';
 import '../models/short_setup_result.dart';
 import '../models/pump_analysis.dart';
+import '../models/pump_analysis_result.dart';
 import '../painters/candle_chart_painter.dart';
 import '../widgets/price_box.dart';
 import '../widgets/setup_status_card.dart';
