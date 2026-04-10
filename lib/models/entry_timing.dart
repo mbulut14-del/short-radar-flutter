@@ -74,10 +74,10 @@ class EntryTiming {
     String signal;
     bool ready;
 
-    if (score >= 70) {
+    if (score >= 80) {
       signal = 'Giriş uygun';
       ready = true;
-    } else if (score >= 45) {
+    } else if (score >= 55) {
       signal = 'Hazır';
       ready = false;
     } else {
