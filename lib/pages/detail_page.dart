@@ -613,6 +613,15 @@ class _DetailPageState extends State<DetailPage>
                       target2: _formatPrice(setupResult!.target2),
                       rr: setupResult!.rr.toStringAsFixed(2),
                     ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Risk: ${(((setupResult!.stopLoss - setupResult!.entry) / setupResult!.entry) * 100).toStringAsFixed(2)}%',
+                      style: const TextStyle(
+                        color: Colors.redAccent,
+                        fontSize: 13,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
                     const SizedBox(height: 12),
                     Container(
                       height: 280,
