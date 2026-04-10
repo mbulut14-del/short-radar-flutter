@@ -1,67 +1,90 @@
+import 'dart:math';
+
+import 'candle_data.dart';
+import 'entry_timing_result.dart';
+
 class EntryTiming {
-  static EntryTimingResult analyze({
-    required List<CandleData> candles,
-  }) {
-    if (candles.isEmpty) {
+  static EntryTimingResult analyze(List<CandleData> candles) {
+    if (candles.length < 3) {
       return const EntryTimingResult(
-        isReady: false,
+        signal: 'Bekle',
         score: 0,
-        status: "Veri yok",
-        reasons: ["Candle verisi bulunamadı"],
+        ready: false,
+        reasons: ['Yetersiz veri var.'],
       );
     }
 
-    final last = candles.last;
+    final CandleData last = candles[candles.length - 1];
+    final CandleData prev = candles[candles.length - 2];
+    final CandleData prev2 = candles[candles.length - 3];
 
     int score = 0;
-    List<String> reasons = [];
+    final List<String> reasons = [];
 
-    // Üst fitil kontrolü
-    final upperWick = last.high - (last.open > last.close ? last.open : last.close);
-    final body = (last.open - last.close).abs();
+    final double body = (last.close - last.open).abs();
+    final double prevBody = (prev.close - prev.open).abs();
+    final double upperWick = last.high - max(last.open, last.close);
+    final double range = (last.high - last.low).abs();
 
-    if (upperWick > body) {
-      score += 30;
-      reasons.add("Son mumda belirgin üst fitil var.");
-    }
+    final bool hasUpperWick = upperWick > body * 0.8;
+    final bool redClose = last.close < last.open;
+    final bool closeNotNearTop =
+        range > 0 ? ((last.high - last.close) / range) > 0.25 : false;
+    final bool lowerHigh = last.high < prev.high || prev.high < prev2.high;
+    final bool bodyShrinking = body > 0 && body < prevBody;
+    final bool closeBelowPrev = last.close < prev.close;
 
-    // Kırmızı mum
-    if (last.close < last.open) {
+    if (hasUpperWick) {
       score += 20;
-      reasons.add("Son mum kırmızı kapanmış.");
+      reasons.add('Son mumda belirgin üst fitil var.');
     }
 
-    // Tepeden uzak kapanış
-    if ((last.high - last.close) / last.high > 0.01) {
+    if (redClose) {
       score += 15;
-      reasons.add("Kapanış tepeye yakın değil.");
+      reasons.add('Son mum kırmızı kapanmış.');
     }
 
-    // Basit lower-high kontrolü
-    if (candles.length >= 3) {
-      final prev = candles[candles.length - 2];
-      if (last.high < prev.high) {
-        score += 20;
-        reasons.add("Kısa vadede lower-high oluşmuş.");
-      }
+    if (closeNotNearTop) {
+      score += 20;
+      reasons.add('Kapanış tepeye yakın değil.');
     }
 
-    // Hazır mı?
-    final isReady = score >= 70;
+    if (lowerHigh) {
+      score += 20;
+      reasons.add('Kısa vadede lower-high oluşmuş.');
+    }
 
-    String status;
-    if (isReady) {
-      status = "Giriş uygun";
-    } else if (score >= 50) {
-      status = "Hazırlanıyor";
+    if (bodyShrinking) {
+      score += 10;
+      reasons.add('Mum gövdesi zayıflamaya başlamış.');
+    }
+
+    if (closeBelowPrev) {
+      score += 15;
+      reasons.add('Son kapanış önceki mumun altında.');
+    }
+
+    if (score > 100) score = 100;
+
+    final bool ready = score >= 70;
+
+    final String signal;
+    if (score >= 70) {
+      signal = 'Giriş uygun';
+    } else if (score >= 45) {
+      signal = 'Hazır';
     } else {
-      status = "Bekle";
+      signal = 'Bekle';
+    }
+
+    if (reasons.isEmpty) {
+      reasons.add('Şimdilik giriş için net zayıflama oluşmamış.');
     }
 
     return EntryTimingResult(
-      isReady: isReady,
+      signal: signal,
       score: score,
-      status: status,
+      ready: ready,
       reasons: reasons,
     );
   }
