@@ -1,14 +1,13 @@
-
 class EntryTimingResult {
-  final int score; // 0 - 100
-  final bool ready;
-  final String signal; // Bekle / Hazır / Giriş uygun
-  final List<String> reasons;
+  final String timing; // 🔥 EKLEDİK
+  final double score;
+  final bool isReady;
+  final String reason;
 
   const EntryTimingResult({
+    required this.timing, // 🔥 EKLEDİK
     required this.score,
-    required this.ready,
-    required this.signal,
-    required this.reasons,
+    required this.isReady,
+    required this.reason,
   });
 }
