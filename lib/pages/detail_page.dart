@@ -1,24 +1,20 @@
 import 'dart:async';
-import 'dart:convert';
 
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
 
 import '../models/candle_data.dart';
 import '../models/coin_radar_data.dart';
-import '../models/entry_timing.dart';
 import '../models/entry_timing_result.dart';
-import '../models/pump_analysis.dart';
 import '../models/pump_analysis_result.dart';
-import '../models/short_setup_logic.dart';
 import '../models/short_setup_result.dart';
+import '../services/detail_data_service.dart';
 import '../widgets/candle_chart_widget.dart';
 import '../widgets/entry_timing_card.dart';
 import '../widgets/price_box.dart';
 import '../widgets/pump_analysis_card.dart';
 import '../widgets/risk_panel_card.dart';
 import '../widgets/setup_status_card.dart';
-import '../widgets/short_setup_logic.dart';
+import '../widgets/short_setup_card.dart';
 
 class DetailPage extends StatefulWidget {
   final CoinRadarData coinData;
@@ -81,15 +77,6 @@ class _DetailPageState extends State<DetailPage>
     super.dispose();
   }
 
-  String _apiInterval(String value) {
-    switch (value) {
-      case '12h':
-        return '1d';
-      default:
-        return value;
-    }
-  }
-
   Future<void> fetchDetail({bool showLoader = true}) async {
     if (_isFetchingDetail) return;
     _isFetchingDetail = true;
@@ -102,120 +89,20 @@ class _DetailPageState extends State<DetailPage>
     }
 
     try {
-      final tickerUri = Uri.parse(
-        'https://fx-api.gateio.ws/api/v4/futures/usdt/tickers',
+      final bundle = await DetailDataService.load(
+        contractName: contractName,
+        selectedInterval: selectedInterval,
+        fallbackCoin: selectedCoin,
       );
-
-      final candlesUri = Uri.parse(
-        'https://fx-api.gateio.ws/api/v4/futures/usdt/candlesticks'
-        '?contract=${Uri.encodeQueryComponent(contractName)}'
-        '&interval=${Uri.encodeQueryComponent(_apiInterval(selectedInterval))}'
-        '&limit=120',
-      );
-
-      final responses = await Future.wait([
-        http
-            .get(
-              tickerUri,
-              headers: {'Accept': 'application/json'},
-            )
-            .timeout(const Duration(seconds: 10)),
-        http
-            .get(
-              candlesUri,
-              headers: {'Accept': 'application/json'},
-            )
-            .timeout(const Duration(seconds: 10)),
-      ]);
-
-      final tickerResponse = responses[0];
-      final candleResponse = responses[1];
-
-      if (tickerResponse.statusCode != 200 ||
-          candleResponse.statusCode != 200) {
-        if (!mounted) return;
-        setState(() {
-          detailLoading = false;
-          detailError = 'Detay verisi alınamadı';
-        });
-        return;
-      }
-
-      final dynamic parsedTicker = json.decode(tickerResponse.body);
-      final dynamic parsedCandles = json.decode(candleResponse.body);
-
-      if (parsedTicker is! List || parsedCandles is! List) {
-        if (!mounted) return;
-        setState(() {
-          detailLoading = false;
-          detailError = 'API veri formatı beklenen gibi değil';
-        });
-        return;
-      }
-
-      final List<CoinRadarData> allCoins = parsedTicker
-          .whereType<Map<String, dynamic>>()
-          .where((e) => (e['contract'] ?? '').toString().isNotEmpty)
-          .map(CoinRadarData.fromJson)
-          .toList();
-
-      CoinRadarData? detailItem;
-      for (final coin in allCoins) {
-        if (coin.name == contractName) {
-          detailItem = coin;
-          break;
-        }
-      }
-
-      detailItem ??= selectedCoin;
-
-      final List<CandleData> newCandles = [];
-      for (final raw in parsedCandles) {
-        try {
-          newCandles.add(CandleData.fromApi(raw));
-        } catch (_) {}
-      }
-
-      newCandles.sort((a, b) => a.timestamp.compareTo(b.timestamp));
-
-      if (newCandles.isEmpty) {
-        if (!mounted) return;
-        setState(() {
-          selectedCoin = detailItem!;
-          candles = [];
-          visibleCandles = [];
-          setupResult = null;
-          pumpAnalysis = null;
-          entryTiming = null;
-          detailLoading = false;
-          detailError = 'Grafik verisi bulunamadı';
-        });
-        return;
-      }
-
-      final List<CandleData> zoomCandles = newCandles.length > 40
-          ? newCandles.sublist(newCandles.length - 40)
-          : newCandles;
-
-      final ShortSetupResult newSetup = ShortSetupLogic.build(
-        candles: zoomCandles,
-        coin: detailItem,
-      );
-
-      final PumpAnalysisResult newPumpAnalysis =
-          PumpAnalysis.analyze(zoomCandles);
-
-      final EntryTimingResult newEntryTiming =
-          EntryTiming.analyze(zoomCandles);
 
       if (!mounted) return;
       setState(() {
-        selectedCoin = detailItem!;
-        candles = newCandles;
-        visibleCandles = zoomCandles;
-        setupResult = newSetup;
-        pumpAnalysis = newPumpAnalysis;
-        entryTiming = newEntryTiming;
+        selectedCoin = bundle.selectedCoin;
+        candles = bundle.candles;
+        visibleCandles = bundle.visibleCandles;
+        setupResult = bundle.setupResult;
+        pumpAnalysis = bundle.pumpAnalysis;
+        entryTiming = bundle.entryTiming;
         detailLoading = false;
         detailError = '';
       });
@@ -225,15 +112,20 @@ class _DetailPageState extends State<DetailPage>
         detailLoading = false;
         detailError = 'İstek zaman aşımına uğradı';
       });
-    } catch (_) {
+    } catch (e) {
       if (!mounted) return;
       setState(() {
         detailLoading = false;
-        detailError = 'Detay verisi alınamadı';
+        detailError = e.toString().replaceFirst('Exception: ', '');
       });
     } finally {
       _isFetchingDetail = false;
     }
+  }
+
+  String _formatPrice(double value, {int digits = 6}) {
+    if (value == 0) return '-';
+    return value.toStringAsFixed(digits);
   }
 
   Widget _spinnerRing() {
@@ -478,22 +370,14 @@ class _DetailPageState extends State<DetailPage>
                     if (entryTiming != null)
                       EntryTimingCard(result: entryTiming!),
                     const SizedBox(height: 12),
-                    _cardShell(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            'SHORT SETUP',
-                            style: TextStyle(
-                              color: Colors.white70,
-                              fontSize: 12,
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                          const SizedBox(height: 12),
-                          buildShortSetup(setupResult!),
-                        ],
-                      ),
+                    ShortSetupCard(
+                      entry: _formatPrice(setupResult!.entry),
+                      stopLoss: _formatPrice(setupResult!.stopLoss),
+                      target1: _formatPrice(setupResult!.target1),
+                      target2: _formatPrice(setupResult!.target2),
+                      rr: setupResult!.rr.toStringAsFixed(2),
+                      riskPercent:
+                          '${(((setupResult!.stopLoss - setupResult!.entry) / setupResult!.entry) * 100).toStringAsFixed(2)}%',
                     ),
                     const SizedBox(height: 12),
                     CandleChartWidget(
