@@ -1,13 +1,23 @@
 class EntryTimingResult {
-  final String timing; // 🔥 EKLEDİK
-  final double score;
   final bool isReady;
-  final String reason;
+  final int score;
+  final String status;
+  final List<String> reasons;
 
   const EntryTimingResult({
-    required this.timing, // 🔥 EKLEDİK
-    required this.score,
     required this.isReady,
-    required this.reason,
+    required this.score,
+    required this.status,
+    required this.reasons,
   });
+
+  /// UI için kolay kullanım
+  String get signal {
+    if (isReady) return "Giriş uygun";
+    if (score >= 50) return "Hazır";
+    return "Bekle";
+  }
+
+  /// UI için hazır mı
+  bool get ready => isReady;
 }
