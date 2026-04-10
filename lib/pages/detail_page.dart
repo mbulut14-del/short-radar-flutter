@@ -4,6 +4,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:syncfusion_flutter_charts/charts.dart';
 
 import '../models/candle_data.dart';
 import '../models/coin_radar_data.dart';
@@ -12,7 +13,6 @@ import '../models/entry_timing_result.dart';
 import '../models/pump_analysis.dart';
 import '../models/pump_analysis_result.dart';
 import '../models/short_setup_result.dart';
-import '../painters/candle_chart_painter.dart';
 import '../widgets/entry_timing_card.dart';
 import '../widgets/price_box.dart';
 import '../widgets/pump_analysis_card.dart';
@@ -48,6 +48,7 @@ class _DetailPageState extends State<DetailPage>
   late AnimationController _spinnerController;
   late final String contractName;
   late CoinRadarData selectedCoin;
+  late TrackballBehavior _trackballBehavior;
 
   List<CandleData> candles = [];
   List<CandleData> visibleCandles = [];
@@ -68,6 +69,18 @@ class _DetailPageState extends State<DetailPage>
       vsync: this,
       duration: const Duration(milliseconds: 1100),
     )..repeat();
+
+    _trackballBehavior = TrackballBehavior(
+      enable: true,
+      activationMode: ActivationMode.singleTap,
+      tooltipDisplayMode: TrackballDisplayMode.groupAllPoints,
+      lineType: TrackballLineType.vertical,
+      tooltipSettings: const InteractiveTooltip(
+        enable: true,
+        color: Colors.black87,
+        textStyle: TextStyle(color: Colors.white, fontSize: 10),
+      ),
+    );
 
     fetchDetail();
 
@@ -197,8 +210,8 @@ class _DetailPageState extends State<DetailPage>
         return;
       }
 
-      final List<CandleData> zoomCandles = newCandles.length > 10
-          ? newCandles.sublist(newCandles.length - 10)
+      final List<CandleData> zoomCandles = newCandles.length > 40
+          ? newCandles.sublist(newCandles.length - 40)
           : newCandles;
 
       final ShortSetupResult newSetup = _buildShortSetup(
@@ -651,13 +664,62 @@ class _DetailPageState extends State<DetailPage>
   }
 
   Widget _buildChartCard() {
-    final double? lastPrice = visibleCandles.isNotEmpty
-        ? visibleCandles.last.close
-        : null;
+    final List<_ChartCandle> chartData = visibleCandles
+        .map((c) => _ChartCandle(
+              time: DateTime.fromMillisecondsSinceEpoch(
+                c.timestamp * 1000,
+                isUtc: true,
+              ).toLocal(),
+              open: c.open,
+              high: c.high,
+              low: c.low,
+              close: c.close,
+            ))
+        .toList();
+
+    final double? lastPrice =
+        chartData.isNotEmpty ? chartData.last.close : null;
+
+    final List<PlotBand> plotBands = setupResult == null
+        ? []
+        : [
+            PlotBand(
+              isVisible: true,
+              start: setupResult!.entry,
+              end: setupResult!.entry,
+              borderWidth: 1.2,
+              borderColor: Colors.blueAccent.withOpacity(0.95),
+              dashArray: const <double>[6, 4],
+            ),
+            PlotBand(
+              isVisible: true,
+              start: setupResult!.stopLoss,
+              end: setupResult!.stopLoss,
+              borderWidth: 1.2,
+              borderColor: Colors.redAccent.withOpacity(0.95),
+              dashArray: const <double>[6, 4],
+            ),
+            PlotBand(
+              isVisible: true,
+              start: setupResult!.target1,
+              end: setupResult!.target1,
+              borderWidth: 1.2,
+              borderColor: Colors.greenAccent.withOpacity(0.95),
+              dashArray: const <double>[6, 4],
+            ),
+            PlotBand(
+              isVisible: true,
+              start: setupResult!.target2,
+              end: setupResult!.target2,
+              borderWidth: 1.2,
+              borderColor: Colors.greenAccent.withOpacity(0.95),
+              dashArray: const <double>[6, 4],
+            ),
+          ];
 
     return Container(
-      height: 280,
-      padding: const EdgeInsets.fromLTRB(10, 10, 10, 12),
+      height: 320,
+      padding: const EdgeInsets.fromLTRB(8, 8, 8, 8),
       decoration: BoxDecoration(
         color: Colors.black.withOpacity(0.35),
         borderRadius: BorderRadius.circular(18),
@@ -667,37 +729,62 @@ class _DetailPageState extends State<DetailPage>
       ),
       child: Stack(
         children: [
-          Positioned.fill(
-            child: CustomPaint(
-              painter: CandleChartPainter(candles: visibleCandles),
-              child: const SizedBox.expand(),
-            ),
-          ),
-          if (setupResult != null)
-            Positioned.fill(
-              child: IgnorePointer(
-                child: CustomPaint(
-                  painter: TradeLinesPainter(
-                    candles: visibleCandles,
-                    entry: setupResult!.entry,
-                    stop: setupResult!.stopLoss,
-                    tp1: setupResult!.target1,
-                    tp2: setupResult!.target2,
-                  ),
-                ),
+          SfCartesianChart(
+            plotAreaBorderWidth: 0,
+            margin: EdgeInsets.zero,
+            backgroundColor: Colors.transparent,
+            trackballBehavior: _trackballBehavior,
+            primaryXAxis: DateTimeAxis(
+              majorGridLines: MajorGridLines(
+                width: 0.6,
+                color: Colors.white.withOpacity(0.06),
               ),
+              axisLine: const AxisLine(width: 0),
+              labelStyle: TextStyle(
+                color: Colors.white.withOpacity(0.55),
+                fontSize: 10,
+              ),
+              intervalType: DateTimeIntervalType.auto,
             ),
+            primaryYAxis: NumericAxis(
+              opposedPosition: true,
+              decimalPlaces: 6,
+              majorGridLines: MajorGridLines(
+                width: 0.6,
+                color: Colors.white.withOpacity(0.08),
+              ),
+              axisLine: const AxisLine(width: 0),
+              labelStyle: TextStyle(
+                color: Colors.white.withOpacity(0.65),
+                fontSize: 10,
+              ),
+              numberFormat: null,
+              plotBands: plotBands,
+            ),
+            series: <CartesianSeries<_ChartCandle, DateTime>>[
+              CandleSeries<_ChartCandle, DateTime>(
+                dataSource: chartData,
+                xValueMapper: (_ChartCandle data, _) => data.time,
+                lowValueMapper: (_ChartCandle data, _) => data.low,
+                highValueMapper: (_ChartCandle data, _) => data.high,
+                openValueMapper: (_ChartCandle data, _) => data.open,
+                closeValueMapper: (_ChartCandle data, _) => data.close,
+                bearColor: Colors.redAccent,
+                bullColor: Colors.greenAccent,
+                enableSolidCandles: true,
+                spacing: 0.12,
+              ),
+            ],
+          ),
           if (lastPrice != null)
             Positioned(
-              top: 12,
-              right: 6,
+              top: 10,
+              right: 10,
               child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 8,
-                  vertical: 4,
-                ),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
-                  color: Colors.black.withOpacity(0.75),
+                  color: Colors.black.withOpacity(0.82),
                   borderRadius: BorderRadius.circular(6),
                   border: Border.all(color: Colors.white24),
                 ),
@@ -916,74 +1003,18 @@ class _DetailPageState extends State<DetailPage>
   }
 }
 
-class TradeLinesPainter extends CustomPainter {
-  final List<CandleData> candles;
-  final double entry;
-  final double stop;
-  final double tp1;
-  final double tp2;
+class _ChartCandle {
+  final DateTime time;
+  final double open;
+  final double high;
+  final double low;
+  final double close;
 
-  TradeLinesPainter({
-    required this.candles,
-    required this.entry,
-    required this.stop,
-    required this.tp1,
-    required this.tp2,
+  _ChartCandle({
+    required this.time,
+    required this.open,
+    required this.high,
+    required this.low,
+    required this.close,
   });
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    if (candles.isEmpty) return;
-
-    final double maxPrice = candles.map((e) => e.high).reduce(math.max);
-    final double minPrice = candles.map((e) => e.low).reduce(math.min);
-
-    if (maxPrice <= minPrice) return;
-
-    double priceToY(double price) {
-      return size.height -
-          ((price - minPrice) / (maxPrice - minPrice)) * size.height;
-    }
-
-    final Paint entryPaint = Paint()
-      ..color = Colors.blueAccent.withOpacity(0.85)
-      ..strokeWidth = 1.2;
-
-    final Paint stopPaint = Paint()
-      ..color = Colors.redAccent.withOpacity(0.90)
-      ..strokeWidth = 1.2;
-
-    final Paint tpPaint = Paint()
-      ..color = Colors.greenAccent.withOpacity(0.90)
-      ..strokeWidth = 1.2;
-
-    void drawDashedLine(double y, Paint paint) {
-      const double dashWidth = 6;
-      const double dashSpace = 4;
-      double startX = 0;
-
-      while (startX < size.width) {
-        canvas.drawLine(
-          Offset(startX, y),
-          Offset(math.min(startX + dashWidth, size.width), y),
-          paint,
-        );
-        startX += dashWidth + dashSpace;
-      }
-    }
-
-    drawDashedLine(priceToY(entry), entryPaint);
-    drawDashedLine(priceToY(stop), stopPaint);
-    drawDashedLine(priceToY(tp1), tpPaint);
-    drawDashedLine(priceToY(tp2), tpPaint);
-  }
-
-  @override
-  bool shouldRepaint(covariant TradeLinesPainter oldDelegate) {
-    return oldDelegate.candles != candles ||
-        oldDelegate.entry != entry ||
-        oldDelegate.stop != stop ||
-        oldDelegate.tp1 != tp1 ||
-        oldDelegate.tp2 != tp2;
-  }
 }
