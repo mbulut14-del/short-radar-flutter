@@ -24,10 +24,6 @@ String _formatPrice(double value, {int digits = 6}) {
   return value.toStringAsFixed(digits);
 }
 
-String _formatPercent(double value, {int digits = 2}) {
-  return '${value >= 0 ? '+' : ''}${value.toStringAsFixed(digits)}%';
-}
-
 class DetailPage extends StatefulWidget {
   final CoinRadarData coinData;
   final CoinRadarData? leaderData;
@@ -371,7 +367,7 @@ class _DetailPageState extends State<DetailPage>
     if (strength > 100) strength = 100;
 
     final bool hardReject =
-        rrFallbackGuard(risk) ||
+        risk <= 0 ||
         !fundingPositive ||
         (lastGreenAndStrong && coreSignals < 2) ||
         (pumpStrong && coreSignals == 0);
@@ -436,10 +432,6 @@ class _DetailPageState extends State<DetailPage>
           ? reasons
           : ['Veri var ama güçlü teyit sayısı şu an düşük.'],
     );
-  }
-
-  bool rrFallbackGuard(double risk) {
-    return risk <= 0;
   }
 
   Widget _spinnerRing() {
@@ -567,6 +559,15 @@ class _DetailPageState extends State<DetailPage>
         ((setupResult!.stopLoss - setupResult!.entry) / setupResult!.entry) *
             100;
 
+    double leverage;
+    if (riskPercent <= 2) {
+      leverage = 10;
+    } else if (riskPercent <= 4) {
+      leverage = 5;
+    } else {
+      leverage = 3;
+    }
+
     Widget valueText(String text, Color color) {
       return Text(
         text,
@@ -639,6 +640,10 @@ class _DetailPageState extends State<DetailPage>
           row(
             'Risk %',
             valueText('${riskPercent.toStringAsFixed(2)}%', Colors.redAccent),
+          ),
+          row(
+            'Önerilen Kaldıraç',
+            valueText('${leverage.toInt()}x', Colors.orangeAccent),
           ),
         ],
       ),
