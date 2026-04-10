@@ -650,6 +650,72 @@ class _DetailPageState extends State<DetailPage>
     );
   }
 
+  Widget _buildChartCard() {
+    final double? lastPrice = visibleCandles.isNotEmpty
+        ? visibleCandles.last.close
+        : null;
+
+    return Container(
+      height: 280,
+      padding: const EdgeInsets.fromLTRB(10, 10, 10, 12),
+      decoration: BoxDecoration(
+        color: Colors.black.withOpacity(0.35),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+          color: Colors.orangeAccent.withOpacity(0.35),
+        ),
+      ),
+      child: Stack(
+        children: [
+          Positioned.fill(
+            child: CustomPaint(
+              painter: CandleChartPainter(candles: visibleCandles),
+              child: const SizedBox.expand(),
+            ),
+          ),
+          if (setupResult != null)
+            Positioned.fill(
+              child: IgnorePointer(
+                child: CustomPaint(
+                  painter: TradeLinesPainter(
+                    candles: visibleCandles,
+                    entry: setupResult!.entry,
+                    stop: setupResult!.stopLoss,
+                    tp1: setupResult!.target1,
+                    tp2: setupResult!.target2,
+                  ),
+                ),
+              ),
+            ),
+          if (lastPrice != null)
+            Positioned(
+              top: 12,
+              right: 6,
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 8,
+                  vertical: 4,
+                ),
+                decoration: BoxDecoration(
+                  color: Colors.black.withOpacity(0.75),
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: Colors.white24),
+                ),
+                child: Text(
+                  _formatPrice(lastPrice),
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildCenterState({
     required Widget child,
   }) {
@@ -774,21 +840,7 @@ class _DetailPageState extends State<DetailPage>
                     const SizedBox(height: 12),
                     _buildShortSetupCard(),
                     const SizedBox(height: 12),
-                    Container(
-                      height: 280,
-                      padding: const EdgeInsets.fromLTRB(10, 10, 10, 12),
-                      decoration: BoxDecoration(
-                        color: Colors.black.withOpacity(0.35),
-                        borderRadius: BorderRadius.circular(18),
-                        border: Border.all(
-                          color: Colors.orangeAccent.withOpacity(0.35),
-                        ),
-                      ),
-                      child: CustomPaint(
-                        painter: CandleChartPainter(candles: visibleCandles),
-                        child: const SizedBox.expand(),
-                      ),
-                    ),
+                    _buildChartCard(),
                     const SizedBox(height: 18),
                     Row(
                       children: [
@@ -861,5 +913,77 @@ class _DetailPageState extends State<DetailPage>
         ],
       ),
     );
+  }
+}
+
+class TradeLinesPainter extends CustomPainter {
+  final List<CandleData> candles;
+  final double entry;
+  final double stop;
+  final double tp1;
+  final double tp2;
+
+  TradeLinesPainter({
+    required this.candles,
+    required this.entry,
+    required this.stop,
+    required this.tp1,
+    required this.tp2,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (candles.isEmpty) return;
+
+    final double maxPrice = candles.map((e) => e.high).reduce(math.max);
+    final double minPrice = candles.map((e) => e.low).reduce(math.min);
+
+    if (maxPrice <= minPrice) return;
+
+    double priceToY(double price) {
+      return size.height -
+          ((price - minPrice) / (maxPrice - minPrice)) * size.height;
+    }
+
+    final Paint entryPaint = Paint()
+      ..color = Colors.blueAccent.withOpacity(0.85)
+      ..strokeWidth = 1.2;
+
+    final Paint stopPaint = Paint()
+      ..color = Colors.redAccent.withOpacity(0.90)
+      ..strokeWidth = 1.2;
+
+    final Paint tpPaint = Paint()
+      ..color = Colors.greenAccent.withOpacity(0.90)
+      ..strokeWidth = 1.2;
+
+    void drawDashedLine(double y, Paint paint) {
+      const double dashWidth = 6;
+      const double dashSpace = 4;
+      double startX = 0;
+
+      while (startX < size.width) {
+        canvas.drawLine(
+          Offset(startX, y),
+          Offset(math.min(startX + dashWidth, size.width), y),
+          paint,
+        );
+        startX += dashWidth + dashSpace;
+      }
+    }
+
+    drawDashedLine(priceToY(entry), entryPaint);
+    drawDashedLine(priceToY(stop), stopPaint);
+    drawDashedLine(priceToY(tp1), tpPaint);
+    drawDashedLine(priceToY(tp2), tpPaint);
+  }
+
+  @override
+  bool shouldRepaint(covariant TradeLinesPainter oldDelegate) {
+    return oldDelegate.candles != candles ||
+        oldDelegate.entry != entry ||
+        oldDelegate.stop != stop ||
+        oldDelegate.tp1 != tp1 ||
+        oldDelegate.tp2 != tp2;
   }
 }
