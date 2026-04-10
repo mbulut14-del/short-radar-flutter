@@ -6,6 +6,7 @@ class ShortSetupCard extends StatelessWidget {
   final String target1;
   final String target2;
   final String rr;
+  final String riskPercent;
 
   const ShortSetupCard({
     super.key,
@@ -14,6 +15,7 @@ class ShortSetupCard extends StatelessWidget {
     required this.target1,
     required this.target2,
     required this.rr,
+    required this.riskPercent,
   });
 
   Widget _row(String label, String value, {Color? valueColor}) {
@@ -41,8 +43,27 @@ class ShortSetupCard extends StatelessWidget {
     );
   }
 
+  double _parsePercent(String value) {
+    final cleaned = value.replaceAll('%', '').replaceAll(',', '.').trim();
+    return double.tryParse(cleaned) ?? 0;
+  }
+
   @override
   Widget build(BuildContext context) {
+    final double risk = _parsePercent(riskPercent);
+
+    double leverage;
+    if (risk <= 2) {
+      leverage = 10;
+    } else if (risk <= 4) {
+      leverage = 5;
+    } else {
+      leverage = 3;
+    }
+
+    final double loss5x = risk * 5;
+    final double loss10x = risk * 10;
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(14),
@@ -72,6 +93,26 @@ class ShortSetupCard extends StatelessWidget {
           _row('Hedef 2', target2, valueColor: Colors.greenAccent),
           const SizedBox(height: 8),
           _row('Risk / Ödül', rr, valueColor: Colors.orangeAccent),
+          const SizedBox(height: 8),
+          _row('Risk %', riskPercent, valueColor: Colors.redAccent),
+          const SizedBox(height: 8),
+          _row(
+            'Önerilen Kaldıraç',
+            '${leverage.toInt()}x',
+            valueColor: Colors.orangeAccent,
+          ),
+          const SizedBox(height: 8),
+          _row(
+            '5x max kayıp',
+            '${loss5x.toStringAsFixed(2)}%',
+            valueColor: Colors.redAccent,
+          ),
+          const SizedBox(height: 8),
+          _row(
+            '10x max kayıp',
+            '${loss10x.toStringAsFixed(2)}%',
+            valueColor: Colors.redAccent,
+          ),
         ],
       ),
     );
