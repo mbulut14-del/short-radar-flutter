@@ -33,6 +33,8 @@ class EntryTiming {
         last.high > prev.high && last.close < prev.high;
     final bool momentumShift =
         last.close < prev.close && prev.close < prev2.close;
+    final bool earlySignal =
+        (upperWickHeavy || failedBreakout) && !momentumShift;
 
     int strongSignals = 0;
     if (upperWickHeavy) strongSignals++;
@@ -82,6 +84,9 @@ class EntryTiming {
     if (score >= 80 && strongSignals >= 2) {
       signal = 'Giriş uygun';
       ready = true;
+    } else if (earlySignal && score >= 50) {
+      signal = 'Hazırlan';
+      ready = false;
     } else if (score >= 55) {
       signal = 'Hazır';
       ready = false;
