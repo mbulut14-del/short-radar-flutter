@@ -255,6 +255,8 @@ class _DetailPageState extends State<DetailPage>
     final CandleData last = recent.last;
     final CandleData prev =
         recent.length >= 2 ? recent[recent.length - 2] : last;
+    final CandleData prev2 =
+        recent.length >= 3 ? recent[recent.length - 3] : prev;
 
     final List<CandleData> swingWindow = recent.length > 5
         ? recent.sublist(recent.length - 5)
@@ -269,52 +271,92 @@ class _DetailPageState extends State<DetailPage>
     final bool nearResistance =
         swingHigh > 0 && ((swingHigh - last.close) / swingHigh) * 100 < 1.40;
 
-    final bool weakening = recent.length < 2
-        ? false
-        : (last.close <= prev.close || last.bodySize <= prev.bodySize);
+    final bool weakening =
+        last.close <= prev.close || last.bodySize <= prev.bodySize;
 
     final bool upperWickSignal =
         last.range > 0 && last.upperWick > last.bodySize * 0.75;
 
-    final bool lowerHigh = recent.length >= 3 &&
-        recent[recent.length - 2].high < recent[recent.length - 3].high;
+    final bool lowerHigh =
+        recent.length >= 3 && prev.high < prev2.high;
+
+    final bool closeBelowPrev = last.close < prev.close;
+
+    final bool failedBreakout =
+        last.high > prev.high && last.close < prev.high;
 
     final bool divergenceWide = coin.divergencePercent > 0.08;
     final bool fundingPositive = coin.fundingRate > 0;
-    final bool pumpStrong = priceRisePercent > 1.4 || coin.changePercent > 4.0;
+    final bool fundingHot = coin.fundingRate > 0.0008;
+    final bool pumpStrong =
+        priceRisePercent > 1.4 || coin.changePercent > 4.0;
+
+    final bool lastGreenAndStrong =
+        last.isBullish && last.bodySize > prev.bodySize;
 
     int strength = 0;
+    int coreSignals = 0;
+    int confirmSignals = 0;
     final List<String> reasons = [];
 
-    if (pumpStrong) {
-      strength += 18;
-      reasons.add('Son mumlarda yukarı yönlü şişme var.');
-    }
-    if (fundingPositive) {
-      strength += coin.fundingRate > 0.0001 ? 14 : 8;
-      reasons.add('Funding pozitif, long tarafı kalabalık.');
-    } else {
-      strength -= 10;
-    }
-    if (divergenceWide) {
-      strength += 14;
-      reasons.add('Mark-index farkı genişlemiş durumda.');
-    }
     if (nearResistance) {
-      strength += 16;
+      strength += 18;
+      coreSignals++;
       reasons.add('Fiyat yakın direnç bölgesinde.');
     }
+
     if (upperWickSignal) {
-      strength += 16;
+      strength += 18;
+      coreSignals++;
       reasons.add('Son mumda üst fitil satış baskısı gösteriyor.');
     }
+
+    if (lowerHigh) {
+      strength += 16;
+      coreSignals++;
+      reasons.add('Son yapıda lower-high oluşumu var.');
+    }
+
     if (weakening) {
-      strength += 12;
+      strength += 14;
+      coreSignals++;
       reasons.add('Kısa vadeli ivme zayıflıyor.');
     }
-    if (lowerHigh) {
+
+    if (closeBelowPrev) {
       strength += 10;
-      reasons.add('Son yapıda lower-high oluşumu var.');
+      confirmSignals++;
+      reasons.add('Son kapanış önceki mumun altında.');
+    }
+
+    if (failedBreakout) {
+      strength += 14;
+      confirmSignals++;
+      reasons.add('Yeni high denenmiş ama taşınamamış.');
+    }
+
+    if (divergenceWide) {
+      strength += 12;
+      confirmSignals++;
+      reasons.add('Mark-index farkı genişlemiş durumda.');
+    }
+
+    if (pumpStrong) {
+      strength += 10;
+      confirmSignals++;
+      reasons.add('Son mumlarda yukarı yönlü şişme var.');
+    }
+
+    if (fundingPositive) {
+      strength += fundingHot ? 12 : 8;
+      confirmSignals++;
+      reasons.add('Funding pozitif, long tarafı kalabalık.');
+    } else {
+      strength -= 14;
+    }
+
+    if (lastGreenAndStrong && !upperWickSignal && !failedBreakout) {
+      strength -= 18;
     }
 
     final double structuralStop = swingHigh * 1.003;
@@ -334,20 +376,41 @@ class _DetailPageState extends State<DetailPage>
         math.max(entry - target2, math.max(entry * 0.001, 0.0000001));
     final double rr = reward / risk;
 
+    if (strength < 0) strength = 0;
+    if (strength > 100) strength = 100;
+
+    final bool hardReject =
+        rr < 1.0 ||
+        !fundingPositive ||
+        (lastGreenAndStrong && coreSignals < 2) ||
+        (pumpStrong && coreSignals == 0);
+
     String status;
-    if (rr < 1 || coin.fundingRate < 0) {
+
+    if (hardReject) {
       status = 'Zayıf';
-    } else if (strength >= 68 && rr >= 1.5) {
+    } else if (coreSignals >= 3 &&
+        confirmSignals >= 2 &&
+        rr >= 1.4 &&
+        strength >= 68) {
       status = 'Güçlü';
-    } else if (strength >= 42 && rr >= 1.1) {
+    } else if (coreSignals >= 2 &&
+        confirmSignals >= 1 &&
+        rr >= 1.1 &&
+        strength >= 42) {
       status = 'Orta';
     } else {
       status = 'Zayıf';
     }
 
-    final String summary = reasons.isNotEmpty
-        ? reasons.take(2).join(' ')
-        : 'Net short teyidi zayıf, dikkatli takip edilmeli.';
+    final String summary;
+    if (status == 'Güçlü') {
+      summary = 'Rejection + zayıflama birlikte çalışıyor. Short setup güçlü.';
+    } else if (status == 'Orta') {
+      summary = 'Kurulum var ama teyit henüz tam güçlenmemiş.';
+    } else {
+      summary = 'Short setup zayıf. Şartlar henüz net değil.';
+    }
 
     return ShortSetupResult(
       entry: entry,
