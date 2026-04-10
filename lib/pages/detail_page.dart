@@ -10,12 +10,15 @@ import '../models/coin_radar_data.dart';
 import '../models/short_setup_result.dart';
 import '../models/pump_analysis.dart';
 import '../models/pump_analysis_result.dart';
+import '../models/entry_timing.dart';
+import '../models/entry_timing_result.dart';
 import '../painters/candle_chart_painter.dart';
 import '../widgets/price_box.dart';
 import '../widgets/pump_analysis_card.dart';
 import '../widgets/risk_panel_card.dart';
 import '../widgets/setup_status_card.dart';
 import '../widgets/short_setup_card.dart';
+import '../widgets/entry_timing_card.dart';
 
 String _formatPrice(double value, {int digits = 6}) {
   if (value == 0) return '-';
@@ -70,6 +73,7 @@ class _DetailPageState extends State<DetailPage>
   List<CandleData> visibleCandles = [];
   ShortSetupResult? setupResult;
   PumpAnalysisResult? pumpAnalysis;
+  EntryTimingResult? entryTiming;
   List<LossStopRow> lossStopRows = [];
   bool _isFetchingDetail = false;
 
@@ -268,6 +272,7 @@ class _DetailPageState extends State<DetailPage>
           visibleCandles = [];
           setupResult = null;
           pumpAnalysis = null;
+          entryTiming = null;
           lossStopRows = [];
           detailLoading = false;
           detailError = 'Grafik verisi bulunamadı';
@@ -287,6 +292,9 @@ class _DetailPageState extends State<DetailPage>
       final PumpAnalysisResult newPumpAnalysis =
           PumpAnalysis.analyze(zoomCandles);
 
+      final EntryTimingResult newEntryTiming =
+          EntryTiming.analyze(zoomCandles);
+
       final List<LossStopRow> newLossRows = _buildLossStopRows(newSetup.entry);
 
       if (!mounted) return;
@@ -296,6 +304,7 @@ class _DetailPageState extends State<DetailPage>
         visibleCandles = zoomCandles;
         setupResult = newSetup;
         pumpAnalysis = newPumpAnalysis;
+        entryTiming = newEntryTiming;
         lossStopRows = newLossRows;
         detailLoading = false;
         detailError = '';
@@ -826,6 +835,9 @@ class _DetailPageState extends State<DetailPage>
                     const SizedBox(height: 12),
                     if (pumpAnalysis != null)
                       PumpAnalysisCard(result: pumpAnalysis!),
+                    const SizedBox(height: 12),
+                    if (entryTiming != null)
+                      EntryTimingCard(result: entryTiming!),
                     const SizedBox(height: 12),
                     ShortSetupCard(
                       entry: _formatPrice(setupResult!.entry),
