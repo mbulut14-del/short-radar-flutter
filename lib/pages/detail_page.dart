@@ -824,7 +824,8 @@ class _DetailPageState extends State<DetailPage>
                     ],
                     SetupStatusCard(setup: setupResult!),
                     const SizedBox(height: 12),
-                    PumpAnalysisCard(result: pumpAnalysis!),
+                    if (pumpAnalysis != null)
+                      PumpAnalysisCard(result: pumpAnalysis!),
                     const SizedBox(height: 12),
                     ShortSetupCard(
                       entry: _formatPrice(setupResult!.entry),
