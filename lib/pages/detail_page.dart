@@ -531,6 +531,142 @@ class _DetailPageState extends State<DetailPage>
     );
   }
 
+  Widget _buildPumpAnalysisCard() {
+    final PumpAnalysisResult analysis = pumpAnalysis!;
+
+    Color pumpTypeColor;
+    if (analysis.pumpType == 'Fake pump') {
+      pumpTypeColor = Colors.redAccent;
+    } else if (analysis.pumpType == 'İzlenmeli') {
+      pumpTypeColor = Colors.orangeAccent;
+    } else {
+      pumpTypeColor = Colors.greenAccent;
+    }
+
+    Color entryColor;
+    if (analysis.entrySignal == 'Giriş uygun') {
+      entryColor = Colors.redAccent;
+    } else if (analysis.entrySignal == 'Hazır') {
+      entryColor = Colors.orangeAccent;
+    } else {
+      entryColor = Colors.white70;
+    }
+
+    final List<String> topReasons = analysis.reasons.take(3).toList();
+
+    return _cardShell(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'PUMP ANALİZİ',
+            style: TextStyle(
+              color: Colors.white70,
+              fontSize: 12,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          const SizedBox(height: 12),
+          _analysisRow(
+            'Pump tipi',
+            analysis.pumpType,
+            valueColor: pumpTypeColor,
+          ),
+          const SizedBox(height: 8),
+          _analysisRow(
+            'Pump skoru',
+            '${analysis.pumpScore}/100',
+            valueColor: Colors.orangeAccent,
+          ),
+          const SizedBox(height: 8),
+          _analysisRow(
+            'Giriş sinyali',
+            analysis.entrySignal,
+            valueColor: entryColor,
+          ),
+          const SizedBox(height: 8),
+          _analysisRow(
+            'Entry skoru',
+            '${analysis.entryScore}/100',
+            valueColor: Colors.orangeAccent,
+          ),
+          const SizedBox(height: 8),
+          _analysisRow(
+            'Short hazır mı',
+            analysis.shortReady ? 'Evet' : 'Hayır',
+            valueColor:
+                analysis.shortReady ? Colors.greenAccent : Colors.white70,
+          ),
+          if (topReasons.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            const Text(
+              'Sinyaller',
+              style: TextStyle(
+                color: Colors.white70,
+                fontSize: 12,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            const SizedBox(height: 8),
+            ...topReasons.map(
+              (reason) => Padding(
+                padding: const EdgeInsets.only(bottom: 6),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      '• ',
+                      style: TextStyle(
+                        color: Colors.orangeAccent,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    Expanded(
+                      child: Text(
+                        reason,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _analysisRow(String label, String value, {Color? valueColor}) {
+    return Row(
+      children: [
+        Expanded(
+          child: Text(
+            label,
+            style: const TextStyle(
+              color: Colors.white70,
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+        Text(
+          value,
+          style: TextStyle(
+            color: valueColor ?? Colors.white,
+            fontSize: 15,
+            fontWeight: FontWeight.w900,
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _buildLossStopPanel() {
     return _cardShell(
       child: Column(
@@ -822,6 +958,8 @@ class _DetailPageState extends State<DetailPage>
                       const SizedBox(height: 14),
                     ],
                     SetupStatusCard(setup: setupResult!),
+                    const SizedBox(height: 12),
+                    _buildPumpAnalysisCard(),
                     const SizedBox(height: 12),
                     ShortSetupCard(
                       entry: _formatPrice(setupResult!.entry),
