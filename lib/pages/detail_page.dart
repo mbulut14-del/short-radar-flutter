@@ -18,11 +18,7 @@ import '../widgets/price_box.dart';
 import '../widgets/pump_analysis_card.dart';
 import '../widgets/risk_panel_card.dart';
 import '../widgets/setup_status_card.dart';
-
-String _formatPrice(double value, {int digits = 6}) {
-  if (value == 0) return '-';
-  return value.toStringAsFixed(digits);
-}
+import '../widgets/short_setup_card.dart';
 
 class DetailPage extends StatefulWidget {
   final CoinRadarData coinData;
@@ -92,6 +88,11 @@ class _DetailPageState extends State<DetailPage>
       default:
         return value;
     }
+  }
+
+  String _formatPrice(double value, {int digits = 6}) {
+    if (value == 0) return '-';
+    return value.toStringAsFixed(digits);
   }
 
   Future<void> fetchDetail({bool showLoader = true}) async {
@@ -554,102 +555,6 @@ class _DetailPageState extends State<DetailPage>
     );
   }
 
-  Widget _buildShortSetupCard() {
-    final double riskPercent =
-        ((setupResult!.stopLoss - setupResult!.entry) / setupResult!.entry) *
-            100;
-
-    double leverage;
-    if (riskPercent <= 2) {
-      leverage = 10;
-    } else if (riskPercent <= 4) {
-      leverage = 5;
-    } else {
-      leverage = 3;
-    }
-
-    Widget valueText(String text, Color color) {
-      return Text(
-        text,
-        style: TextStyle(
-          color: color,
-          fontSize: 16,
-          fontWeight: FontWeight.w800,
-        ),
-      );
-    }
-
-    Widget row(String label, Widget value) {
-      return Padding(
-        padding: const EdgeInsets.only(bottom: 12),
-        child: Row(
-          children: [
-            Expanded(
-              child: Text(
-                label,
-                style: TextStyle(
-                  color: Colors.white.withOpacity(0.72),
-                  fontSize: 13,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ),
-            value,
-          ],
-        ),
-      );
-    }
-
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: Colors.black.withOpacity(0.36),
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: Colors.white.withOpacity(0.10)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'SHORT SETUP',
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 12,
-              fontWeight: FontWeight.w900,
-            ),
-          ),
-          const SizedBox(height: 16),
-          row('Giriş', valueText(_formatPrice(setupResult!.entry), Colors.white)),
-          row(
-            'Stop loss',
-            valueText(_formatPrice(setupResult!.stopLoss), Colors.redAccent),
-          ),
-          row(
-            'Hedef 1',
-            valueText(_formatPrice(setupResult!.target1), Colors.greenAccent),
-          ),
-          row(
-            'Hedef 2',
-            valueText(_formatPrice(setupResult!.target2), Colors.greenAccent),
-          ),
-          row(
-            'Risk / Ödül',
-            valueText(setupResult!.rr.toStringAsFixed(2), Colors.orangeAccent),
-          ),
-          row(
-            'Risk %',
-            valueText('${riskPercent.toStringAsFixed(2)}%', Colors.redAccent),
-          ),
-          row(
-            'Önerilen Kaldıraç',
-            valueText('${leverage.toInt()}x', Colors.orangeAccent),
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _buildCenterState({
     required Widget child,
   }) {
@@ -772,7 +677,15 @@ class _DetailPageState extends State<DetailPage>
                     if (entryTiming != null)
                       EntryTimingCard(result: entryTiming!),
                     const SizedBox(height: 12),
-                    _buildShortSetupCard(),
+                    ShortSetupCard(
+                      entry: _formatPrice(setupResult!.entry),
+                      stopLoss: _formatPrice(setupResult!.stopLoss),
+                      target1: _formatPrice(setupResult!.target1),
+                      target2: _formatPrice(setupResult!.target2),
+                      rr: setupResult!.rr.toStringAsFixed(2),
+                      riskPercent:
+                          '${(((setupResult!.stopLoss - setupResult!.entry) / setupResult!.entry) * 100).toStringAsFixed(2)}%',
+                    ),
                     const SizedBox(height: 12),
                     CandleChartWidget(
                       candles: visibleCandles,
