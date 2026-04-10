@@ -34,6 +34,11 @@ class EntryTiming {
     final bool momentumShift =
         last.close < prev.close && prev.close < prev2.close;
 
+    int strongSignals = 0;
+    if (upperWickHeavy) strongSignals++;
+    if (failedBreakout) strongSignals++;
+    if (momentumShift) strongSignals++;
+
     if (upperWickHeavy) {
       score += 20;
       reasons.add('Son mumda belirgin üst fitil var.');
@@ -74,7 +79,7 @@ class EntryTiming {
     String signal;
     bool ready;
 
-    if (score >= 80) {
+    if (score >= 80 && strongSignals >= 2) {
       signal = 'Giriş uygun';
       ready = true;
     } else if (score >= 55) {
