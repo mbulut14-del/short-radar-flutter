@@ -68,7 +68,7 @@ class _DetailPageState extends State<DetailPage>
   List<CandleData> candles = [];
   List<CandleData> visibleCandles = [];
   ShortSetupResult? setupResult;
-  PumpAnalysis? pumpAnalysis;
+  PumpAnalysisResult? pumpAnalysis;
   List<LossStopRow> lossStopRows = [];
   bool _isFetchingDetail = false;
 
@@ -283,7 +283,8 @@ class _DetailPageState extends State<DetailPage>
         coin: detailItem,
       );
 
-      final PumpAnalysis newPumpAnalysis = PumpAnalysis.analyze(zoomCandles);
+      final PumpAnalysisResult newPumpAnalysis =
+          PumpAnalysis.analyze(zoomCandles);
 
       final List<LossStopRow> newLossRows = _buildLossStopRows(newSetup.entry);
 
