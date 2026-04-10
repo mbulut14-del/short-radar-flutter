@@ -1,65 +1,69 @@
-
 import 'candle_data.dart';
 import 'entry_timing_result.dart';
 
 class EntryTiming {
   static EntryTimingResult analyze(List<CandleData> candles) {
-    if (candles.length < 4) {
-      return const EntryTimingResult(
+    if (candles.length < 3) {
+      return EntryTimingResult(
+        status: "Bekle",
         score: 0,
-        ready: false,
-        signal: 'Bekle',
-        reasons: ['Entry timing için veri yetersiz.'],
+        signal: "Yetersiz veri",
       );
     }
 
-    final recent =
-        candles.length > 6 ? candles.sublist(candles.length - 6) : candles;
-
-    final last = recent[recent.length - 1];
-    final prev = recent[recent.length - 2];
-    final prev2 = recent[recent.length - 3];
+    final last = candles[candles.length - 1];
+    final prev = candles[candles.length - 2];
+    final prev2 = candles[candles.length - 3];
 
     int score = 0;
-    final reasons = <String>[];
+    String signal = "Zayıf";
 
-    final bool upperWickHeavy =
-        last.upperWick > last.bodySize * 1.2 && last.upperWick > 0;
-    final bool redCandle = !last.isBullish;
-    final bool weakClose =
-        last.range > 0 && ((last.high - last.close) / last.range) > 0.45;
-    final bool lowerHigh = prev.high < prev2.high;
-    final bool closeBelowPrev = last.close < prev.close;
-    final bool failedBreakout = last.high > prev.high && last.close < prev.high;
+    // 🔹 Üst fitil kontrolü
+    final upperWick = last.high - (last.close > last.open ? last.close : last.open);
+    final body = (last.close - last.open).abs();
 
-    if (upperWickHeavy) {
+    if (upperWick > body) {
       score += 20;
-      reasons.add('Son mumda belirgin üst fitil var.');
     }
 
-    if (redCandle) {
-      score += 15;
-      reasons.add('Son mum kırmızı kapanmış.');
-    }
-
-    if (weakClose) {
-      score += 15;
-      reasons.add('Kapanış tepeye yakın değil.');
-    }
-
-    if (lowerHigh) {
+    // 🔹 Kırmızı mum
+    if (last.close < last.open) {
       score += 20;
-      reasons.add('Kısa vadede lower-high oluşmuş.');
     }
 
-    if (closeBelowPrev) {
-      score += 15;
-      reasons.add('Son kapanış önceki mumun altında.');
+    // 🔹 Lower high
+    if (last.high < prev.high) {
+      score += 20;
     }
 
-    if (failedBreakout) {
-      score += 15;
-      reasons.add('Yeni high denenmiş ama taşınamamış.');
+    // 🔹 Momentum kırılması
+    if (prev.close < prev2.close) {
+      score += 20;
     }
 
-    if
+    // 🔹 Zayıf kapanış
+    if (last.close < (last.high - (last.high - last.low) * 0.3)) {
+      score += 20;
+    }
+
+    // 🔥 SONUÇ
+    String status;
+
+    if (score >= 70) {
+      status = "Giriş uygun";
+      signal = "Rejection başladı";
+    } else if (score >= 40) {
+      status = "Hazır";
+      signal = "Zayıflama var";
+    } else {
+      status = "Bekle";
+      signal = "Momentum güçlü";
+    }
+
+    return EntryTimingResult(
+      status: status,
+      score: score,
+      signal: signal,
+    );
+  }
+}
