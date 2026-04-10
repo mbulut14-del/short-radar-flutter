@@ -1,71 +1,68 @@
-import 'dart:math';
-
-import 'candle_data.dart';
-import 'entry_timing_result.dart';
-
 class EntryTiming {
-  static EntryTimingResult analyze(List<CandleData> candles) {
-    if (candles.length < 3) {
-      return EntryTimingResult(
-        timing: "WAIT",
+  static EntryTimingResult analyze({
+    required List<CandleData> candles,
+  }) {
+    if (candles.isEmpty) {
+      return const EntryTimingResult(
+        isReady: false,
         score: 0,
-        reason: "Yetersiz veri",
+        status: "Veri yok",
+        reasons: ["Candle verisi bulunamadı"],
       );
     }
 
-    final last = candles[candles.length - 1];
-    final prev = candles[candles.length - 2];
+    final last = candles.last;
 
     int score = 0;
+    List<String> reasons = [];
 
-    /// 🔥 FAKE BREAKOUT FILTER
-    bool fakeBreakoutRisk = false;
+    // Üst fitil kontrolü
+    final upperWick = last.high - (last.open > last.close ? last.open : last.close);
+    final body = (last.open - last.close).abs();
 
-    final body = (last.close - last.open).abs();
-    final upperWick = last.high - max(last.open, last.close);
-
-    if (upperWick < body * 1.2) {
-      fakeBreakoutRisk = true;
-    }
-
-    /// 🔹 Momentum zayıflama
-    if (last.close <= prev.close) {
+    if (upperWick > body) {
       score += 30;
+      reasons.add("Son mumda belirgin üst fitil var.");
     }
 
-    /// 🔹 Üst fitil → satış baskısı
-    if (upperWick > body * 1.5) {
-      score += 30;
-    }
-
-    /// 🔹 Küçülen mum
-    final prevBody = (prev.close - prev.open).abs();
-    if (body < prevBody) {
+    // Kırmızı mum
+    if (last.close < last.open) {
       score += 20;
+      reasons.add("Son mum kırmızı kapanmış.");
     }
 
-    /// 🔹 Fake breakout kontrolü
-    if (fakeBreakoutRisk) {
-      score -= 30;
+    // Tepeden uzak kapanış
+    if ((last.high - last.close) / last.high > 0.01) {
+      score += 15;
+      reasons.add("Kapanış tepeye yakın değil.");
     }
 
-    /// 🔥 ENTRY KARARI
-    String timing;
+    // Basit lower-high kontrolü
+    if (candles.length >= 3) {
+      final prev = candles[candles.length - 2];
+      if (last.high < prev.high) {
+        score += 20;
+        reasons.add("Kısa vadede lower-high oluşmuş.");
+      }
+    }
 
-    if (!fakeBreakoutRisk && score >= 80) {
-      timing = "🔥 PERFECT SHORT";
-    } else if (!fakeBreakoutRisk && score >= 60) {
-      timing = "✅ READY";
+    // Hazır mı?
+    final isReady = score >= 70;
+
+    String status;
+    if (isReady) {
+      status = "Giriş uygun";
+    } else if (score >= 50) {
+      status = "Hazırlanıyor";
     } else {
-      timing = "⏳ WAIT";
+      status = "Bekle";
     }
 
     return EntryTimingResult(
-      timing: timing,
+      isReady: isReady,
       score: score,
-      reason: fakeBreakoutRisk
-          ? "Fake breakout riski var"
-          : "Momentum zayıflıyor",
+      status: status,
+      reasons: reasons,
     );
   }
 }
