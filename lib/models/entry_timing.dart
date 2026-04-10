@@ -31,6 +31,8 @@ class EntryTiming {
     final bool closeBelowPrev = last.close < prev.close;
     final bool failedBreakout =
         last.high > prev.high && last.close < prev.high;
+    final bool momentumShift =
+        last.close < prev.close && prev.close < prev2.close;
 
     if (upperWickHeavy) {
       score += 20;
@@ -60,6 +62,11 @@ class EntryTiming {
     if (failedBreakout) {
       score += 15;
       reasons.add('Yeni high denenmiş ama taşınamamış.');
+    }
+
+    if (momentumShift) {
+      score += 15;
+      reasons.add('Son 3 kapanışta aşağı yönlü ivme artıyor.');
     }
 
     if (score > 100) score = 100;
