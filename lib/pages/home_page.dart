@@ -35,7 +35,7 @@ class _HomePageState extends State<HomePage> {
   String errorText = '';
   Timer? _refreshTimer;
 
-  // 🔥 EKLENEN (bildirim kontrol)
+  // Bildirim için eklenenler
   String? lastNotifiedCoin;
   DateTime? lastNotifyTime;
 
@@ -108,12 +108,12 @@ class _HomePageState extends State<HomePage> {
 
       setState(() {
         coins = sortedByChange.take(10).toList();
-        radarLeader = leader;
+        radarLeader = sortedByScore.first;
         isLoading = false;
         errorText = '';
       });
 
-      // 🚨 SHORT BAŞLIYOR (EKLENEN TEK BLOK)
+      // Short başlıyor bildirimi
       if (leader.score >= 70 && leader.fundingRate > 0) {
         final now = DateTime.now();
 
@@ -230,12 +230,31 @@ class _HomePageState extends State<HomePage> {
                   color: scoreColor.withOpacity(0.75),
                   width: 1.4,
                 ),
+                boxShadow: [
+                  BoxShadow(
+                    color: scoreColor.withOpacity(0.18),
+                    blurRadius: 18,
+                    spreadRadius: 1,
+                  ),
+                ],
               ),
               child: Row(
                 children: [
                   Container(
                     width: 74,
                     height: 74,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Colors.black.withOpacity(0.55),
+                      border: Border.all(color: scoreColor, width: 3),
+                      boxShadow: [
+                        BoxShadow(
+                          color: scoreColor.withOpacity(0.35),
+                          blurRadius: 16,
+                          spreadRadius: 2,
+                        ),
+                      ],
+                    ),
                     alignment: Alignment.center,
                     child: Text(
                       '${leader.score}',
@@ -248,13 +267,40 @@ class _HomePageState extends State<HomePage> {
                   ),
                   const SizedBox(width: 14),
                   Expanded(
-                    child: Text(
-                      leader.name,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 20,
-                        fontWeight: FontWeight.w900,
-                      ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'EN GÜÇLÜ SHORT ADAYI',
+                          style: TextStyle(
+                            color: scoreColor,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          leader.name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 20,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Wrap(
+                          spacing: 10,
+                          runSpacing: 6,
+                          children: [
+                            _miniInfo('Skor', '${leader.score}'),
+                            _miniInfo('Değişim', leader.changeText),
+                            _miniInfo('Funding', leader.fundingText),
+                            _miniInfo('Bias', leader.biasLabel),
+                          ],
+                        ),
+                      ],
                     ),
                   ),
                 ],
@@ -353,25 +399,91 @@ class _HomePageState extends State<HomePage> {
               color: const Color(0xFF3EA6FF),
               width: 1.4,
             ),
+            boxShadow: const [
+              BoxShadow(
+                color: Color(0x663EA6FF),
+                blurRadius: 10,
+                spreadRadius: 1,
+              ),
+              BoxShadow(
+                color: Color(0x3300FFFF),
+                blurRadius: 18,
+                spreadRadius: 1,
+              ),
+            ],
           ),
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 14),
             child: Row(
               children: [
-                Text(
-                  '$index',
-                  style: const TextStyle(color: Colors.white),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
+                Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: const Color(0xFF123D9B),
+                    border: Border.all(
+                      color: const Color(0xFF5AA8FF),
+                      width: 1.6,
+                    ),
+                    boxShadow: const [
+                      BoxShadow(
+                        color: Color(0x663EA6FF),
+                        blurRadius: 8,
+                        spreadRadius: 1,
+                      ),
+                    ],
+                  ),
+                  alignment: Alignment.center,
                   child: Text(
-                    coin.name,
-                    style: const TextStyle(color: Colors.white),
+                    '$index',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 19,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                 ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        coin.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 17,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Short skoru: ${coin.score} • ${coin.biasLabel}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: Colors.white.withOpacity(0.72),
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 12),
                 Text(
                   coin.changeText,
-                  style: const TextStyle(color: Colors.greenAccent),
+                  style: TextStyle(
+                    color: coin.changePercent < 0
+                        ? Colors.redAccent
+                        : const Color(0xFF3CFFB2),
+                    fontSize: 16,
+                    fontWeight: FontWeight.w800,
+                  ),
                 ),
               ],
             ),
