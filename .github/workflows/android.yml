@@ -32,106 +32,8 @@ jobs:
       - name: Android proje olustur
         run: flutter create . --project-name short_radar_flutter --platforms=android
 
-      - name: Keystore dosyasini yaz
-        shell: bash
-        run: |
-          echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 --decode > android/app/upload-keystore.jks
-
-      - name: key.properties olustur
-        shell: bash
-        run: |
-          cat > android/key.properties <<EOF
-          storePassword=${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          keyPassword=${{ secrets.ANDROID_KEY_PASSWORD }}
-          keyAlias=${{ secrets.ANDROID_KEY_ALIAS }}
-          storeFile=app/upload-keystore.jks
-          EOF
-
-      - name: Android signing ayarini uygula
-        shell: bash
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
-
-          gradle_kts = Path("android/app/build.gradle.kts")
-          gradle = Path("android/app/build.gradle")
-
-          if gradle_kts.exists():
-              text = gradle_kts.read_text(encoding="utf-8")
-
-              if 'val keystoreProperties = Properties()' not in text:
-                  text = text.replace(
-                      'plugins {',
-                      '''import java.util.Properties
-import java.io.FileInputStream
-
-val keystoreProperties = Properties()
-val keystorePropertiesFile = rootProject.file("key.properties")
-if (keystorePropertiesFile.exists()) {
-    keystoreProperties.load(FileInputStream(keystorePropertiesFile))
-}
-
-plugins {'''
-                  )
-
-              if 'create("release")' not in text:
-                  text = text.replace(
-                      'buildTypes {',
-                      '''signingConfigs {
-        create("release") {
-            keyAlias = keystoreProperties["keyAlias"] as String
-            keyPassword = keystoreProperties["keyPassword"] as String
-            storeFile = file(keystoreProperties["storeFile"] as String)
-            storePassword = keystoreProperties["storePassword"] as String
-        }
-    }
-
-    buildTypes {'''
-                  )
-
-              text = text.replace(
-                  'signingConfig = signingConfigs.getByName("debug")',
-                  'signingConfig = signingConfigs.getByName("release")'
-              )
-
-              gradle_kts.write_text(text, encoding="utf-8")
-
-          elif gradle.exists():
-              text = gradle.read_text(encoding="utf-8")
-
-              if 'def keystoreProperties = new Properties()' not in text:
-                  text = '''def keystoreProperties = new Properties()
-def keystorePropertiesFile = rootProject.file('key.properties')
-if (keystorePropertiesFile.exists()) {
-    keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
-}
-
-''' + text
-
-              if 'signingConfigs {' not in text or 'release {' not in text.split('signingConfigs {', 1)[-1]:
-                  text = text.replace(
-                      'buildTypes {',
-                      '''signingConfigs {
-        release {
-            keyAlias keystoreProperties['keyAlias']
-            keyPassword keystoreProperties['keyPassword']
-            storeFile keystoreProperties['storeFile'] ? file(keystoreProperties['storeFile']) : null
-            storePassword keystoreProperties['storePassword']
-        }
-    }
-
-    buildTypes {'''
-                  )
-
-              text = text.replace(
-                  'signingConfig signingConfigs.debug',
-                  'signingConfig signingConfigs.release'
-              )
-
-              gradle.write_text(text, encoding="utf-8")
-          else:
-              raise SystemExit("build.gradle veya build.gradle.kts bulunamadi")
-          PY
+      - name: Android dosyalarini listele
+        run: find android -maxdepth 4 -type f
 
       - name: Uygulama adini ve internet iznini ekle
         run: |
@@ -159,7 +61,7 @@ if (keystorePropertiesFile.exists()) {
         run: dart run flutter_launcher_icons
 
       - name: APK build
-        run: flutter build apk --release --build-number=${{ github.run_number }}
+        run: flutter build apk --release
 
       - name: APK upload
         uses: actions/upload-artifact@v4
