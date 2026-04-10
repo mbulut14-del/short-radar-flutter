@@ -1,11 +1,28 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 import 'pages/splash_screen.dart';
 import 'pages/home_page.dart';
 import 'pages/detail_page.dart';
 import 'models/coin_radar_data.dart';
 
-void main() {
+// 🔥 GLOBAL TANIM (late final)
+late final FlutterLocalNotificationsPlugin notificationsPlugin;
+
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  // 🔥 INIT
+  notificationsPlugin = FlutterLocalNotificationsPlugin();
+
+  const AndroidInitializationSettings androidSettings =
+      AndroidInitializationSettings('@mipmap/ic_launcher');
+
+  const InitializationSettings initSettings =
+      InitializationSettings(android: androidSettings);
+
+  await notificationsPlugin.initialize(initSettings);
+
   runApp(const MyApp());
 }
 
@@ -18,10 +35,14 @@ class MyApp extends StatelessWidget {
       title: 'Short Radar',
       debugShowCheckedModeBanner: false,
       theme: ThemeData.dark(),
+
+      // 🚀 AKIŞ AYNI
       home: const SplashScreen(),
+
       routes: {
         '/home': (context) => const HomePage(),
       },
+
       onGenerateRoute: (settings) {
         if (settings.name == '/detail') {
           final coin = settings.arguments as CoinRadarData;
