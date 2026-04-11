@@ -1,4 +1,3 @@
-
 import 'package:flutter/material.dart';
 
 import '../models/candle_data.dart';
@@ -6,7 +5,6 @@ import '../models/coin_radar_data.dart';
 import '../models/entry_timing_result.dart';
 import '../models/pump_analysis_result.dart';
 import '../models/short_setup_result.dart';
-import 'candle_chart_widget.dart';
 import 'entry_timing_card.dart';
 import 'price_box.dart';
 import 'pump_analysis_card.dart';
@@ -258,11 +256,6 @@ class DetailPageContent extends StatelessWidget {
               rr: setupResult!.rr.toStringAsFixed(2),
               riskPercent:
                   '${(((setupResult!.stopLoss - setupResult!.entry) / setupResult!.entry) * 100).toStringAsFixed(2)}%',
-            ),
-            const SizedBox(height: 12),
-            CandleChartWidget(
-              candles: visibleCandles,
-              setupResult: setupResult,
             ),
             const SizedBox(height: 18),
             Row(
