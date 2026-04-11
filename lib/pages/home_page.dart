@@ -35,7 +35,6 @@ class _HomePageState extends State<HomePage> {
   String errorText = '';
   Timer? _refreshTimer;
 
-  // Bildirim için eklenenler
   String? lastNotifiedCoin;
   DateTime? lastNotifyTime;
 
@@ -113,7 +112,6 @@ class _HomePageState extends State<HomePage> {
         errorText = '';
       });
 
-      // Short başlıyor bildirimi
       if (leader.score >= 70 && leader.fundingRate > 0) {
         final now = DateTime.now();
 
@@ -458,6 +456,17 @@ class _HomePageState extends State<HomePage> {
                           color: Colors.white,
                           fontSize: 17,
                           fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        coin.lastPriceText,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: Colors.white.withOpacity(0.82),
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
                         ),
                       ),
                       const SizedBox(height: 4),
