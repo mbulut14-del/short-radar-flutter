@@ -533,7 +533,7 @@ class _HomePageState extends State<HomePage> {
             ),
             SizedBox(height: 14),
             Text(
-              'Canlı veriler yükleniyor...',
+              'Short fırsatları analiz ediliyor...',
               style: TextStyle(
                 color: Colors.white70,
                 fontSize: 13,
