@@ -17,18 +17,7 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
-  List<CoinRadarData> coins = [
-    CoinRadarData.seed(name: 'KOMA_USDT', changePercent: 58.22),
-    CoinRadarData.seed(name: 'BULLA_USDT', changePercent: 44.77),
-    CoinRadarData.seed(name: 'PLAY_USDT', changePercent: 34.27),
-    CoinRadarData.seed(name: 'APR_USDT', changePercent: 31.12),
-    CoinRadarData.seed(name: 'TRU_USDT', changePercent: 28.90),
-    CoinRadarData.seed(name: 'DOGE_USDT', changePercent: 25.61),
-    CoinRadarData.seed(name: 'SOL_USDT', changePercent: 22.10),
-    CoinRadarData.seed(name: 'ETH_USDT', changePercent: 19.85),
-    CoinRadarData.seed(name: 'BTC_USDT', changePercent: 17.40),
-    CoinRadarData.seed(name: 'XRP_USDT', changePercent: 15.12),
-  ];
+  List<CoinRadarData> coins = [];
 
   CoinRadarData? radarLeader;
   bool isLoading = true;
@@ -41,7 +30,6 @@ class _HomePageState extends State<HomePage> {
   @override
   void initState() {
     super.initState();
-    radarLeader = coins.first;
     fetchCoins();
 
     _refreshTimer = Timer.periodic(const Duration(seconds: 5), (_) {
@@ -107,7 +95,7 @@ class _HomePageState extends State<HomePage> {
 
       setState(() {
         coins = sortedByChange.take(10).toList();
-        radarLeader = sortedByScore.first;
+        radarLeader = leader;
         isLoading = false;
         errorText = '';
       });
@@ -178,7 +166,37 @@ class _HomePageState extends State<HomePage> {
   Widget _buildRadarHero() {
     final CoinRadarData? leader = radarLeader;
     if (leader == null) {
-      return const SizedBox(height: 150);
+      return SizedBox(
+        height: 150,
+        child: Stack(
+          children: [
+            Positioned(
+              top: 0,
+              right: 0,
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: Colors.black.withOpacity(0.55),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: isLoading ? Colors.orangeAccent : Colors.greenAccent,
+                  ),
+                ),
+                child: Text(
+                  isLoading ? 'Yükleniyor' : 'Canlı Veri',
+                  style: TextStyle(
+                    color:
+                        isLoading ? Colors.orangeAccent : Colors.greenAccent,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
     }
 
     final Color scoreColor = leader.score >= 75
@@ -502,8 +520,36 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
+  Widget _buildInitialLoadingState() {
+    return SizedBox(
+      height: 260,
+      child: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: const [
+            CircularProgressIndicator(
+              strokeWidth: 2.2,
+              valueColor: AlwaysStoppedAnimation<Color>(Colors.orangeAccent),
+            ),
+            SizedBox(height: 14),
+            Text(
+              'Canlı veriler yükleniyor...',
+              style: TextStyle(
+                color: Colors.white70,
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final bool showInitialLoader = coins.isEmpty && isLoading;
+
     return Scaffold(
       body: Stack(
         children: [
@@ -527,11 +573,14 @@ class _HomePageState extends State<HomePage> {
                     _buildErrorCard(),
                   ],
                   const SizedBox(height: 12),
-                  ...coins.asMap().entries.map((entry) {
-                    final int index = entry.key + 1;
-                    final CoinRadarData coin = entry.value;
-                    return _buildCoinCard(index, coin);
-                  }),
+                  if (showInitialLoader)
+                    _buildInitialLoadingState()
+                  else
+                    ...coins.asMap().entries.map((entry) {
+                      final int index = entry.key + 1;
+                      final CoinRadarData coin = entry.value;
+                      return _buildCoinCard(index, coin);
+                    }),
                 ],
               ),
             ),
