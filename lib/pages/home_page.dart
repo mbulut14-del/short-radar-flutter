@@ -272,13 +272,10 @@ class _HomePageState extends State<HomePage> {
                       ],
                     ),
                     alignment: Alignment.center,
-                    child: Text(
-                      '${leader.score}',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 26,
-                        fontWeight: FontWeight.w900,
-                      ),
+                    child: Icon(
+                      Icons.radar_rounded,
+                      color: scoreColor,
+                      size: 34,
                     ),
                   ),
                   const SizedBox(width: 14),
@@ -310,7 +307,6 @@ class _HomePageState extends State<HomePage> {
                           spacing: 10,
                           runSpacing: 6,
                           children: [
-                            _miniInfo('Skor', '${leader.score}'),
                             _miniInfo('Değişim', leader.changeText),
                             _miniInfo('Funding', leader.fundingText),
                             _miniInfo('Bias', leader.biasLabel),
@@ -484,6 +480,17 @@ class _HomePageState extends State<HomePage> {
                         style: TextStyle(
                           color: Colors.white.withOpacity(0.82),
                           fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Short skoru: ${coin.score} • ${coin.biasLabel}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: Colors.white.withOpacity(0.72),
+                          fontSize: 11,
                           fontWeight: FontWeight.w700,
                         ),
                       ),
