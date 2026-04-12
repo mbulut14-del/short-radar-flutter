@@ -25,6 +25,7 @@ class DetailPageContent extends StatelessWidget {
   final EntryTimingResult? entryTiming;
   final List<CandleData> visibleCandles;
   final CoinRadarData selectedCoin;
+  final String openInterestDisplay;
 
   const DetailPageContent({
     super.key,
@@ -40,6 +41,7 @@ class DetailPageContent extends StatelessWidget {
     required this.entryTiming,
     required this.visibleCandles,
     required this.selectedCoin,
+    required this.openInterestDisplay,
   });
 
   String _formatPrice(double value, {int digits = 6}) {
@@ -299,7 +301,7 @@ class DetailPageContent extends StatelessWidget {
                 Expanded(
                   child: PriceBox(
                     title: 'Open Interest',
-                    value: selectedCoin.openInterestText,
+                    value: openInterestDisplay,
                   ),
                 ),
                 const SizedBox(width: 8),
