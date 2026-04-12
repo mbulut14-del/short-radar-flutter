@@ -108,7 +108,7 @@ class DetailPageContent extends StatelessWidget {
             TextSpan(
               children: [
                 const TextSpan(
-                  text: 'O interest (Son 30dk) ',
+                  text: 'OI (Son 30dk - canlı) ',
                   style: TextStyle(
                     color: Colors.white,
                     fontSize: 12,
