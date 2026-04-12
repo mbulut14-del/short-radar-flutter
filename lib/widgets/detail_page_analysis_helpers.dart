@@ -528,4 +528,39 @@ class DetailPageAnalysisHelpers {
       ),
     );
   }
+
+  static String getCombinedSignal({
+    required String oiDirection,
+    required String priceDirection,
+    required String orderFlow,
+  }) {
+    final oi = normalizeDirection(oiDirection);
+    final price = normalizeDirection(priceDirection);
+
+    if (oi == 'UP' && price == 'DOWN' && orderFlow == 'SELL_PRESSURE') {
+      return 'STRONG_SHORT';
+    }
+
+    if (oi == 'UP' && price == 'UP' && orderFlow == 'SELL_PRESSURE') {
+      return 'FAKE_PUMP';
+    }
+
+    if (oi == 'DOWN' && price == 'UP' && orderFlow == 'BUY_PRESSURE') {
+      return 'SHORT_SQUEEZE';
+    }
+
+    if (oi == 'DOWN' && price == 'DOWN' && orderFlow == 'SELL_PRESSURE') {
+      return 'WEAK_DROP';
+    }
+
+    if (oi == 'FLAT' && price == 'FLAT' && orderFlow == 'BUY_PRESSURE') {
+      return 'EARLY_ACCUMULATION';
+    }
+
+    if (oi == 'FLAT' && price == 'FLAT' && orderFlow == 'SELL_PRESSURE') {
+      return 'EARLY_DISTRIBUTION';
+    }
+
+    return 'NEUTRAL';
+  }
 }
