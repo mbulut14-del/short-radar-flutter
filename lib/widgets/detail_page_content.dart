@@ -209,6 +209,14 @@ class DetailPageContent extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+
+    // 🔥 EKLENEN (SİNYAL MOTORU)
+    final combinedSignal = DetailPageAnalysisHelpers.getCombinedSignal(
+      oiDirection: oiDirection,
+      priceDirection: priceDirection,
+      orderFlow: orderFlowDirection,
+    );
+
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(16, 18, 16, 24),
       child: Column(
@@ -260,13 +268,16 @@ class DetailPageContent extends StatelessWidget {
             ],
             SetupStatusCard(setup: setupResult!),
             const SizedBox(height: 12),
+
+            // 🔥 SADECE BURASI DEĞİŞTİ
             DetailPageAnalysisHelpers.buildOiPriceAnalysisCard(
               oiDirection: oiDirection,
               priceDirection: priceDirection,
-              oiPriceSignal: oiPriceSignal,
+              oiPriceSignal: combinedSignal,
               orderFlowDirection: orderFlowDirection,
               openInterestDisplay: openInterestDisplay,
             ),
+
             const SizedBox(height: 12),
             if (pumpAnalysis != null) ...[
               PumpAnalysisCard(result: pumpAnalysis!),
