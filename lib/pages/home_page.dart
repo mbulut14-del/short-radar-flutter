@@ -28,12 +28,9 @@ class _HomePageState extends State<HomePage> {
   DateTime? lastNotifyTime;
 
   // ✅ Her coin için OI geçmişi
-  final Map<String, List<double>> oiHistory = {};
+  final Map<String, List<double>> _oiHistory = {};
 
-  // ✅ Her coin için OI yönü
-  final Map<String, String> oiDirection = {};
-
-  static const int _oiHistoryLimit = 360; // 30 dk / 5 sn
+  static const int _oiHistoryLimit = 360; // 30dk / 5sn
 
   @override
   void initState() {
@@ -53,29 +50,50 @@ class _HomePageState extends State<HomePage> {
     super.dispose();
   }
 
-  String _calculateOiDirection(String name, double currentOi) {
-    final history = oiHistory.putIfAbsent(name, () => []);
+  void _updateOiHistory(String symbol, double oi) {
+    final history = _oiHistory.putIfAbsent(symbol, () => <double>[]);
 
-    history.add(currentOi);
+    history.add(oi);
 
     if (history.length > _oiHistoryLimit) {
       history.removeAt(0);
     }
+  }
 
-    // Yeterli veri birikmeden nötr kalsın
-    if (history.length < _oiHistoryLimit) {
+  String _calculateOiDirection(String symbol) {
+    final history = _oiHistory[symbol];
+
+    if (history == null || history.length < 2) {
       return 'FLAT';
     }
 
-    final double oldOi = history.first;
+    final double first = history.first;
+    final double last = history.last;
 
-    if (oldOi <= 0) return 'FLAT';
+    if (first <= 0) return 'FLAT';
 
-    final double percentChange = ((currentOi - oldOi) / oldOi) * 100;
+    final double changePercent = ((last - first) / first) * 100;
 
-    if (percentChange > 2) return 'UP';
-    if (percentChange < -2) return 'DOWN';
+    if (changePercent > 1) return 'UP';
+    if (changePercent < -1) return 'DOWN';
     return 'FLAT';
+  }
+
+  CoinRadarData _withOiDirection(CoinRadarData coin, String direction) {
+    return CoinRadarData(
+      name: coin.name,
+      changePercent: coin.changePercent,
+      fundingRate: coin.fundingRate,
+      lastPrice: coin.lastPrice,
+      markPrice: coin.markPrice,
+      indexPrice: coin.indexPrice,
+      volume24h: coin.volume24h,
+      openInterest: coin.openInterest,
+      oiDirection: direction,
+      score: coin.score,
+      biasLabel: coin.biasLabel,
+      note: coin.note,
+    );
   }
 
   Future<void> fetchCoins() async {
@@ -100,13 +118,13 @@ class _HomePageState extends State<HomePage> {
 
       final List<dynamic> parsed = json.decode(response.body);
 
-      final List<CoinRadarData> allCoins = parsed
+      final List<CoinRadarData> rawCoins = parsed
           .whereType<Map<String, dynamic>>()
           .where((e) => (e['contract'] ?? '').toString().isNotEmpty)
           .map(CoinRadarData.fromJson)
           .toList();
 
-      if (allCoins.isEmpty) {
+      if (rawCoins.isEmpty) {
         setState(() {
           isLoading = false;
           errorText = 'Canlı veri boş döndü';
@@ -114,13 +132,11 @@ class _HomePageState extends State<HomePage> {
         return;
       }
 
-      // ✅ OI geçmişi ve yön hesaplama
-      for (final coin in allCoins) {
-        oiDirection[coin.name] = _calculateOiDirection(
-          coin.name,
-          coin.openInterest,
-        );
-      }
+      final List<CoinRadarData> allCoins = rawCoins.map((coin) {
+        _updateOiHistory(coin.name, coin.openInterest);
+        final String direction = _calculateOiDirection(coin.name);
+        return _withOiDirection(coin, direction);
+      }).toList();
 
       final List<CoinRadarData> sortedByChange = [...allCoins]
         ..sort((a, b) => b.changePercent.compareTo(a.changePercent));
@@ -437,7 +453,7 @@ class _HomePageState extends State<HomePage> {
             MaterialPageRoute(
               builder: (_) => DetailPage(
                 coinData: coin,
-                oiDirection: oiDirection[coin.name] ?? 'FLAT',
+                oiDirection: coin.oiDirection,
               ),
             ),
           );
@@ -609,6 +625,8 @@ class _HomePageState extends State<HomePage> {
               child: ListView(
                 padding: const EdgeInsets.all(12),
                 children: [
+                  // ❌ ÜST KARTLAR KALDIRILDI
+
                   if (errorText.isNotEmpty) ...[
                     const SizedBox(height: 10),
                     _buildErrorCard(),
