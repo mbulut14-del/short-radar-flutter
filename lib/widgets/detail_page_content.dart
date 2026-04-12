@@ -29,6 +29,7 @@ class DetailPageContent extends StatelessWidget {
   final String oiDirection;
   final String priceDirection;
   final String oiPriceSignal;
+  final String orderFlowDirection;
 
   const DetailPageContent({
     super.key,
@@ -48,6 +49,7 @@ class DetailPageContent extends StatelessWidget {
     this.oiDirection = 'FLAT',
     this.priceDirection = 'FLAT',
     this.oiPriceSignal = 'NEUTRAL',
+    this.orderFlowDirection = 'NEUTRAL',
   });
 
   String _formatPrice(double value, {int digits = 6}) {
@@ -258,24 +260,18 @@ class DetailPageContent extends StatelessWidget {
             ],
             SetupStatusCard(setup: setupResult!),
             const SizedBox(height: 12),
-
-            // ✅ ANA KARAR KARTI
             DetailPageAnalysisHelpers.buildOiPriceAnalysisCard(
               oiDirection: oiDirection,
               priceDirection: priceDirection,
               oiPriceSignal: oiPriceSignal,
+              orderFlowDirection: orderFlowDirection,
               openInterestDisplay: openInterestDisplay,
             ),
             const SizedBox(height: 12),
-
-            // ✅ Destek kartı
             if (pumpAnalysis != null) ...[
               PumpAnalysisCard(result: pumpAnalysis!),
               const SizedBox(height: 12),
             ],
-
-            // ✅ Entry timing kaldırıldı
-
             ShortSetupCard(
               entry: _formatPrice(setupResult!.entry),
               stopLoss: _formatPrice(setupResult!.stopLoss),
