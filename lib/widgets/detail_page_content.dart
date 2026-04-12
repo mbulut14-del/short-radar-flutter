@@ -49,6 +49,30 @@ class DetailPageContent extends StatelessWidget {
     return value.toStringAsFixed(digits);
   }
 
+  String _openInterestTitle() {
+    final String trimmed = openInterestDisplay.trim();
+
+    if (trimmed.endsWith('↑')) {
+      return 'Open Interest (Son 30dk ⬆️)';
+    }
+    if (trimmed.endsWith('↓')) {
+      return 'Open Interest (Son 30dk ⬇️)';
+    }
+    return 'Open Interest (Son 30dk ↔️)';
+  }
+
+  String _openInterestValue() {
+    final List<String> parts = openInterestDisplay.trim().split(' ');
+    if (parts.isEmpty) return '-';
+
+    final String last = parts.last;
+    if (last == '↑' || last == '↓' || last == '-' || last == '↔️') {
+      return parts.sublist(0, parts.length - 1).join(' ').trim();
+    }
+
+    return openInterestDisplay.trim();
+  }
+
   Widget _cardShell({required Widget child}) {
     return Container(
       width: double.infinity,
@@ -260,7 +284,6 @@ class DetailPageContent extends StatelessWidget {
                   '${(((setupResult!.stopLoss - setupResult!.entry) / setupResult!.entry) * 100).toStringAsFixed(2)}%',
             ),
             const SizedBox(height: 18),
-
             Row(
               children: [
                 Expanded(
@@ -278,9 +301,7 @@ class DetailPageContent extends StatelessWidget {
                 ),
               ],
             ),
-
             const SizedBox(height: 8),
-
             Row(
               children: [
                 Expanded(
@@ -298,15 +319,13 @@ class DetailPageContent extends StatelessWidget {
                 ),
               ],
             ),
-
             const SizedBox(height: 8),
-
             Row(
               children: [
                 Expanded(
                   child: PriceBox(
-                    title: 'Open Interest (30dk)', // ✅ BURASI DÜZELTİLDİ
-                    value: openInterestDisplay,
+                    title: _openInterestTitle(),
+                    value: _openInterestValue(),
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -315,9 +334,7 @@ class DetailPageContent extends StatelessWidget {
                 ),
               ],
             ),
-
             const SizedBox(height: 18),
-
             RiskPanelCard(result: setupResult!),
             const SizedBox(height: 18),
             _buildWhyCard(),
