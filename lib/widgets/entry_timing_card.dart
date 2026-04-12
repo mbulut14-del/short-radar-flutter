@@ -9,12 +9,6 @@ class EntryTimingCard extends StatelessWidget {
     required this.result,
   });
 
-  Color _getColor() {
-    if (result.signal == 'Giriş uygun') return Colors.greenAccent;
-    if (result.signal == 'Hazır') return Colors.orangeAccent;
-    return Colors.white70;
-  }
-
   @override
   Widget build(BuildContext context) {
     final topReasons = result.reasons.take(3).toList();
@@ -40,18 +34,17 @@ class EntryTimingCard extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 12),
-
-          // ❌ DURUM KALDIRILDI
-
-          _row('Skor', '${result.score}/100',
-              valueColor: Colors.orangeAccent),
+          _row(
+            'Skor',
+            '${result.score}/100',
+            valueColor: Colors.orangeAccent,
+          ),
           const SizedBox(height: 8),
-          _row('Short hazır mı',
-              result.ready ? 'Evet' : 'Hayır',
-              valueColor: result.ready
-                  ? Colors.greenAccent
-                  : Colors.white70),
-
+          _row(
+            'Short hazır mı',
+            result.ready ? 'Evet' : 'Hayır',
+            valueColor: result.ready ? Colors.greenAccent : Colors.white70,
+          ),
           if (topReasons.isNotEmpty) ...[
             const SizedBox(height: 12),
             const Text(
