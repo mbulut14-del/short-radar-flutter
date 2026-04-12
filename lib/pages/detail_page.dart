@@ -44,6 +44,9 @@ class _DetailPageState extends State<DetailPage>
 
   bool _isFetchingDetail = false;
 
+  double? _previousOpenInterest;
+  String _openInterestDisplay = '-';
+
   @override
   void initState() {
     super.initState();
@@ -71,6 +74,38 @@ class _DetailPageState extends State<DetailPage>
     super.dispose();
   }
 
+  String _formatOpenInterest(double value) {
+    if (value <= 0) return '-';
+    if (value >= 1000000) {
+      return '${(value / 1000000).toStringAsFixed(2)}M';
+    }
+    if (value >= 1000) {
+      return '${(value / 1000).toStringAsFixed(2)}K';
+    }
+    return value.toStringAsFixed(0);
+  }
+
+  String _buildOpenInterestDisplay(double currentOI) {
+    if (currentOI <= 0) return '-';
+
+    final String formatted = _formatOpenInterest(currentOI);
+
+    if (_previousOpenInterest == null) {
+      _previousOpenInterest = currentOI;
+      return '$formatted -';
+    }
+
+    String direction = '-';
+    if (currentOI > _previousOpenInterest!) {
+      direction = '↑';
+    } else if (currentOI < _previousOpenInterest!) {
+      direction = '↓';
+    }
+
+    _previousOpenInterest = currentOI;
+    return '$formatted $direction';
+  }
+
   Future<void> fetchDetail({bool showLoader = true}) async {
     if (_isFetchingDetail) return;
     _isFetchingDetail = true;
@@ -89,6 +124,9 @@ class _DetailPageState extends State<DetailPage>
         fallbackCoin: selectedCoin,
       );
 
+      final String openInterestDisplay =
+          _buildOpenInterestDisplay(bundle.selectedCoin.openInterest);
+
       if (!mounted) return;
       setState(() {
         selectedCoin = bundle.selectedCoin;
@@ -97,6 +135,7 @@ class _DetailPageState extends State<DetailPage>
         setupResult = bundle.setupResult;
         pumpAnalysis = bundle.pumpAnalysis;
         entryTiming = bundle.entryTiming;
+        _openInterestDisplay = openInterestDisplay;
         detailLoading = false;
         detailError = '';
       });
@@ -178,6 +217,7 @@ class _DetailPageState extends State<DetailPage>
               entryTiming: entryTiming,
               visibleCandles: visibleCandles,
               selectedCoin: selectedCoin,
+              openInterestDisplay: _openInterestDisplay,
             ),
           ),
         ],
