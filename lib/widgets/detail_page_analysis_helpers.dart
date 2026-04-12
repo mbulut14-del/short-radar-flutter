@@ -17,6 +17,64 @@ class DetailPageAnalysisHelpers {
     return 'NEUTRAL';
   }
 
+  static String getCombinedSignal({
+    required String oiDirection,
+    required String priceDirection,
+    required String orderFlow,
+  }) {
+    final String oi = normalizeDirection(oiDirection);
+    final String price = normalizeDirection(priceDirection);
+    final String flow = normalizeOrderFlow(orderFlow);
+
+    if (oi == 'UP' && price == 'DOWN' && flow == 'SELL_PRESSURE') {
+      return 'STRONG_SHORT';
+    }
+
+    if (oi == 'UP' && price == 'UP' && flow == 'SELL_PRESSURE') {
+      return 'PUMP_RISK';
+    }
+
+    if (oi == 'DOWN' && price == 'UP' && flow == 'BUY_PRESSURE') {
+      return 'SHORT_SQUEEZE';
+    }
+
+    if (oi == 'DOWN' && price == 'DOWN' && flow == 'SELL_PRESSURE') {
+      return 'WEAK_DROP';
+    }
+
+    if (oi == 'FLAT' && price == 'FLAT' && flow == 'BUY_PRESSURE') {
+      return 'EARLY_ACCUMULATION';
+    }
+
+    if (oi == 'FLAT' && price == 'FLAT' && flow == 'SELL_PRESSURE') {
+      return 'EARLY_DISTRIBUTION';
+    }
+
+    return 'NEUTRAL';
+  }
+
+  static double getSignalStrength({
+    required String oiDirection,
+    required String priceDirection,
+    required String orderFlow,
+  }) {
+    final String oi = normalizeDirection(oiDirection);
+    final String price = normalizeDirection(priceDirection);
+    final String flow = normalizeOrderFlow(orderFlow);
+
+    int score = 0;
+
+    if (oi == 'UP') score++;
+    if (price == 'DOWN') score++;
+    if (flow == 'SELL_PRESSURE') score++;
+
+    if (oi == 'DOWN') score++;
+    if (price == 'UP') score++;
+    if (flow == 'BUY_PRESSURE') score++;
+
+    return score / 6;
+  }
+
   static String getOiDirection({
     required String oiDirection,
     required String openInterestDisplay,
@@ -132,6 +190,10 @@ class DetailPageAnalysisHelpers {
         return 'Short Squeeze Riski';
       case 'WEAK_DROP':
         return 'Zayıf Hareket';
+      case 'EARLY_ACCUMULATION':
+        return 'Erken Toplanma';
+      case 'EARLY_DISTRIBUTION':
+        return 'Erken Dağılım';
       default:
         return 'Kararsız / Nötr';
     }
@@ -147,6 +209,10 @@ class DetailPageAnalysisHelpers {
         return 'OI düşerken fiyat yükseliyor. Short kapanışları fiyatı yukarı itiyor olabilir.';
       case 'WEAK_DROP':
         return 'OI ve fiyat birlikte düşüyor. Hareket var ama baskı zayıf olabilir.';
+      case 'EARLY_ACCUMULATION':
+        return 'OI ve fiyat yatay kalırken alış baskısı öne çıkıyor. Erken bir birikim olabilir.';
+      case 'EARLY_DISTRIBUTION':
+        return 'OI ve fiyat yatay kalırken satış baskısı öne çıkıyor. Erken bir dağılım olabilir.';
       default:
         return 'Şu an net bir baskı veya güçlü fırsat görünmüyor.';
     }
@@ -182,6 +248,12 @@ class DetailPageAnalysisHelpers {
     }
     if (signal == 'WEAK_DROP' && flow == 'BUY_PRESSURE') {
       return 'Düşüşe tepki geliyor';
+    }
+    if (signal == 'EARLY_ACCUMULATION') {
+      return 'Erken birikim sinyali';
+    }
+    if (signal == 'EARLY_DISTRIBUTION') {
+      return 'Erken dağılım sinyali';
     }
     if (flow == 'SELL_PRESSURE') {
       return 'Satış tarafı önde';
@@ -223,6 +295,12 @@ class DetailPageAnalysisHelpers {
     if (signal == 'WEAK_DROP' && flow == 'BUY_PRESSURE') {
       return 'Düşüş görülse de emir akışında alıcılar devreye giriyor. Hareketin devamı zayıflayabilir.';
     }
+    if (signal == 'EARLY_ACCUMULATION') {
+      return 'Fiyat ve OI henüz net yön üretmiyor ancak alış tarafı erken üstünlük kuruyor olabilir.';
+    }
+    if (signal == 'EARLY_DISTRIBUTION') {
+      return 'Fiyat ve OI henüz net yön üretmiyor ancak satış tarafı erken üstünlük kuruyor olabilir.';
+    }
     if (flow == 'SELL_PRESSURE') {
       return 'Fiyat ve OI tarafı net bir yön üretmese de emir akışında satış tarafı daha baskın görünüyor.';
     }
@@ -242,6 +320,10 @@ class DetailPageAnalysisHelpers {
         return Colors.purpleAccent;
       case 'WEAK_DROP':
         return Colors.amberAccent;
+      case 'EARLY_ACCUMULATION':
+        return Colors.greenAccent;
+      case 'EARLY_DISTRIBUTION':
+        return Colors.redAccent;
       default:
         return Colors.white70;
     }
@@ -257,6 +339,10 @@ class DetailPageAnalysisHelpers {
         return Icons.north_rounded;
       case 'WEAK_DROP':
         return Icons.trending_down_rounded;
+      case 'EARLY_ACCUMULATION':
+        return Icons.north_east_rounded;
+      case 'EARLY_DISTRIBUTION':
+        return Icons.south_east_rounded;
       default:
         return Icons.remove_rounded;
     }
@@ -528,92 +614,4 @@ class DetailPageAnalysisHelpers {
       ),
     );
   }
-
-  static String getCombinedSignal({
-    required String oiDirection,
-    required String priceDirection,
-    required String orderFlow,
-  }) {
-    final oi = normalizeDirection(oiDirection);
-    final price = normalizeDirection(priceDirection);
-
-    if (oi == 'UP' && price == 'DOWN' && orderFlow == 'SELL_PRESSURE') {
-      return 'STRONG_SHORT';
-    }
-
-    if (oi == 'UP' && price == 'UP' && orderFlow == 'SELL_PRESSURE') {
-      return 'FAKE_PUMP';
-    }
-
-    if (oi == 'DOWN' && price == 'UP' && orderFlow == 'BUY_PRESSURE') {
-      return 'SHORT_SQUEEZE';
-    }
-
-    if (oi == 'DOWN' && price == 'DOWN' && orderFlow == 'SELL_PRESSURE') {
-      return 'WEAK_DROP';
-    }
-
-    if (oi == 'FLAT' && price == 'FLAT' && orderFlow == 'BUY_PRESSURE') {
-      return 'EARLY_ACCUMULATION';
-    }
-
-    if (oi == 'FLAT' && price == 'FLAT' && orderFlow == 'SELL_PRESSURE') {
-      return 'EARLY_DISTRIBUTION';
-    }
-
-    return 'NEUTRAL';
-  }
- // ===== YENİ SİNYAL MOTORU =====
-
-static String getCombinedSignal({
-  required String oiDirection,
-  required String priceDirection,
-  required String orderFlow,
-}) {
-  if (oiDirection == 'UP' &&
-      priceDirection == 'DOWN' &&
-      orderFlow == 'SELL_PRESSURE') {
-    return 'STRONG_SHORT';
-  }
-
-  if (oiDirection == 'UP' &&
-      priceDirection == 'UP' &&
-      orderFlow == 'SELL_PRESSURE') {
-    return 'PUMP_RISK';
-  }
-
-  if (oiDirection == 'DOWN' &&
-      priceDirection == 'UP' &&
-      orderFlow == 'BUY_PRESSURE') {
-    return 'SHORT_SQUEEZE';
-  }
-
-  if (oiDirection == 'DOWN' &&
-      priceDirection == 'DOWN' &&
-      orderFlow == 'SELL_PRESSURE') {
-    return 'WEAK_DROP';
-  }
-
-  return 'NEUTRAL';
-}
-
-// ===== GÜÇ SKORU =====
-
-static double getSignalStrength({
-  required String oiDirection,
-  required String priceDirection,
-  required String orderFlow,
-}) {
-  int score = 0;
-
-  if (oiDirection == 'UP') score++;
-  if (priceDirection == 'DOWN') score++;
-  if (orderFlow == 'SELL_PRESSURE') score++;
-
-  if (oiDirection == 'DOWN') score++;
-  if (priceDirection == 'UP') score++;
-  if (orderFlow == 'BUY_PRESSURE') score++;
-
-  return score / 6;
-} 
 }
