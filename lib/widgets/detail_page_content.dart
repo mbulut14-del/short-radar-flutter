@@ -70,11 +70,11 @@ class DetailPageContent extends StatelessWidget {
   String _getOiArrow() {
     switch (_getOiDirection()) {
       case 'up':
-        return '⬆️';
+        return '▲';
       case 'down':
-        return '⬇️';
+        return '▼';
       default:
-        return '↔️';
+        return '■';
     }
   }
 
@@ -116,7 +116,7 @@ class DetailPageContent extends StatelessWidget {
                   ),
                 ),
                 TextSpan(
-                  text: arrow,
+                  text: '($arrow)',
                   style: TextStyle(
                     color: valueColor,
                     fontSize: 12,
