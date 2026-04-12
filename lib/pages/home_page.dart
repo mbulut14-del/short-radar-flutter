@@ -38,6 +38,13 @@ class _HomePageState extends State<HomePage> {
   final Map<String, String> _priceDirectionMap = {};
   final Map<String, String> _oiPriceSignalMap = {};
 
+  // ✅ Order flow hazırlığı
+  final Map<String, String> _orderFlowMap = {};
+
+  // ✅ İleride Gate book_ticker bağlanınca kullanılacak alanlar
+  final Map<String, double> _bestBidSizeMap = {};
+  final Map<String, double> _bestAskSizeMap = {};
+
   static const int _historyLimit = 360; // 30dk / 5sn
 
   @override
@@ -122,6 +129,27 @@ class _HomePageState extends State<HomePage> {
     return 'NEUTRAL';
   }
 
+  // ✅ Yeni: order flow yönü
+  String _calculateOrderFlow(double bidSize, double askSize) {
+    if (bidSize > askSize * 1.2) return 'BUY_PRESSURE';
+    if (askSize > bidSize * 1.2) return 'SELL_PRESSURE';
+    return 'NEUTRAL';
+  }
+
+  // ✅ Şimdilik sadece sistem hazırlığı.
+  // Gate book_ticker bağlandığında bu metod kullanılacak.
+  void _updateOrderFlowForSymbol(String symbol) {
+    final double bidSize = _bestBidSizeMap[symbol] ?? 0;
+    final double askSize = _bestAskSizeMap[symbol] ?? 0;
+
+    if (bidSize <= 0 && askSize <= 0) {
+      _orderFlowMap[symbol] = 'NEUTRAL';
+      return;
+    }
+
+    _orderFlowMap[symbol] = _calculateOrderFlow(bidSize, askSize);
+  }
+
   CoinRadarData _withOiDirection(CoinRadarData coin, String direction) {
     return CoinRadarData(
       name: coin.name,
@@ -189,6 +217,9 @@ class _HomePageState extends State<HomePage> {
         _oiDirectionMap[coin.name] = oiDirection;
         _priceDirectionMap[coin.name] = priceDirection;
         _oiPriceSignalMap[coin.name] = oiPriceSignal;
+
+        // ✅ Şimdilik book_ticker bağlı olmadığı için NEUTRAL kalır
+        _updateOrderFlowForSymbol(coin.name);
 
         return _withOiDirection(coin, oiDirection);
       }).toList();
