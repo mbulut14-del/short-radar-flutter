@@ -34,17 +34,16 @@ class EntryTimingCard extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 12),
+
+          // ✅ SKOR
           _row(
             'Skor',
             '${result.score}/100',
             valueColor: Colors.orangeAccent,
           ),
-          const SizedBox(height: 8),
-          _row(
-            'Short hazır mı',
-            result.ready ? 'Evet' : 'Hayır',
-            valueColor: result.ready ? Colors.greenAccent : Colors.white70,
-          ),
+
+          // ❌ SHORT HAZIR MI KALDIRILDI
+
           if (topReasons.isNotEmpty) ...[
             const SizedBox(height: 12),
             const Text(
@@ -56,6 +55,7 @@ class EntryTimingCard extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 8),
+
             ...topReasons.map(
               (e) => Padding(
                 padding: const EdgeInsets.only(bottom: 6),
