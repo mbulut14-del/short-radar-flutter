@@ -30,7 +30,15 @@ class _HomePageState extends State<HomePage> {
   // ✅ Her coin için OI geçmişi
   final Map<String, List<double>> _oiHistory = {};
 
+  // ✅ Her coin için fiyat geçmişi
+  final Map<String, List<double>> _priceHistory = {};
+
+  // ✅ Gelecek adımlarda kullanmak için yön/sinyal hafızası
+  final Map<String, String> _priceDirectionMap = {};
+  final Map<String, String> _oiPriceSignalMap = {};
+
   static const int _oiHistoryLimit = 360; // 30dk / 5sn
+  static const int _priceHistoryLimit = 360; // 30dk / 5sn
 
   @override
   void initState() {
@@ -60,6 +68,16 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
+  void _updatePriceHistory(String symbol, double price) {
+    final history = _priceHistory.putIfAbsent(symbol, () => <double>[]);
+
+    history.add(price);
+
+    if (history.length > _priceHistoryLimit) {
+      history.removeAt(0);
+    }
+  }
+
   String _calculateOiDirection(String symbol) {
     final history = _oiHistory[symbol];
 
@@ -77,6 +95,44 @@ class _HomePageState extends State<HomePage> {
     if (changePercent > 1) return 'UP';
     if (changePercent < -1) return 'DOWN';
     return 'FLAT';
+  }
+
+  String _calculatePriceDirection(String symbol) {
+    final history = _priceHistory[symbol];
+
+    if (history == null || history.length < 2) {
+      return 'FLAT';
+    }
+
+    final double first = history.first;
+    final double last = history.last;
+
+    if (first <= 0) return 'FLAT';
+
+    final double changePercent = ((last - first) / first) * 100;
+
+    if (changePercent > 0.8) return 'UP';
+    if (changePercent < -0.8) return 'DOWN';
+    return 'FLAT';
+  }
+
+  String _calculateOiPriceSignal({
+    required String oiDirection,
+    required String priceDirection,
+  }) {
+    if (oiDirection == 'UP' && priceDirection == 'DOWN') {
+      return 'STRONG_SHORT';
+    }
+    if (oiDirection == 'UP' && priceDirection == 'UP') {
+      return 'PUMP_RISK';
+    }
+    if (oiDirection == 'DOWN' && priceDirection == 'UP') {
+      return 'SHORT_SQUEEZE';
+    }
+    if (oiDirection == 'DOWN' && priceDirection == 'DOWN') {
+      return 'WEAK_DROP';
+    }
+    return 'NEUTRAL';
   }
 
   CoinRadarData _withOiDirection(CoinRadarData coin, String direction) {
@@ -134,8 +190,19 @@ class _HomePageState extends State<HomePage> {
 
       final List<CoinRadarData> allCoins = rawCoins.map((coin) {
         _updateOiHistory(coin.name, coin.openInterest);
-        final String direction = _calculateOiDirection(coin.name);
-        return _withOiDirection(coin, direction);
+        _updatePriceHistory(coin.name, coin.lastPrice);
+
+        final String oiDirection = _calculateOiDirection(coin.name);
+        final String priceDirection = _calculatePriceDirection(coin.name);
+        final String oiPriceSignal = _calculateOiPriceSignal(
+          oiDirection: oiDirection,
+          priceDirection: priceDirection,
+        );
+
+        _priceDirectionMap[coin.name] = priceDirection;
+        _oiPriceSignalMap[coin.name] = oiPriceSignal;
+
+        return _withOiDirection(coin, oiDirection);
       }).toList();
 
       final List<CoinRadarData> sortedByChange = [...allCoins]
