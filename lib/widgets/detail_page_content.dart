@@ -5,7 +5,6 @@ import '../models/coin_radar_data.dart';
 import '../models/entry_timing_result.dart';
 import '../models/pump_analysis_result.dart';
 import '../models/short_setup_result.dart';
-import 'entry_timing_card.dart';
 import 'price_box.dart';
 import 'pump_analysis_card.dart';
 import 'risk_panel_card.dart';
@@ -27,7 +26,7 @@ class DetailPageContent extends StatelessWidget {
   final CoinRadarData selectedCoin;
   final String openInterestDisplay;
 
-  // ✅ YENİ: home_page tarafında hesaplanan canlı yön/sinyal verileri
+  // ✅ HomePage'den gelen canlı yön/sinyal verileri
   final String oiDirection;
   final String priceDirection;
   final String oiPriceSignal;
@@ -548,10 +547,19 @@ class DetailPageContent extends StatelessWidget {
           else if (hasData) ...[
             SetupStatusCard(setup: setupResult!),
             const SizedBox(height: 12),
-            if (pumpAnalysis != null) PumpAnalysisCard(result: pumpAnalysis!),
+
+            // ✅ ANA KARAR KARTI ÖNE ALINDI
+            _buildOiPriceAnalysisCard(),
             const SizedBox(height: 12),
-            if (entryTiming != null) EntryTimingCard(result: entryTiming!),
-            const SizedBox(height: 12),
+
+            // ✅ Pump analizi artık destek kartı
+            if (pumpAnalysis != null) ...[
+              PumpAnalysisCard(result: pumpAnalysis!),
+              const SizedBox(height: 12),
+            ],
+
+            // ✅ Giriş zamanı kartı kaldırıldı
+
             ShortSetupCard(
               entry: _formatPrice(setupResult!.entry),
               stopLoss: _formatPrice(setupResult!.stopLoss),
@@ -609,11 +617,6 @@ class DetailPageContent extends StatelessWidget {
                 ),
               ],
             ),
-            const SizedBox(height: 12),
-
-            // ✅ YENİ: OI + Fiyat sinyal kartı
-            _buildOiPriceAnalysisCard(),
-
             const SizedBox(height: 18),
             RiskPanelCard(result: setupResult!),
             const SizedBox(height: 18),
