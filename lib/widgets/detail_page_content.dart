@@ -49,28 +49,81 @@ class DetailPageContent extends StatelessWidget {
     return value.toStringAsFixed(digits);
   }
 
-  String _openInterestTitle() {
-    final String trimmed = openInterestDisplay.trim();
-
-    if (trimmed.endsWith('↑')) {
-      return 'Open Interest (Son 30dk ⬆️)';
-    }
-    if (trimmed.endsWith('↓')) {
-      return 'Open Interest (Son 30dk ⬇️)';
-    }
-    return 'Open Interest (Son 30dk ↔️)';
+  String _getOiDirection() {
+    final String text = openInterestDisplay.trim();
+    if (text.endsWith('↑')) return 'up';
+    if (text.endsWith('↓')) return 'down';
+    return 'flat';
   }
 
-  String _openInterestValue() {
-    final List<String> parts = openInterestDisplay.trim().split(' ');
+  Color _getOiColor() {
+    switch (_getOiDirection()) {
+      case 'up':
+        return Colors.greenAccent;
+      case 'down':
+        return Colors.redAccent;
+      default:
+        return Colors.yellowAccent;
+    }
+  }
+
+  String _getOiArrow() {
+    switch (_getOiDirection()) {
+      case 'up':
+        return '⬆️';
+      case 'down':
+        return '⬇️';
+      default:
+        return '↔️';
+    }
+  }
+
+  String _getOiValue() {
+    final String text = openInterestDisplay.trim();
+    final List<String> parts = text.split(' ');
     if (parts.isEmpty) return '-';
 
     final String last = parts.last;
-    if (last == '↑' || last == '↓' || last == '-' || last == '↔️') {
+    if (last == '↑' || last == '↓' || last == '-') {
       return parts.sublist(0, parts.length - 1).join(' ').trim();
     }
 
-    return openInterestDisplay.trim();
+    return text;
+  }
+
+  Widget _buildOpenInterestBox() {
+    final Color oiColor = _getOiColor();
+
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.black,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.white12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Open Interest (Son 30dk) ${_getOiArrow()}',
+            style: TextStyle(
+              color: oiColor,
+              fontSize: 12,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            _getOiValue(),
+            style: TextStyle(
+              color: oiColor,
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   Widget _cardShell({required Widget child}) {
@@ -323,10 +376,7 @@ class DetailPageContent extends StatelessWidget {
             Row(
               children: [
                 Expanded(
-                  child: PriceBox(
-                    title: _openInterestTitle(),
-                    value: _openInterestValue(),
-                  ),
+                  child: _buildOpenInterestBox(),
                 ),
                 const SizedBox(width: 8),
                 const Expanded(
