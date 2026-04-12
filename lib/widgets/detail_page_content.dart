@@ -260,6 +260,7 @@ class DetailPageContent extends StatelessWidget {
                   '${(((setupResult!.stopLoss - setupResult!.entry) / setupResult!.entry) * 100).toStringAsFixed(2)}%',
             ),
             const SizedBox(height: 18),
+
             Row(
               children: [
                 Expanded(
@@ -277,7 +278,9 @@ class DetailPageContent extends StatelessWidget {
                 ),
               ],
             ),
+
             const SizedBox(height: 8),
+
             Row(
               children: [
                 Expanded(
@@ -295,12 +298,14 @@ class DetailPageContent extends StatelessWidget {
                 ),
               ],
             ),
+
             const SizedBox(height: 8),
+
             Row(
               children: [
                 Expanded(
                   child: PriceBox(
-                    title: 'Open Interest',
+                    title: 'Open Interest (30dk)', // ✅ BURASI DÜZELTİLDİ
                     value: openInterestDisplay,
                   ),
                 ),
@@ -310,7 +315,9 @@ class DetailPageContent extends StatelessWidget {
                 ),
               ],
             ),
+
             const SizedBox(height: 18),
+
             RiskPanelCard(result: setupResult!),
             const SizedBox(height: 18),
             _buildWhyCard(),
