@@ -41,8 +41,8 @@ class EntryTimingCard extends StatelessWidget {
           ),
           const SizedBox(height: 12),
 
-          _row('Durum', result.signal, valueColor: _getColor()),
-          const SizedBox(height: 8),
+          // ❌ DURUM KALDIRILDI
+
           _row('Skor', '${result.score}/100',
               valueColor: Colors.orangeAccent),
           const SizedBox(height: 8),
