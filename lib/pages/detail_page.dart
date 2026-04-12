@@ -13,10 +13,12 @@ import '../widgets/detail_page_content.dart';
 class DetailPage extends StatefulWidget {
   final CoinRadarData coinData;
   final CoinRadarData? leaderData;
+  final String oiDirection;
 
   const DetailPage({
     super.key,
     required this.coinData,
+    required this.oiDirection,
     this.leaderData,
   });
 
@@ -43,63 +45,17 @@ class _DetailPageState extends State<DetailPage>
   EntryTimingResult? entryTiming;
 
   bool _isFetchingDetail = false;
-
-  // =========================
-  // 🔥 30DK OI SİSTEMİ
-  // =========================
-
-  final List<double> _oiHistory = [];
   String _openInterestDisplay = '-';
-
-  static const int _maxHistory = 360; // 30dk (5sn veri)
-
-  String _formatOI(double value) {
-    if (value <= 0) return '-';
-    if (value >= 1000000) {
-      return '${(value / 1000000).toStringAsFixed(2)}M';
-    }
-    if (value >= 1000) {
-      return '${(value / 1000).toStringAsFixed(2)}K';
-    }
-    return value.toStringAsFixed(0);
-  }
-
-  String _calculateOITrend(double currentOI) {
-    if (currentOI <= 0) return '-';
-
-    // listeye ekle
-    _oiHistory.add(currentOI);
-
-    // max 360 veri tut
-    if (_oiHistory.length > _maxHistory) {
-      _oiHistory.removeAt(0);
-    }
-
-    // yeterli veri yoksa yön verme
-    if (_oiHistory.length < _maxHistory) {
-      return '${_formatOI(currentOI)} -';
-    }
-
-    // 30dk önceki veri
-    final double pastOI = _oiHistory.first;
-
-    String direction = '-';
-    if (currentOI > pastOI) {
-      direction = '↑';
-    } else if (currentOI < pastOI) {
-      direction = '↓';
-    }
-
-    return '${_formatOI(currentOI)} $direction';
-  }
-
-  // =========================
 
   @override
   void initState() {
     super.initState();
     contractName = widget.coinData.name;
     selectedCoin = widget.coinData;
+    _openInterestDisplay = _buildOpenInterestDisplay(
+      widget.coinData.openInterest,
+      widget.oiDirection,
+    );
 
     _spinnerController = AnimationController(
       vsync: this,
@@ -122,6 +78,30 @@ class _DetailPageState extends State<DetailPage>
     super.dispose();
   }
 
+  String _formatOI(double value) {
+    if (value <= 0) return '-';
+    if (value >= 1000000) {
+      return '${(value / 1000000).toStringAsFixed(2)}M';
+    }
+    if (value >= 1000) {
+      return '${(value / 1000).toStringAsFixed(2)}K';
+    }
+    return value.toStringAsFixed(0);
+  }
+
+  String _buildOpenInterestDisplay(double currentOI, String direction) {
+    final String formatted = _formatOI(currentOI);
+
+    switch (direction) {
+      case 'UP':
+        return '$formatted ↑';
+      case 'DOWN':
+        return '$formatted ↓';
+      default:
+        return '$formatted -';
+    }
+  }
+
   Future<void> fetchDetail({bool showLoader = true}) async {
     if (_isFetchingDetail) return;
     _isFetchingDetail = true;
@@ -140,9 +120,6 @@ class _DetailPageState extends State<DetailPage>
         fallbackCoin: selectedCoin,
       );
 
-      final String oiDisplay =
-          _calculateOITrend(bundle.selectedCoin.openInterest);
-
       if (!mounted) return;
       setState(() {
         selectedCoin = bundle.selectedCoin;
@@ -151,7 +128,10 @@ class _DetailPageState extends State<DetailPage>
         setupResult = bundle.setupResult;
         pumpAnalysis = bundle.pumpAnalysis;
         entryTiming = bundle.entryTiming;
-        _openInterestDisplay = oiDisplay;
+        _openInterestDisplay = _buildOpenInterestDisplay(
+          bundle.selectedCoin.openInterest,
+          widget.oiDirection,
+        );
         detailLoading = false;
         detailError = '';
       });
