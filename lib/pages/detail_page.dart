@@ -13,13 +13,23 @@ import '../widgets/detail_page_content.dart';
 class DetailPage extends StatefulWidget {
   final CoinRadarData coinData;
   final CoinRadarData? leaderData;
+
+  // ✅ ZATEN VAR
   final String oiDirection;
+
+  // ✅ YENİ EKLENDİ
+  final String priceDirection;
+  final String oiPriceSignal;
 
   const DetailPage({
     super.key,
     required this.coinData,
     required this.oiDirection,
     this.leaderData,
+
+    // ✅ DEFAULT VERDİK (crash olmasın diye)
+    this.priceDirection = 'FLAT',
+    this.oiPriceSignal = 'NEUTRAL',
   });
 
   @override
@@ -52,6 +62,7 @@ class _DetailPageState extends State<DetailPage>
     super.initState();
     contractName = widget.coinData.name;
     selectedCoin = widget.coinData;
+
     _openInterestDisplay = _buildOpenInterestDisplay(
       widget.coinData.openInterest,
       widget.oiDirection,
@@ -128,10 +139,12 @@ class _DetailPageState extends State<DetailPage>
         setupResult = bundle.setupResult;
         pumpAnalysis = bundle.pumpAnalysis;
         entryTiming = bundle.entryTiming;
+
         _openInterestDisplay = _buildOpenInterestDisplay(
           bundle.selectedCoin.openInterest,
           widget.oiDirection,
         );
+
         detailLoading = false;
         detailError = '';
       });
@@ -214,6 +227,11 @@ class _DetailPageState extends State<DetailPage>
               visibleCandles: visibleCandles,
               selectedCoin: selectedCoin,
               openInterestDisplay: _openInterestDisplay,
+
+              // ✅ KRİTİK BAĞLANTI
+              oiDirection: widget.oiDirection,
+              priceDirection: widget.priceDirection,
+              oiPriceSignal: widget.oiPriceSignal,
             ),
           ),
         ],
