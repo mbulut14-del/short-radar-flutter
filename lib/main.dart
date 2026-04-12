@@ -48,7 +48,10 @@ class MyApp extends StatelessWidget {
           final coin = settings.arguments as CoinRadarData;
 
           return MaterialPageRoute(
-            builder: (_) => DetailPage(coinData: coin),
+            builder: (_) => DetailPage(
+              coinData: coin,
+              oiDirection: 'FLAT',
+            ),
           );
         }
         return null;
