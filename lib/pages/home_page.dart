@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
@@ -27,29 +28,41 @@ class _HomePageState extends State<HomePage> {
   String? lastNotifiedCoin;
   DateTime? lastNotifyTime;
 
-  // ✅ Her coin için OI geçmişi
+  // ✅ OI geçmişi
   final Map<String, List<double>> _oiHistory = {};
 
-  // ✅ Her coin için fiyat geçmişi
+  // ✅ Fiyat geçmişi
   final Map<String, List<double>> _priceHistory = {};
 
-  // ✅ Hesaplanan yön ve sinyal cache
+  // ✅ Hesaplanan yön/sinyal cache
   final Map<String, String> _oiDirectionMap = {};
   final Map<String, String> _priceDirectionMap = {};
   final Map<String, String> _oiPriceSignalMap = {};
 
-  // ✅ Order flow hazırlığı
+  // ✅ Order flow
   final Map<String, String> _orderFlowMap = {};
-
-  // ✅ İleride Gate book_ticker bağlanınca kullanılacak alanlar
+  final Map<String, double> _bestBidPriceMap = {};
+  final Map<String, double> _bestAskPriceMap = {};
   final Map<String, double> _bestBidSizeMap = {};
   final Map<String, double> _bestAskSizeMap = {};
 
+  // ✅ WebSocket
+  WebSocket? _bookTickerSocket;
+  StreamSubscription? _bookTickerSubscription;
+  Timer? _bookTickerReconnectTimer;
+  bool _isConnectingBookTicker = false;
+  bool _manuallyClosedBookTicker = false;
+
+  final Set<String> _desiredBookTickerSymbols = <String>{};
+  final Set<String> _subscribedBookTickerSymbols = <String>{};
+
   static const int _historyLimit = 360; // 30dk / 5sn
+  static const String _gateUsdtWsUrl = 'wss://fx-ws.gateio.ws/v4/ws/usdt';
 
   @override
   void initState() {
     super.initState();
+    _connectBookTicker();
     fetchCoins();
 
     _refreshTimer = Timer.periodic(const Duration(seconds: 5), (_) {
@@ -62,6 +75,12 @@ class _HomePageState extends State<HomePage> {
   @override
   void dispose() {
     _refreshTimer?.cancel();
+
+    _bookTickerReconnectTimer?.cancel();
+    _bookTickerSubscription?.cancel();
+    _manuallyClosedBookTicker = true;
+    _bookTickerSocket?.close();
+
     super.dispose();
   }
 
@@ -129,15 +148,12 @@ class _HomePageState extends State<HomePage> {
     return 'NEUTRAL';
   }
 
-  // ✅ Yeni: order flow yönü
-  String _calculateOrderFlow(double bidSize, double askSize) {
-    if (bidSize > askSize * 1.2) return 'BUY_PRESSURE';
-    if (askSize > bidSize * 1.2) return 'SELL_PRESSURE';
+  String _calculateOrderFlow(double bid, double ask) {
+    if (bid > ask * 1.2) return 'BUY_PRESSURE';
+    if (ask > bid * 1.2) return 'SELL_PRESSURE';
     return 'NEUTRAL';
   }
 
-  // ✅ Şimdilik sadece sistem hazırlığı.
-  // Gate book_ticker bağlandığında bu metod kullanılacak.
   void _updateOrderFlowForSymbol(String symbol) {
     final double bidSize = _bestBidSizeMap[symbol] ?? 0;
     final double askSize = _bestAskSizeMap[symbol] ?? 0;
@@ -148,6 +164,12 @@ class _HomePageState extends State<HomePage> {
     }
 
     _orderFlowMap[symbol] = _calculateOrderFlow(bidSize, askSize);
+  }
+
+  double _parseToDouble(dynamic value) {
+    if (value == null) return 0;
+    if (value is num) return value.toDouble();
+    return double.tryParse(value.toString()) ?? 0;
   }
 
   CoinRadarData _withOiDirection(CoinRadarData coin, String direction) {
@@ -165,6 +187,126 @@ class _HomePageState extends State<HomePage> {
       biasLabel: coin.biasLabel,
       note: coin.note,
     );
+  }
+
+  Future<void> _connectBookTicker() async {
+    if (_isConnectingBookTicker) return;
+    if (_bookTickerSocket != null) return;
+
+    _isConnectingBookTicker = true;
+
+    try {
+      final socket = await WebSocket.connect(
+        _gateUsdtWsUrl,
+        headers: const {
+          'X-Gate-Size-Decimal': '1',
+        },
+      );
+
+      socket.pingInterval = const Duration(seconds: 10);
+
+      _bookTickerSocket = socket;
+      _subscribedBookTickerSymbols.clear();
+
+      _bookTickerSubscription = socket.listen(
+        _handleBookTickerMessage,
+        onDone: _handleBookTickerClosed,
+        onError: (_) => _handleBookTickerClosed(),
+        cancelOnError: true,
+      );
+
+      _syncBookTickerSubscriptions();
+    } catch (_) {
+      _scheduleBookTickerReconnect();
+    } finally {
+      _isConnectingBookTicker = false;
+    }
+  }
+
+  void _handleBookTickerClosed() {
+    _bookTickerSubscription?.cancel();
+    _bookTickerSubscription = null;
+    _bookTickerSocket = null;
+    _subscribedBookTickerSymbols.clear();
+
+    if (!_manuallyClosedBookTicker) {
+      _scheduleBookTickerReconnect();
+    }
+  }
+
+  void _scheduleBookTickerReconnect() {
+    _bookTickerReconnectTimer?.cancel();
+    _bookTickerReconnectTimer = Timer(const Duration(seconds: 3), () {
+      if (mounted) {
+        _connectBookTicker();
+      }
+    });
+  }
+
+  void _sendBookTickerMessage({
+    required String event,
+    required String symbol,
+  }) {
+    final socket = _bookTickerSocket;
+    if (socket == null) return;
+
+    final Map<String, dynamic> message = {
+      'time': DateTime.now().millisecondsSinceEpoch ~/ 1000,
+      'channel': 'futures.book_ticker',
+      'event': event,
+      'payload': [symbol],
+    };
+
+    socket.add(jsonEncode(message));
+  }
+
+  void _syncBookTickerSubscriptions() {
+    final socket = _bookTickerSocket;
+    if (socket == null) return;
+
+    final Set<String> toSubscribe =
+        _desiredBookTickerSymbols.difference(_subscribedBookTickerSymbols);
+    final Set<String> toUnsubscribe =
+        _subscribedBookTickerSymbols.difference(_desiredBookTickerSymbols);
+
+    for (final symbol in toSubscribe) {
+      _sendBookTickerMessage(event: 'subscribe', symbol: symbol);
+      _subscribedBookTickerSymbols.add(symbol);
+    }
+
+    for (final symbol in toUnsubscribe) {
+      _sendBookTickerMessage(event: 'unsubscribe', symbol: symbol);
+      _subscribedBookTickerSymbols.remove(symbol);
+    }
+  }
+
+  void _handleBookTickerMessage(dynamic rawMessage) {
+    try {
+      final dynamic decoded = jsonDecode(rawMessage as String);
+      if (decoded is! Map<String, dynamic>) return;
+
+      if (decoded['channel'] != 'futures.book_ticker') return;
+      if (decoded['event'] != 'update') return;
+
+      final dynamic result = decoded['result'];
+      if (result is! Map<String, dynamic>) return;
+
+      final String symbol = (result['s'] ?? '').toString();
+      if (symbol.isEmpty) return;
+
+      _bestBidPriceMap[symbol] = _parseToDouble(result['b']);
+      _bestAskPriceMap[symbol] = _parseToDouble(result['a']);
+      _bestBidSizeMap[symbol] = _parseToDouble(result['B']);
+      _bestAskSizeMap[symbol] = _parseToDouble(result['A']);
+
+      _updateOrderFlowForSymbol(symbol);
+
+      if (mounted) {
+        setState(() {});
+      }
+    } catch (_) {
+      // Sessiz geç: tek bir bozuk mesaj yüzünden akış dursun istemiyoruz.
+    }
   }
 
   Future<void> fetchCoins() async {
@@ -218,7 +360,6 @@ class _HomePageState extends State<HomePage> {
         _priceDirectionMap[coin.name] = priceDirection;
         _oiPriceSignalMap[coin.name] = oiPriceSignal;
 
-        // ✅ Şimdilik book_ticker bağlı olmadığı için NEUTRAL kalır
         _updateOrderFlowForSymbol(coin.name);
 
         return _withOiDirection(coin, oiDirection);
@@ -235,9 +376,16 @@ class _HomePageState extends State<HomePage> {
         });
 
       final CoinRadarData leader = sortedByScore.first;
+      final List<CoinRadarData> topCoins = sortedByChange.take(10).toList();
+
+      _desiredBookTickerSymbols
+        ..clear()
+        ..addAll(topCoins.map((e) => e.name));
+
+      _syncBookTickerSubscriptions();
 
       setState(() {
-        coins = sortedByChange.take(10).toList();
+        coins = topCoins;
         radarLeader = leader;
         isLoading = false;
         errorText = '';
@@ -728,7 +876,7 @@ class _HomePageState extends State<HomePage> {
                     ...coins.asMap().entries.map((entry) {
                       final int index = entry.key + 1;
                       final CoinRadarData coin = entry.value;
-                      return _buildCoinCard(index, coin);
+           1           return _buildCoinCard(index, coin);
                     }),
                 ],
               ),
