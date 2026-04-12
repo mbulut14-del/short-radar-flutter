@@ -23,6 +23,7 @@ class CoinRadarData {
   final double indexPrice;
   final double volume24h;
   final double openInterest;
+  final String oiDirection;
   final int score;
   final String biasLabel;
   final String note;
@@ -36,6 +37,7 @@ class CoinRadarData {
     required this.indexPrice,
     required this.volume24h,
     required this.openInterest,
+    required this.oiDirection,
     required this.score,
     required this.biasLabel,
     required this.note,
@@ -62,6 +64,7 @@ class CoinRadarData {
       indexPrice: 0,
       volume24h: 0,
       openInterest: 0,
+      oiDirection: 'FLAT',
       score: score,
       biasLabel: _biasLabel(score),
       note: _noteText(score, changePercent, 0, 0, 0),
@@ -98,6 +101,7 @@ class CoinRadarData {
       indexPrice: indexPrice,
       volume24h: volume24h,
       openInterest: openInterest,
+      oiDirection: 'FLAT',
       score: score,
       biasLabel: _biasLabel(score),
       note: _noteText(
