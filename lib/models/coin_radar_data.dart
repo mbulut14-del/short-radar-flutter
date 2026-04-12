@@ -22,6 +22,7 @@ class CoinRadarData {
   final double markPrice;
   final double indexPrice;
   final double volume24h;
+  final double openInterest;
   final int score;
   final String biasLabel;
   final String note;
@@ -34,6 +35,7 @@ class CoinRadarData {
     required this.markPrice,
     required this.indexPrice,
     required this.volume24h,
+    required this.openInterest,
     required this.score,
     required this.biasLabel,
     required this.note,
@@ -59,6 +61,7 @@ class CoinRadarData {
       markPrice: 0,
       indexPrice: 0,
       volume24h: 0,
+      openInterest: 0,
       score: score,
       biasLabel: _biasLabel(score),
       note: _noteText(score, changePercent, 0, 0, 0),
@@ -73,6 +76,9 @@ class CoinRadarData {
     final double indexPrice = _parseDouble(json['index_price']);
     final double volume24h = _parseDouble(
       json['volume_24h_quote'] ?? json['volume_24h'] ?? 0,
+    );
+    final double openInterest = _parseDouble(
+      json['open_interest'] ?? json['total_size'] ?? 0,
     );
 
     final int score = _calculateScore(
@@ -91,6 +97,7 @@ class CoinRadarData {
       markPrice: markPrice,
       indexPrice: indexPrice,
       volume24h: volume24h,
+      openInterest: openInterest,
       score: score,
       biasLabel: _biasLabel(score),
       note: _noteText(
@@ -184,6 +191,8 @@ class CoinRadarData {
 
   String get changeText => _formatPercent(changePercent);
   String get fundingText => _formatFunding(fundingRate);
+  String get openInterestText =>
+      openInterest == 0 ? '-' : openInterest.toStringAsFixed(2);
 
   double get divergencePercent {
     if (indexPrice == 0) return 0;
