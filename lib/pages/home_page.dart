@@ -33,12 +33,12 @@ class _HomePageState extends State<HomePage> {
   // ✅ Her coin için fiyat geçmişi
   final Map<String, List<double>> _priceHistory = {};
 
-  // ✅ Gelecek adımlarda kullanmak için yön/sinyal hafızası
+  // ✅ Hesaplanan yön ve sinyal cache
+  final Map<String, String> _oiDirectionMap = {};
   final Map<String, String> _priceDirectionMap = {};
   final Map<String, String> _oiPriceSignalMap = {};
 
-  static const int _oiHistoryLimit = 360; // 30dk / 5sn
-  static const int _priceHistoryLimit = 360; // 30dk / 5sn
+  static const int _historyLimit = 360; // 30dk / 5sn
 
   @override
   void initState() {
@@ -63,7 +63,7 @@ class _HomePageState extends State<HomePage> {
 
     history.add(oi);
 
-    if (history.length > _oiHistoryLimit) {
+    if (history.length > _historyLimit) {
       history.removeAt(0);
     }
   }
@@ -73,14 +73,12 @@ class _HomePageState extends State<HomePage> {
 
     history.add(price);
 
-    if (history.length > _priceHistoryLimit) {
+    if (history.length > _historyLimit) {
       history.removeAt(0);
     }
   }
 
-  String _calculateOiDirection(String symbol) {
-    final history = _oiHistory[symbol];
-
+  String _calculateDirectionFromHistory(List<double>? history) {
     if (history == null || history.length < 2) {
       return 'FLAT';
     }
@@ -97,23 +95,12 @@ class _HomePageState extends State<HomePage> {
     return 'FLAT';
   }
 
+  String _calculateOiDirection(String symbol) {
+    return _calculateDirectionFromHistory(_oiHistory[symbol]);
+  }
+
   String _calculatePriceDirection(String symbol) {
-    final history = _priceHistory[symbol];
-
-    if (history == null || history.length < 2) {
-      return 'FLAT';
-    }
-
-    final double first = history.first;
-    final double last = history.last;
-
-    if (first <= 0) return 'FLAT';
-
-    final double changePercent = ((last - first) / first) * 100;
-
-    if (changePercent > 0.8) return 'UP';
-    if (changePercent < -0.8) return 'DOWN';
-    return 'FLAT';
+    return _calculateDirectionFromHistory(_priceHistory[symbol]);
   }
 
   String _calculateOiPriceSignal({
@@ -199,6 +186,7 @@ class _HomePageState extends State<HomePage> {
           priceDirection: priceDirection,
         );
 
+        _oiDirectionMap[coin.name] = oiDirection;
         _priceDirectionMap[coin.name] = priceDirection;
         _oiPriceSignalMap[coin.name] = oiPriceSignal;
 
@@ -215,7 +203,7 @@ class _HomePageState extends State<HomePage> {
           return b.changePercent.compareTo(a.changePercent);
         });
 
-      final leader = sortedByScore.first;
+      final CoinRadarData leader = sortedByScore.first;
 
       setState(() {
         coins = sortedByChange.take(10).toList();
@@ -227,8 +215,8 @@ class _HomePageState extends State<HomePage> {
       if (leader.score >= 70 && leader.fundingRate > 0) {
         final now = DateTime.now();
 
-        final isSameCoin = lastNotifiedCoin == leader.name;
-        final isTooSoon = lastNotifyTime != null &&
+        final bool isSameCoin = lastNotifiedCoin == leader.name;
+        final bool isTooSoon = lastNotifyTime != null &&
             now.difference(lastNotifyTime!).inMinutes < 30;
 
         if (!isSameCoin || !isTooSoon) {
@@ -511,6 +499,10 @@ class _HomePageState extends State<HomePage> {
   }
 
   Widget _buildCoinCard(int index, CoinRadarData coin) {
+    final String oiDirection = _oiDirectionMap[coin.name] ?? coin.oiDirection;
+    final String priceDirection = _priceDirectionMap[coin.name] ?? 'FLAT';
+    final String oiPriceSignal = _oiPriceSignalMap[coin.name] ?? 'NEUTRAL';
+
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
       child: GestureDetector(
@@ -520,7 +512,9 @@ class _HomePageState extends State<HomePage> {
             MaterialPageRoute(
               builder: (_) => DetailPage(
                 coinData: coin,
-                oiDirection: coin.oiDirection,
+                oiDirection: oiDirection,
+                priceDirection: priceDirection,
+                oiPriceSignal: oiPriceSignal,
               ),
             ),
           );
@@ -692,8 +686,6 @@ class _HomePageState extends State<HomePage> {
               child: ListView(
                 padding: const EdgeInsets.all(12),
                 children: [
-                  // ❌ ÜST KARTLAR KALDIRILDI
-
                   if (errorText.isNotEmpty) ...[
                     const SizedBox(height: 10),
                     _buildErrorCard(),
