@@ -28,25 +28,19 @@ class _HomePageState extends State<HomePage> {
   String? lastNotifiedCoin;
   DateTime? lastNotifyTime;
 
-  // Her coin için OI geçmişi
   final Map<String, List<double>> _oiHistory = {};
-
-  // Her coin için fiyat geçmişi
   final Map<String, List<double>> _priceHistory = {};
 
-  // Hesaplanan yön ve sinyal cache
   final Map<String, String> _oiDirectionMap = {};
   final Map<String, String> _priceDirectionMap = {};
   final Map<String, String> _oiPriceSignalMap = {};
 
-  // Order flow
   final Map<String, String> _orderFlowMap = {};
   final Map<String, double> _bestBidPriceMap = {};
   final Map<String, double> _bestAskPriceMap = {};
   final Map<String, double> _bestBidSizeMap = {};
   final Map<String, double> _bestAskSizeMap = {};
 
-  // WebSocket
   WebSocket? _bookTickerSocket;
   StreamSubscription<dynamic>? _bookTickerSubscription;
   Timer? _bookTickerReconnectTimer;
@@ -56,7 +50,7 @@ class _HomePageState extends State<HomePage> {
   final Set<String> _desiredBookTickerSymbols = <String>{};
   final Set<String> _subscribedBookTickerSymbols = <String>{};
 
-  static const int _historyLimit = 360; // 30dk / 5sn
+  static const int _historyLimit = 360;
   static const String _gateUsdtWsUrl = 'wss://fx-ws.gateio.ws/v4/ws/usdt';
 
   @override
@@ -86,7 +80,6 @@ class _HomePageState extends State<HomePage> {
 
   void _updateOiHistory(String symbol, double oi) {
     final history = _oiHistory.putIfAbsent(symbol, () => <double>[]);
-
     history.add(oi);
 
     if (history.length > _historyLimit) {
@@ -96,7 +89,6 @@ class _HomePageState extends State<HomePage> {
 
   void _updatePriceHistory(String symbol, double price) {
     final history = _priceHistory.putIfAbsent(symbol, () => <double>[]);
-
     history.add(price);
 
     if (history.length > _historyLimit) {
@@ -313,9 +305,7 @@ class _HomePageState extends State<HomePage> {
       if (mounted) {
         setState(() {});
       }
-    } catch (_) {
-      // Tek bir bozuk mesaj yüzünden akış dursun istemiyoruz.
-    }
+    } catch (_) {}
   }
 
   Future<void> fetchCoins() async {
@@ -463,205 +453,6 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  Widget _buildRadarHero() {
-    final CoinRadarData? leader = radarLeader;
-    if (leader == null) {
-      return SizedBox(
-        height: 150,
-        child: Stack(
-          children: [
-            Positioned(
-              top: 0,
-              right: 0,
-              child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                decoration: BoxDecoration(
-                  color: Colors.black.withOpacity(0.55),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                    color: isLoading ? Colors.orangeAccent : Colors.greenAccent,
-                  ),
-                ),
-                child: Text(
-                  isLoading ? 'Yükleniyor' : 'Canlı Veri',
-                  style: TextStyle(
-                    color:
-                        isLoading ? Colors.orangeAccent : Colors.greenAccent,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
-      );
-    }
-
-    final Color scoreColor = leader.score >= 75
-        ? Colors.redAccent
-        : leader.score >= 60
-            ? Colors.orangeAccent
-            : leader.score >= 45
-                ? Colors.amberAccent
-                : Colors.greenAccent;
-
-    return SizedBox(
-      height: 150,
-      child: Stack(
-        children: [
-          Positioned(
-            top: 0,
-            right: 0,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-              decoration: BoxDecoration(
-                color: Colors.black.withOpacity(0.55),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                  color: isLoading ? Colors.orangeAccent : Colors.greenAccent,
-                ),
-              ),
-              child: Text(
-                isLoading ? 'Yükleniyor' : 'Canlı Veri',
-                style: TextStyle(
-                  color: isLoading ? Colors.orangeAccent : Colors.greenAccent,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ),
-          ),
-          Positioned(
-            left: 0,
-            right: 0,
-            bottom: 0,
-            child: Container(
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                color: Colors.black.withOpacity(0.55),
-                borderRadius: BorderRadius.circular(24),
-                border: Border.all(
-                  color: scoreColor.withOpacity(0.75),
-                  width: 1.4,
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: scoreColor.withOpacity(0.18),
-                    blurRadius: 18,
-                    spreadRadius: 1,
-                  ),
-                ],
-              ),
-              child: Row(
-                children: [
-                  Container(
-                    width: 74,
-                    height: 74,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: Colors.black.withOpacity(0.55),
-                      border: Border.all(color: scoreColor, width: 3),
-                      boxShadow: [
-                        BoxShadow(
-                          color: scoreColor.withOpacity(0.35),
-                          blurRadius: 16,
-                          spreadRadius: 2,
-                        ),
-                      ],
-                    ),
-                    alignment: Alignment.center,
-                    child: Text(
-                      '${leader.score}',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 26,
-                        fontWeight: FontWeight.w900,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 14),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'EN GÜÇLÜ SHORT ADAYI',
-                          style: TextStyle(
-                            color: scoreColor,
-                            fontSize: 12,
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          leader.name,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 20,
-                            fontWeight: FontWeight.w900,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        Wrap(
-                          spacing: 10,
-                          runSpacing: 6,
-                          children: [
-                            _miniInfo('Skor', '${leader.score}'),
-                            _miniInfo('Değişim', leader.changeText),
-                            _miniInfo('Funding', leader.fundingText),
-                            _miniInfo('Bias', leader.biasLabel),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildInfoCard() {
-    if (radarLeader == null) return const SizedBox.shrink();
-
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: Colors.black.withOpacity(0.32),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: Colors.orangeAccent.withOpacity(0.45),
-        ),
-      ),
-      child: Row(
-        children: [
-          const Icon(
-            Icons.radar_rounded,
-            color: Colors.orangeAccent,
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              radarLeader!.note,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 13,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _buildErrorCard() {
     if (errorText.isEmpty) return const SizedBox.shrink();
 
@@ -690,6 +481,7 @@ class _HomePageState extends State<HomePage> {
     final String oiDirection = _oiDirectionMap[coin.name] ?? coin.oiDirection;
     final String priceDirection = _priceDirectionMap[coin.name] ?? 'FLAT';
     final String oiPriceSignal = _oiPriceSignalMap[coin.name] ?? 'NEUTRAL';
+    final String orderFlowDirection = _orderFlowMap[coin.name] ?? 'NEUTRAL';
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
@@ -703,6 +495,7 @@ class _HomePageState extends State<HomePage> {
                 oiDirection: oiDirection,
                 priceDirection: priceDirection,
                 oiPriceSignal: oiPriceSignal,
+                orderFlowDirection: orderFlowDirection,
               ),
             ),
           );
