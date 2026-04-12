@@ -3,12 +3,12 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:http/http.dart' as http;
 
+import '../main.dart';
 import '../models/coin_radar_data.dart';
 import 'detail_page.dart';
-import '../main.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -28,27 +28,27 @@ class _HomePageState extends State<HomePage> {
   String? lastNotifiedCoin;
   DateTime? lastNotifyTime;
 
-  // ✅ OI geçmişi
+  // Her coin için OI geçmişi
   final Map<String, List<double>> _oiHistory = {};
 
-  // ✅ Fiyat geçmişi
+  // Her coin için fiyat geçmişi
   final Map<String, List<double>> _priceHistory = {};
 
-  // ✅ Hesaplanan yön/sinyal cache
+  // Hesaplanan yön ve sinyal cache
   final Map<String, String> _oiDirectionMap = {};
   final Map<String, String> _priceDirectionMap = {};
   final Map<String, String> _oiPriceSignalMap = {};
 
-  // ✅ Order flow
+  // Order flow
   final Map<String, String> _orderFlowMap = {};
   final Map<String, double> _bestBidPriceMap = {};
   final Map<String, double> _bestAskPriceMap = {};
   final Map<String, double> _bestBidSizeMap = {};
   final Map<String, double> _bestAskSizeMap = {};
 
-  // ✅ WebSocket
+  // WebSocket
   WebSocket? _bookTickerSocket;
-  StreamSubscription? _bookTickerSubscription;
+  StreamSubscription<dynamic>? _bookTickerSubscription;
   Timer? _bookTickerReconnectTimer;
   bool _isConnectingBookTicker = false;
   bool _manuallyClosedBookTicker = false;
@@ -199,7 +199,7 @@ class _HomePageState extends State<HomePage> {
       final socket = await WebSocket.connect(
         _gateUsdtWsUrl,
         headers: const {
-          'X-Gate-Size-Decimal': '1',
+          'X-Gate-Channel-Id': 'short-radar-book-ticker',
         },
       );
 
@@ -282,7 +282,16 @@ class _HomePageState extends State<HomePage> {
 
   void _handleBookTickerMessage(dynamic rawMessage) {
     try {
-      final dynamic decoded = jsonDecode(rawMessage as String);
+      final String messageText;
+      if (rawMessage is String) {
+        messageText = rawMessage;
+      } else if (rawMessage is List<int>) {
+        messageText = utf8.decode(rawMessage);
+      } else {
+        return;
+      }
+
+      final dynamic decoded = jsonDecode(messageText);
       if (decoded is! Map<String, dynamic>) return;
 
       if (decoded['channel'] != 'futures.book_ticker') return;
@@ -305,7 +314,7 @@ class _HomePageState extends State<HomePage> {
         setState(() {});
       }
     } catch (_) {
-      // Sessiz geç: tek bir bozuk mesaj yüzünden akış dursun istemiyoruz.
+      // Tek bir bozuk mesaj yüzünden akış dursun istemiyoruz.
     }
   }
 
@@ -876,7 +885,7 @@ class _HomePageState extends State<HomePage> {
                     ...coins.asMap().entries.map((entry) {
                       final int index = entry.key + 1;
                       final CoinRadarData coin = entry.value;
-           1           return _buildCoinCard(index, coin);
+                      return _buildCoinCard(index, coin);
                     }),
                 ],
               ),
