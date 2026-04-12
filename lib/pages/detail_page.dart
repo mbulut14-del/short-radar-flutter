@@ -44,8 +44,56 @@ class _DetailPageState extends State<DetailPage>
 
   bool _isFetchingDetail = false;
 
-  double? _previousOpenInterest;
+  // =========================
+  // 🔥 30DK OI SİSTEMİ
+  // =========================
+
+  final List<double> _oiHistory = [];
   String _openInterestDisplay = '-';
+
+  static const int _maxHistory = 360; // 30dk (5sn veri)
+
+  String _formatOI(double value) {
+    if (value <= 0) return '-';
+    if (value >= 1000000) {
+      return '${(value / 1000000).toStringAsFixed(2)}M';
+    }
+    if (value >= 1000) {
+      return '${(value / 1000).toStringAsFixed(2)}K';
+    }
+    return value.toStringAsFixed(0);
+  }
+
+  String _calculateOITrend(double currentOI) {
+    if (currentOI <= 0) return '-';
+
+    // listeye ekle
+    _oiHistory.add(currentOI);
+
+    // max 360 veri tut
+    if (_oiHistory.length > _maxHistory) {
+      _oiHistory.removeAt(0);
+    }
+
+    // yeterli veri yoksa yön verme
+    if (_oiHistory.length < _maxHistory) {
+      return '${_formatOI(currentOI)} -';
+    }
+
+    // 30dk önceki veri
+    final double pastOI = _oiHistory.first;
+
+    String direction = '-';
+    if (currentOI > pastOI) {
+      direction = '↑';
+    } else if (currentOI < pastOI) {
+      direction = '↓';
+    }
+
+    return '${_formatOI(currentOI)} $direction';
+  }
+
+  // =========================
 
   @override
   void initState() {
@@ -74,38 +122,6 @@ class _DetailPageState extends State<DetailPage>
     super.dispose();
   }
 
-  String _formatOpenInterest(double value) {
-    if (value <= 0) return '-';
-    if (value >= 1000000) {
-      return '${(value / 1000000).toStringAsFixed(2)}M';
-    }
-    if (value >= 1000) {
-      return '${(value / 1000).toStringAsFixed(2)}K';
-    }
-    return value.toStringAsFixed(0);
-  }
-
-  String _buildOpenInterestDisplay(double currentOI) {
-    if (currentOI <= 0) return '-';
-
-    final String formatted = _formatOpenInterest(currentOI);
-
-    if (_previousOpenInterest == null) {
-      _previousOpenInterest = currentOI;
-      return '$formatted -';
-    }
-
-    String direction = '-';
-    if (currentOI > _previousOpenInterest!) {
-      direction = '↑';
-    } else if (currentOI < _previousOpenInterest!) {
-      direction = '↓';
-    }
-
-    _previousOpenInterest = currentOI;
-    return '$formatted $direction';
-  }
-
   Future<void> fetchDetail({bool showLoader = true}) async {
     if (_isFetchingDetail) return;
     _isFetchingDetail = true;
@@ -124,8 +140,8 @@ class _DetailPageState extends State<DetailPage>
         fallbackCoin: selectedCoin,
       );
 
-      final String openInterestDisplay =
-          _buildOpenInterestDisplay(bundle.selectedCoin.openInterest);
+      final String oiDisplay =
+          _calculateOITrend(bundle.selectedCoin.openInterest);
 
       if (!mounted) return;
       setState(() {
@@ -135,7 +151,7 @@ class _DetailPageState extends State<DetailPage>
         setupResult = bundle.setupResult;
         pumpAnalysis = bundle.pumpAnalysis;
         entryTiming = bundle.entryTiming;
-        _openInterestDisplay = openInterestDisplay;
+        _openInterestDisplay = oiDisplay;
         detailLoading = false;
         detailError = '';
       });
