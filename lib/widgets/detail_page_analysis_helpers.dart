@@ -9,6 +9,14 @@ class DetailPageAnalysisHelpers {
     return 'FLAT';
   }
 
+  static String normalizeOrderFlow(String value) {
+    final String v = value.trim().toUpperCase();
+
+    if (v == 'BUY_PRESSURE') return 'BUY_PRESSURE';
+    if (v == 'SELL_PRESSURE') return 'SELL_PRESSURE';
+    return 'NEUTRAL';
+  }
+
   static String getOiDirection({
     required String oiDirection,
     required String openInterestDisplay,
@@ -92,6 +100,28 @@ class DetailPageAnalysisHelpers {
     }
   }
 
+  static String getOrderFlowLabel(String orderFlowDirection) {
+    switch (normalizeOrderFlow(orderFlowDirection)) {
+      case 'BUY_PRESSURE':
+        return '↑ Alış baskısı';
+      case 'SELL_PRESSURE':
+        return '↓ Satış baskısı';
+      default:
+        return '→ Nötr';
+    }
+  }
+
+  static Color getOrderFlowColor(String orderFlowDirection) {
+    switch (normalizeOrderFlow(orderFlowDirection)) {
+      case 'BUY_PRESSURE':
+        return Colors.greenAccent;
+      case 'SELL_PRESSURE':
+        return Colors.redAccent;
+      default:
+        return Colors.yellowAccent;
+    }
+  }
+
   static String getSignalTitle(String oiPriceSignal) {
     switch (oiPriceSignal.toUpperCase()) {
       case 'STRONG_SHORT':
@@ -122,34 +152,84 @@ class DetailPageAnalysisHelpers {
     }
   }
 
-  static String getMarketStateTitle(String oiPriceSignal) {
-    switch (oiPriceSignal.toUpperCase()) {
-      case 'STRONG_SHORT':
-        return 'Satış baskısı artıyor';
-      case 'PUMP_RISK':
-        return 'Yukarı hareket şüpheli';
-      case 'SHORT_SQUEEZE':
-        return 'Yukarı yönlü sıkışma';
-      case 'WEAK_DROP':
-        return 'Zayıf düşüş';
-      default:
-        return 'Net baskı yok';
+  static String getMarketStateTitle({
+    required String oiPriceSignal,
+    required String orderFlowDirection,
+  }) {
+    final String signal = oiPriceSignal.toUpperCase();
+    final String flow = normalizeOrderFlow(orderFlowDirection);
+
+    if (signal == 'STRONG_SHORT' && flow == 'SELL_PRESSURE') {
+      return 'Satış baskısı destekleniyor';
     }
+    if (signal == 'STRONG_SHORT' && flow == 'BUY_PRESSURE') {
+      return 'Karşı alım tepkisi var';
+    }
+    if (signal == 'PUMP_RISK' && flow == 'SELL_PRESSURE') {
+      return 'Yukarı hareket şüpheli';
+    }
+    if (signal == 'PUMP_RISK' && flow == 'BUY_PRESSURE') {
+      return 'Yukarı hareket destek buluyor';
+    }
+    if (signal == 'SHORT_SQUEEZE' && flow == 'BUY_PRESSURE') {
+      return 'Yukarı baskı destekleniyor';
+    }
+    if (signal == 'SHORT_SQUEEZE' && flow == 'SELL_PRESSURE') {
+      return 'Squeeze zayıflıyor olabilir';
+    }
+    if (signal == 'WEAK_DROP' && flow == 'SELL_PRESSURE') {
+      return 'Düşüş var ama sınırlı';
+    }
+    if (signal == 'WEAK_DROP' && flow == 'BUY_PRESSURE') {
+      return 'Düşüşe tepki geliyor';
+    }
+    if (flow == 'SELL_PRESSURE') {
+      return 'Satış tarafı önde';
+    }
+    if (flow == 'BUY_PRESSURE') {
+      return 'Alış tarafı önde';
+    }
+    return 'Net baskı yok';
   }
 
-  static String getMarketStateDescription(String oiPriceSignal) {
-    switch (oiPriceSignal.toUpperCase()) {
-      case 'STRONG_SHORT':
-        return 'OI artışıyla birlikte fiyat geri çekiliyor. Satış tarafı güç kazanıyor olabilir.';
-      case 'PUMP_RISK':
-        return 'Fiyat yükseliyor ama OI da artıyor. Hareket sürdürülebilir olmayabilir.';
-      case 'SHORT_SQUEEZE':
-        return 'OI düşerken fiyat yükseliyor. Short kapanışları etkili olabilir.';
-      case 'WEAK_DROP':
-        return 'Fiyat ve OI birlikte düşüyor. Hareket var ama baskı zayıf kalabilir.';
-      default:
-        return 'Pozisyon çıkışı var ancak fiyat net yön üretmiyor. Piyasa kararsız görünüyor.';
+  static String getMarketStateDescription({
+    required String oiPriceSignal,
+    required String orderFlowDirection,
+  }) {
+    final String signal = oiPriceSignal.toUpperCase();
+    final String flow = normalizeOrderFlow(orderFlowDirection);
+
+    if (signal == 'STRONG_SHORT' && flow == 'SELL_PRESSURE') {
+      return 'OI ve fiyat short yönünde hizalanırken emir akışında da satış tarafı daha baskın görünüyor.';
     }
+    if (signal == 'STRONG_SHORT' && flow == 'BUY_PRESSURE') {
+      return 'Short baskısı sinyali var ancak emir akışında alıcılar karşılık veriyor. Baskı tek yönlü değil.';
+    }
+    if (signal == 'PUMP_RISK' && flow == 'SELL_PRESSURE') {
+      return 'Fiyat yükselse de emir akışı satış tarafına yaslanıyor. Yukarı hareket zayıflayabilir.';
+    }
+    if (signal == 'PUMP_RISK' && flow == 'BUY_PRESSURE') {
+      return 'Yukarı hareket emir akışından destek görüyor. Buna rağmen OI artışı nedeniyle yapı temkinli izlenmeli.';
+    }
+    if (signal == 'SHORT_SQUEEZE' && flow == 'BUY_PRESSURE') {
+      return 'Fiyat yukarı itilirken alım tarafı da baskın. Sıkışma etkisi daha görünür olabilir.';
+    }
+    if (signal == 'SHORT_SQUEEZE' && flow == 'SELL_PRESSURE') {
+      return 'Squeeze sinyali var ama emir akışı bunu tam desteklemiyor. Hareket gücü sınırlı kalabilir.';
+    }
+    if (signal == 'WEAK_DROP' && flow == 'SELL_PRESSURE') {
+      return 'Aşağı yönlü hareket sürüyor ancak yapı güçlü değil. Satış baskısı var ama kuvveti sınırlı.';
+    }
+    if (signal == 'WEAK_DROP' && flow == 'BUY_PRESSURE') {
+      return 'Düşüş görülse de emir akışında alıcılar devreye giriyor. Hareketin devamı zayıflayabilir.';
+    }
+    if (flow == 'SELL_PRESSURE') {
+      return 'Fiyat ve OI tarafı net bir yön üretmese de emir akışında satış tarafı daha baskın görünüyor.';
+    }
+    if (flow == 'BUY_PRESSURE') {
+      return 'Fiyat ve OI tarafı net bir yön üretmese de emir akışında alış tarafı daha baskın görünüyor.';
+    }
+    return 'Pozisyon akışı ve fiyat ilişkisi net bir baskı üretmiyor. Emir tarafında da belirgin üstünlük görünmüyor.';
   }
 
   static Color getSignalColor(String oiPriceSignal) {
@@ -301,6 +381,7 @@ class DetailPageAnalysisHelpers {
     required String oiDirection,
     required String priceDirection,
     required String oiPriceSignal,
+    required String orderFlowDirection,
     required String openInterestDisplay,
   }) {
     final Color signalColor = getSignalColor(oiPriceSignal);
@@ -384,6 +465,11 @@ class DetailPageAnalysisHelpers {
                 valueColor: getPriceDirectionColor(priceDirection),
               ),
               buildMiniBadge(
+                label: 'Order Flow',
+                value: getOrderFlowLabel(orderFlowDirection),
+                valueColor: getOrderFlowColor(orderFlowDirection),
+              ),
+              buildMiniBadge(
                 label: 'Sinyal',
                 value: oiPriceSignal.toUpperCase(),
                 valueColor: signalColor,
@@ -412,7 +498,10 @@ class DetailPageAnalysisHelpers {
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  getMarketStateTitle(oiPriceSignal),
+                  getMarketStateTitle(
+                    oiPriceSignal: oiPriceSignal,
+                    orderFlowDirection: orderFlowDirection,
+                  ),
                   style: TextStyle(
                     color: signalColor,
                     fontSize: 14,
@@ -421,7 +510,10 @@ class DetailPageAnalysisHelpers {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  getMarketStateDescription(oiPriceSignal),
+                  getMarketStateDescription(
+                    oiPriceSignal: oiPriceSignal,
+                    orderFlowDirection: orderFlowDirection,
+                  ),
                   style: const TextStyle(
                     color: Colors.white70,
                     fontSize: 12,
