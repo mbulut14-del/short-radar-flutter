@@ -272,10 +272,13 @@ class _HomePageState extends State<HomePage> {
                       ],
                     ),
                     alignment: Alignment.center,
-                    child: Icon(
-                      Icons.radar_rounded,
-                      color: scoreColor,
-                      size: 34,
+                    child: Text(
+                      '${leader.score}',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 26,
+                        fontWeight: FontWeight.w900,
+                      ),
                     ),
                   ),
                   const SizedBox(width: 14),
@@ -307,6 +310,7 @@ class _HomePageState extends State<HomePage> {
                           spacing: 10,
                           runSpacing: 6,
                           children: [
+                            _miniInfo('Skor', '${leader.score}'),
                             _miniInfo('Değişim', leader.changeText),
                             _miniInfo('Funding', leader.fundingText),
                             _miniInfo('Bias', leader.biasLabel),
@@ -561,9 +565,8 @@ class _HomePageState extends State<HomePage> {
               child: ListView(
                 padding: const EdgeInsets.all(12),
                 children: [
-                  _buildRadarHero(),
-                  const SizedBox(height: 12),
-                  _buildInfoCard(),
+                  // ❌ ÜST KARTLAR KALDIRILDI
+
                   if (errorText.isNotEmpty) ...[
                     const SizedBox(height: 10),
                     _buildErrorCard(),
