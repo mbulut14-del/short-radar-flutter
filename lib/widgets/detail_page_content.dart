@@ -50,9 +50,9 @@ class DetailPageContent extends StatelessWidget {
   }
 
   String _getOiDirection() {
-    final String text = openInterestDisplay.trim();
-    if (text.endsWith('↑')) return 'up';
-    if (text.endsWith('↓')) return 'down';
+    final String trimmed = openInterestDisplay.trim();
+    if (trimmed.endsWith('↑')) return 'up';
+    if (trimmed.endsWith('↓')) return 'down';
     return 'flat';
   }
 
@@ -79,20 +79,20 @@ class DetailPageContent extends StatelessWidget {
   }
 
   String _getOiValue() {
-    final String text = openInterestDisplay.trim();
-    final List<String> parts = text.split(' ');
+    final List<String> parts = openInterestDisplay.trim().split(' ');
     if (parts.isEmpty) return '-';
 
     final String last = parts.last;
-    if (last == '↑' || last == '↓' || last == '-') {
+    if (last == '↑' || last == '↓' || last == '-' || last == '↔️') {
       return parts.sublist(0, parts.length - 1).join(' ').trim();
     }
 
-    return text;
+    return openInterestDisplay.trim();
   }
 
   Widget _buildOpenInterestBox() {
-    final Color oiColor = _getOiColor();
+    final Color valueColor = _getOiColor();
+    final String arrow = _getOiArrow();
 
     return Container(
       padding: const EdgeInsets.all(12),
@@ -104,19 +104,33 @@ class DetailPageContent extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            'Open Interest (Son 30dk) ${_getOiArrow()}',
-            style: TextStyle(
-              color: oiColor,
-              fontSize: 12,
-              fontWeight: FontWeight.w800,
+          Text.rich(
+            TextSpan(
+              children: [
+                const TextSpan(
+                  text: 'O interest (Son 30dk) ',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                TextSpan(
+                  text: arrow,
+                  style: TextStyle(
+                    color: valueColor,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
             ),
           ),
           const SizedBox(height: 6),
           Text(
             _getOiValue(),
             style: TextStyle(
-              color: oiColor,
+              color: valueColor,
               fontSize: 16,
               fontWeight: FontWeight.bold,
             ),
