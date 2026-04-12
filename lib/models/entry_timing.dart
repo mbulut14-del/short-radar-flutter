@@ -64,6 +64,31 @@ class EntryTiming {
       reasons.add('Son kapanış önceki mumun altında.');
     }
 
+    // =========================
+    // 🔥 VOLUME ANALİZİ (YENİ)
+    // =========================
+
+    if (candles.length >= 6) {
+      double avgVolume = 0;
+
+      for (int i = candles.length - 6; i < candles.length - 1; i++) {
+        avgVolume += candles[i].volume;
+      }
+
+      avgVolume /= 5;
+
+      final double lastVolume = last.volume;
+
+      if (lastVolume > avgVolume * 1.3) {
+        score += 10;
+        reasons.add('Hacim artıyor (hareket destekli).');
+      } else if (lastVolume < avgVolume * 0.8) {
+        reasons.add('Hacim düşüyor (zayıf hareket).');
+      }
+    }
+
+    // =========================
+
     if (score > 100) score = 100;
 
     final bool ready = score >= 70;
