@@ -318,7 +318,7 @@ class _HomePageState extends State<HomePage> {
                 ],
               ),
             ),
-          ],
+          ),
         ],
       ),
     );
@@ -484,8 +484,16 @@ class _HomePageState extends State<HomePage> {
                         ),
                       ),
                       const SizedBox(height: 4),
-                      // ❌ BURASI SİLİNDİ
-                      // Text('Short skoru: ${coin.score} • ${coin.biasLabel}')
+                      Text(
+                        'Short skoru: ${coin.score} • ${coin.biasLabel}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: Colors.white.withOpacity(0.72),
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
                     ],
                   ),
                 ),
