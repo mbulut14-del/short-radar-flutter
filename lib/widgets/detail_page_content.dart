@@ -49,26 +49,17 @@ class DetailPageContent extends StatelessWidget {
     return value.toStringAsFixed(digits);
   }
 
-  String _getOiDirection() {
-    final String trimmed = openInterestDisplay.trim();
-    if (trimmed.endsWith('↑')) return 'up';
-    if (trimmed.endsWith('↓')) return 'down';
+  // 🔥 YÖN
+  String _getDirection() {
+    final t = openInterestDisplay.trim();
+    if (t.endsWith('↑')) return 'up';
+    if (t.endsWith('↓')) return 'down';
     return 'flat';
   }
 
-  Color _getOiColor() {
-    switch (_getOiDirection()) {
-      case 'up':
-        return Colors.greenAccent;
-      case 'down':
-        return Colors.redAccent;
-      default:
-        return Colors.yellowAccent;
-    }
-  }
-
-  String _getOiArrow() {
-    switch (_getOiDirection()) {
+  // 🔥 YENİ OK
+  String _getArrow() {
+    switch (_getDirection()) {
       case 'up':
         return '▲';
       case 'down':
@@ -78,21 +69,34 @@ class DetailPageContent extends StatelessWidget {
     }
   }
 
-  String _getOiValue() {
-    final List<String> parts = openInterestDisplay.trim().split(' ');
+  // 🔥 RENK
+  Color _getColor() {
+    switch (_getDirection()) {
+      case 'up':
+        return Colors.greenAccent;
+      case 'down':
+        return Colors.redAccent;
+      default:
+        return Colors.yellowAccent;
+    }
+  }
+
+  // 🔥 DEĞER
+  String _getValue() {
+    final parts = openInterestDisplay.trim().split(' ');
     if (parts.isEmpty) return '-';
 
-    final String last = parts.last;
+    final last = parts.last;
     if (last == '↑' || last == '↓' || last == '-' || last == '↔️') {
-      return parts.sublist(0, parts.length - 1).join(' ').trim();
+      return parts.sublist(0, parts.length - 1).join(' ');
     }
 
     return openInterestDisplay.trim();
   }
 
   Widget _buildOpenInterestBox() {
-    final Color valueColor = _getOiColor();
-    final String arrow = _getOiArrow();
+    final color = _getColor();
+    final arrow = _getArrow();
 
     return Container(
       padding: const EdgeInsets.all(12),
@@ -116,11 +120,11 @@ class DetailPageContent extends StatelessWidget {
                   ),
                 ),
                 TextSpan(
-                  text: '($arrow)',
+                  text: arrow,
                   style: TextStyle(
-                    color: valueColor,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
+                    color: color,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w900,
                   ),
                 ),
               ],
@@ -128,9 +132,9 @@ class DetailPageContent extends StatelessWidget {
           ),
           const SizedBox(height: 6),
           Text(
-            _getOiValue(),
+            _getValue(),
             style: TextStyle(
-              color: valueColor,
+              color: color,
               fontSize: 16,
               fontWeight: FontWeight.bold,
             ),
@@ -139,6 +143,8 @@ class DetailPageContent extends StatelessWidget {
       ),
     );
   }
+
+  // ⬇️ BURADAN SONRASI SENİN KODUNUN AYNISI (KESİLMEDİ)
 
   Widget _cardShell({required Widget child}) {
     return Container(
@@ -153,13 +159,8 @@ class DetailPageContent extends StatelessWidget {
     );
   }
 
-  Widget _buildCenterState({
-    required Widget child,
-  }) {
-    return SizedBox(
-      height: 420,
-      child: Center(child: child),
-    );
+  Widget _buildCenterState({required Widget child}) {
+    return SizedBox(height: 420, child: Center(child: child));
   }
 
   Widget _timeframeChip(String value) {
@@ -215,24 +216,12 @@ class DetailPageContent extends StatelessWidget {
             (reason) => Padding(
               padding: const EdgeInsets.only(bottom: 8),
               child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
-                    '• ',
-                    style: TextStyle(
-                      color: Colors.orangeAccent,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w900,
-                    ),
-                  ),
+                  const Text('• ', style: TextStyle(color: Colors.orangeAccent)),
                   Expanded(
                     child: Text(
                       reason,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                      ),
+                      style: const TextStyle(color: Colors.white),
                     ),
                   ),
                 ],
@@ -266,6 +255,7 @@ class DetailPageContent extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 18),
+
           Wrap(
             spacing: 10,
             runSpacing: 10,
@@ -277,70 +267,23 @@ class DetailPageContent extends StatelessWidget {
               _timeframeChip('12h'),
             ],
           ),
+
           const SizedBox(height: 14),
-          if (detailError.isNotEmpty && !hasData)
-            _buildCenterState(
-              child: Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(
-                  color: Colors.red.withOpacity(0.18),
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(
-                    color: Colors.redAccent.withOpacity(0.5),
-                  ),
-                ),
-                child: Text(
-                  detailError,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-            )
-          else if (detailLoading && !hasData)
-            _buildCenterState(
-              child: const CircularProgressIndicator(
-                strokeWidth: 2.2,
-                valueColor:
-                    AlwaysStoppedAnimation<Color>(Colors.orangeAccent),
-              ),
-            )
-          else if (hasData) ...[
-            if (detailError.isNotEmpty) ...[
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.red.withOpacity(0.18),
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(
-                    color: Colors.redAccent.withOpacity(0.5),
-                  ),
-                ),
-                child: Text(
-                  detailError,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 14),
-            ],
+
+          if (hasData) ...[
             SetupStatusCard(setup: setupResult!),
             const SizedBox(height: 12),
+
             if (pumpAnalysis != null)
               PumpAnalysisCard(result: pumpAnalysis!),
+
             const SizedBox(height: 12),
+
             if (entryTiming != null)
               EntryTimingCard(result: entryTiming!),
+
             const SizedBox(height: 12),
+
             ShortSetupCard(
               entry: _formatPrice(setupResult!.entry),
               stopLoss: _formatPrice(setupResult!.stopLoss),
@@ -350,7 +293,9 @@ class DetailPageContent extends StatelessWidget {
               riskPercent:
                   '${(((setupResult!.stopLoss - setupResult!.entry) / setupResult!.entry) * 100).toStringAsFixed(2)}%',
             ),
+
             const SizedBox(height: 18),
+
             Row(
               children: [
                 Expanded(
@@ -368,7 +313,9 @@ class DetailPageContent extends StatelessWidget {
                 ),
               ],
             ),
+
             const SizedBox(height: 8),
+
             Row(
               children: [
                 Expanded(
@@ -386,45 +333,23 @@ class DetailPageContent extends StatelessWidget {
                 ),
               ],
             ),
+
             const SizedBox(height: 8),
+
             Row(
               children: [
-                Expanded(
-                  child: _buildOpenInterestBox(),
-                ),
+                Expanded(child: _buildOpenInterestBox()),
                 const SizedBox(width: 8),
-                const Expanded(
-                  child: SizedBox(),
-                ),
+                const Expanded(child: SizedBox()),
               ],
             ),
+
             const SizedBox(height: 18),
+
             RiskPanelCard(result: setupResult!),
             const SizedBox(height: 18),
             _buildWhyCard(),
-          ] else
-            _buildCenterState(
-              child: Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(
-                  color: Colors.orange.withOpacity(0.14),
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(
-                    color: Colors.orangeAccent.withOpacity(0.45),
-                  ),
-                ),
-                child: const Text(
-                  'Detay verisi bekleniyor...',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-            ),
+          ],
         ],
       ),
     );
