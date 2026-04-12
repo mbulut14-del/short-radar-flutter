@@ -563,4 +563,57 @@ class DetailPageAnalysisHelpers {
 
     return 'NEUTRAL';
   }
+ // ===== YENİ SİNYAL MOTORU =====
+
+static String getCombinedSignal({
+  required String oiDirection,
+  required String priceDirection,
+  required String orderFlow,
+}) {
+  if (oiDirection == 'UP' &&
+      priceDirection == 'DOWN' &&
+      orderFlow == 'SELL_PRESSURE') {
+    return 'STRONG_SHORT';
+  }
+
+  if (oiDirection == 'UP' &&
+      priceDirection == 'UP' &&
+      orderFlow == 'SELL_PRESSURE') {
+    return 'PUMP_RISK';
+  }
+
+  if (oiDirection == 'DOWN' &&
+      priceDirection == 'UP' &&
+      orderFlow == 'BUY_PRESSURE') {
+    return 'SHORT_SQUEEZE';
+  }
+
+  if (oiDirection == 'DOWN' &&
+      priceDirection == 'DOWN' &&
+      orderFlow == 'SELL_PRESSURE') {
+    return 'WEAK_DROP';
+  }
+
+  return 'NEUTRAL';
+}
+
+// ===== GÜÇ SKORU =====
+
+static double getSignalStrength({
+  required String oiDirection,
+  required String priceDirection,
+  required String orderFlow,
+}) {
+  int score = 0;
+
+  if (oiDirection == 'UP') score++;
+  if (priceDirection == 'DOWN') score++;
+  if (orderFlow == 'SELL_PRESSURE') score++;
+
+  if (oiDirection == 'DOWN') score++;
+  if (priceDirection == 'UP') score++;
+  if (orderFlow == 'BUY_PRESSURE') score++;
+
+  return score / 6;
+} 
 }
