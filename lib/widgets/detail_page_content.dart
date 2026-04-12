@@ -293,6 +293,21 @@ class DetailPageContent extends StatelessWidget {
                 ),
               ],
             ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: PriceBox(
+                    title: 'Open Interest',
+                    value: selectedCoin.openInterestText,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                const Expanded(
+                  child: SizedBox(),
+                ),
+              ],
+            ),
             const SizedBox(height: 18),
             RiskPanelCard(result: setupResult!),
             const SizedBox(height: 18),
