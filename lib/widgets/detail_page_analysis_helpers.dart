@@ -122,6 +122,36 @@ class DetailPageAnalysisHelpers {
     }
   }
 
+  static String getMarketStateTitle(String oiPriceSignal) {
+    switch (oiPriceSignal.toUpperCase()) {
+      case 'STRONG_SHORT':
+        return 'Satış baskısı artıyor';
+      case 'PUMP_RISK':
+        return 'Yukarı hareket şüpheli';
+      case 'SHORT_SQUEEZE':
+        return 'Yukarı yönlü sıkışma';
+      case 'WEAK_DROP':
+        return 'Zayıf düşüş';
+      default:
+        return 'Net baskı yok';
+    }
+  }
+
+  static String getMarketStateDescription(String oiPriceSignal) {
+    switch (oiPriceSignal.toUpperCase()) {
+      case 'STRONG_SHORT':
+        return 'OI artışıyla birlikte fiyat geri çekiliyor. Satış tarafı güç kazanıyor olabilir.';
+      case 'PUMP_RISK':
+        return 'Fiyat yükseliyor ama OI da artıyor. Hareket sürdürülebilir olmayabilir.';
+      case 'SHORT_SQUEEZE':
+        return 'OI düşerken fiyat yükseliyor. Short kapanışları etkili olabilir.';
+      case 'WEAK_DROP':
+        return 'Fiyat ve OI birlikte düşüyor. Hareket var ama baskı zayıf kalabilir.';
+      default:
+        return 'Pozisyon çıkışı var ancak fiyat net yön üretmiyor. Piyasa kararsız görünüyor.';
+    }
+  }
+
   static Color getSignalColor(String oiPriceSignal) {
     switch (oiPriceSignal.toUpperCase()) {
       case 'STRONG_SHORT':
@@ -359,6 +389,48 @@ class DetailPageAnalysisHelpers {
                 valueColor: signalColor,
               ),
             ],
+          ),
+          const SizedBox(height: 12),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.04),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: Colors.white.withOpacity(0.08)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Durum Değerlendirmesi',
+                  style: TextStyle(
+                    color: Colors.white60,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  getMarketStateTitle(oiPriceSignal),
+                  style: TextStyle(
+                    color: signalColor,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  getMarketStateDescription(oiPriceSignal),
+                  style: const TextStyle(
+                    color: Colors.white70,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    height: 1.35,
+                  ),
+                ),
+              ],
+            ),
           ),
         ],
       ),
