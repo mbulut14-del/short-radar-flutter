@@ -27,6 +27,14 @@ class _HomePageState extends State<HomePage> {
   String? lastNotifiedCoin;
   DateTime? lastNotifyTime;
 
+  // ✅ Her coin için OI geçmişi
+  final Map<String, List<double>> oiHistory = {};
+
+  // ✅ Her coin için OI yönü
+  final Map<String, String> oiDirection = {};
+
+  static const int _oiHistoryLimit = 360; // 30 dk / 5 sn
+
   @override
   void initState() {
     super.initState();
@@ -43,6 +51,31 @@ class _HomePageState extends State<HomePage> {
   void dispose() {
     _refreshTimer?.cancel();
     super.dispose();
+  }
+
+  String _calculateOiDirection(String name, double currentOi) {
+    final history = oiHistory.putIfAbsent(name, () => []);
+
+    history.add(currentOi);
+
+    if (history.length > _oiHistoryLimit) {
+      history.removeAt(0);
+    }
+
+    // Yeterli veri birikmeden nötr kalsın
+    if (history.length < _oiHistoryLimit) {
+      return 'FLAT';
+    }
+
+    final double oldOi = history.first;
+
+    if (oldOi <= 0) return 'FLAT';
+
+    final double percentChange = ((currentOi - oldOi) / oldOi) * 100;
+
+    if (percentChange > 2) return 'UP';
+    if (percentChange < -2) return 'DOWN';
+    return 'FLAT';
   }
 
   Future<void> fetchCoins() async {
@@ -79,6 +112,14 @@ class _HomePageState extends State<HomePage> {
           errorText = 'Canlı veri boş döndü';
         });
         return;
+      }
+
+      // ✅ OI geçmişi ve yön hesaplama
+      for (final coin in allCoins) {
+        oiDirection[coin.name] = _calculateOiDirection(
+          coin.name,
+          coin.openInterest,
+        );
       }
 
       final List<CoinRadarData> sortedByChange = [...allCoins]
@@ -394,7 +435,10 @@ class _HomePageState extends State<HomePage> {
           Navigator.push(
             context,
             MaterialPageRoute(
-              builder: (_) => DetailPage(coinData: coin),
+              builder: (_) => DetailPage(
+                coinData: coin,
+                oiDirection: oiDirection[coin.name] ?? 'FLAT',
+              ),
             ),
           );
         },
@@ -565,8 +609,6 @@ class _HomePageState extends State<HomePage> {
               child: ListView(
                 padding: const EdgeInsets.all(12),
                 children: [
-                  // ❌ ÜST KARTLAR KALDIRILDI
-
                   if (errorText.isNotEmpty) ...[
                     const SizedBox(height: 10),
                     _buildErrorCard(),
