@@ -1,4 +1,3 @@
-
 import 'dart:convert';
 
 import 'package:http/http.dart' as http;
@@ -38,6 +37,184 @@ class DetailDataService {
       default:
         return value;
     }
+  }
+
+  static double _bodySize(CandleData candle) {
+    return (candle.close - candle.open).abs();
+  }
+
+  static double _rangeSize(CandleData candle) {
+    return (candle.high - candle.low).abs();
+  }
+
+  static double _upperWickSize(CandleData candle) {
+    final double bodyTop =
+        candle.close >= candle.open ? candle.close : candle.open;
+    return candle.high - bodyTop;
+  }
+
+  static double _safeVolume(CandleData candle) {
+    return candle.volume < 0 ? 0 : candle.volume;
+  }
+
+  static bool _hasUpperWickRejection(List<CandleData> candles) {
+    if (candles.isEmpty) return false;
+
+    final CandleData last = candles.last;
+    final double range = _rangeSize(last);
+    if (range <= 0) return false;
+
+    final double upperWickRatio = _upperWickSize(last) / range;
+    final bool weakClose = last.close <= (last.low + range * 0.60);
+
+    return upperWickRatio >= 0.35 && weakClose;
+  }
+
+  static bool _hasFailedBreakout(List<CandleData> candles) {
+    if (candles.length < 3) return false;
+
+    final CandleData last = candles[candles.length - 1];
+    final CandleData prev = candles[candles.length - 2];
+    final CandleData prev2 = candles[candles.length - 3];
+
+    final double recentHigh = [prev.high, prev2.high]
+        .reduce((a, b) => a > b ? a : b);
+
+    final bool madeNewHigh = last.high > recentHigh;
+    final bool weakClose = last.close < last.high;
+    final bool lostMomentum = _bodySize(last) < _bodySize(prev);
+
+    return madeNewHigh && weakClose && lostMomentum;
+  }
+
+  static bool _hasShrinkingBodyWithRisingVolume(List<CandleData> candles) {
+    if (candles.length < 3) return false;
+
+    final CandleData last = candles[candles.length - 1];
+    final CandleData prev = candles[candles.length - 2];
+    final CandleData prev2 = candles[candles.length - 3];
+
+    final double lastBody = _bodySize(last);
+    final double prevBody = _bodySize(prev);
+
+    final double lastVolume = _safeVolume(last);
+    final double avgPrevVolume = (_safeVolume(prev) + _safeVolume(prev2)) / 2;
+
+    final bool bodyShrinking = prevBody > 0 && lastBody < prevBody * 0.85;
+    final bool volumeRising =
+        avgPrevVolume > 0 && lastVolume > avgPrevVolume * 1.10;
+
+    return bodyShrinking && volumeRising;
+  }
+
+  static bool _hasPreviousLowBreakdown(List<CandleData> candles) {
+    if (candles.length < 4) return false;
+
+    final CandleData last = candles[candles.length - 1];
+    final CandleData prev = candles[candles.length - 2];
+    final CandleData prev2 = candles[candles.length - 3];
+
+    final double triggerLow = prev.low < prev2.low ? prev.low : prev2.low;
+
+    return last.close < triggerLow;
+  }
+
+  static bool _hasLowerHigh(List<CandleData> candles) {
+    if (candles.length < 3) return false;
+
+    final CandleData last = candles[candles.length - 1];
+    final CandleData prev = candles[candles.length - 2];
+
+    return last.high < prev.high;
+  }
+
+  static bool _hasTwoWeakCloses(List<CandleData> candles) {
+    if (candles.length < 3) return false;
+
+    final CandleData last = candles[candles.length - 1];
+    final CandleData prev = candles[candles.length - 2];
+
+    return last.close < last.open && prev.close < prev.open;
+  }
+
+  static bool _hasOiPriceExhaustion(
+    List<CandleData> candles,
+    CoinRadarData coin,
+  ) {
+    if (candles.length < 4) return false;
+
+    final CandleData last = candles[candles.length - 1];
+    final CandleData prev = candles[candles.length - 2];
+    final CandleData prev2 = candles[candles.length - 3];
+
+    final double currentPrice = coin.lastPrice;
+    final double markPrice = coin.markPrice;
+    final double indexPrice = coin.indexPrice;
+    final double openInterest = coin.openInterest;
+
+    final bool priceExtended =
+        currentPrice > 0 &&
+        prev2.close > 0 &&
+        currentPrice > prev2.close * 1.08;
+
+    final bool bodyShrinking = _bodySize(prev) > 0 &&
+        _bodySize(last) < _bodySize(prev) * 0.85;
+
+    final bool weakContinuation = last.close <= prev.close &&
+        last.high >= prev.high;
+
+    final bool markIndexGapWide = markPrice > 0 &&
+        indexPrice > 0 &&
+        ((markPrice - indexPrice).abs() / indexPrice) >= 0.0025;
+
+    final bool oiMeaningful = openInterest > 0;
+
+    return oiMeaningful &&
+        priceExtended &&
+        bodyShrinking &&
+        weakContinuation &&
+        markIndexGapWide;
+  }
+
+  static int _marketWeaknessScore(
+    List<CandleData> candles,
+    CoinRadarData coin,
+  ) {
+    int score = 0;
+
+    if (_hasUpperWickRejection(candles)) score += 2;
+    if (_hasFailedBreakout(candles)) score += 2;
+    if (_hasShrinkingBodyWithRisingVolume(candles)) score += 2;
+    if (_hasPreviousLowBreakdown(candles)) score += 3;
+    if (_hasLowerHigh(candles)) score += 1;
+    if (_hasTwoWeakCloses(candles)) score += 2;
+    if (_hasOiPriceExhaustion(candles, coin)) score += 2;
+
+    return score;
+  }
+
+  static List<CandleData> _selectAnalysisCandles(
+    List<CandleData> candles,
+    CoinRadarData coin,
+  ) {
+    if (candles.length <= 18) return candles;
+
+    final int weaknessScore = _marketWeaknessScore(candles, coin);
+
+    int analysisWindow = 40;
+
+    if (weaknessScore >= 8) {
+      analysisWindow = 18;
+    } else if (weaknessScore >= 5) {
+      analysisWindow = 24;
+    } else if (weaknessScore >= 3) {
+      analysisWindow = 30;
+    } else {
+      analysisWindow = 40;
+    }
+
+    if (candles.length <= analysisWindow) return candles;
+    return candles.sublist(candles.length - analysisWindow);
   }
 
   static Future<DetailDataBundle> load({
@@ -118,16 +295,19 @@ class DetailDataService {
         ? newCandles.sublist(newCandles.length - 40)
         : newCandles;
 
+    final List<CandleData> analysisCandles =
+        _selectAnalysisCandles(newCandles, detailItem);
+
     final ShortSetupResult newSetup = ShortSetupLogic.build(
-      candles: zoomCandles,
+      candles: analysisCandles,
       coin: detailItem,
     );
 
     final PumpAnalysisResult newPumpAnalysis =
-        PumpAnalysis.analyze(zoomCandles);
+        PumpAnalysis.analyze(analysisCandles);
 
     final EntryTimingResult newEntryTiming =
-        EntryTiming.analyze(zoomCandles);
+        EntryTiming.analyze(analysisCandles);
 
     return DetailDataBundle(
       selectedCoin: detailItem,
