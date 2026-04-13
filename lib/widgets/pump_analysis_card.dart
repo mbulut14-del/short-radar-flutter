@@ -3,13 +3,23 @@ import '../models/pump_analysis_result.dart';
 
 class PumpAnalysisCard extends StatelessWidget {
   final PumpAnalysisResult result;
+  final double? finalScore;
 
   const PumpAnalysisCard({
     super.key,
     required this.result,
+    this.finalScore,
   });
 
+  bool get _isLowConfidence => finalScore != null && finalScore! < 40;
+  bool get _isMediumConfidence =>
+      finalScore != null && finalScore! >= 40 && finalScore! < 70;
+
   Color _getPumpColor() {
+    if (_isLowConfidence) {
+      return Colors.orangeAccent;
+    }
+
     switch (result.pumpType) {
       case "FAKE":
         return Colors.redAccent;
@@ -21,6 +31,17 @@ class PumpAnalysisCard extends StatelessWidget {
   }
 
   String _getPumpText() {
+    if (_isLowConfidence) {
+      switch (result.pumpType) {
+        case "FAKE":
+          return "Şişme ihtimali";
+        case "REAL":
+          return "Güçlü yükseliş";
+        default:
+          return "Belirsiz";
+      }
+    }
+
     switch (result.pumpType) {
       case "FAKE":
         return "Fake Pump";
@@ -32,6 +53,17 @@ class PumpAnalysisCard extends StatelessWidget {
   }
 
   String _getEntryText() {
+    if (_isLowConfidence) {
+      return "Henüz uygun değil";
+    }
+
+    if (_isMediumConfidence) {
+      if (!result.shortReady) return "Bekle";
+      if (result.entryScore > 70) return "İzlenmeli";
+      if (result.entryScore > 50) return "Hazırlanıyor";
+      return "Zayıf";
+    }
+
     if (!result.shortReady) return "Bekle";
 
     if (result.entryScore > 70) return "Giriş uygun";
@@ -41,12 +73,37 @@ class PumpAnalysisCard extends StatelessWidget {
   }
 
   Color _getEntryColor() {
+    if (_isLowConfidence) return Colors.grey;
+
+    if (_isMediumConfidence) {
+      if (!result.shortReady) return Colors.grey;
+      if (result.entryScore > 70) return Colors.orangeAccent;
+      if (result.entryScore > 50) return Colors.orangeAccent;
+      return Colors.redAccent;
+    }
+
     if (!result.shortReady) return Colors.grey;
 
     if (result.entryScore > 70) return Colors.greenAccent;
     if (result.entryScore > 50) return Colors.orangeAccent;
 
     return Colors.redAccent;
+  }
+
+  String _getSectionTitle() {
+    if (_isLowConfidence) return "PUMP GÖZLEMİ";
+    if (_isMediumConfidence) return "PUMP ERKEN SİNYALİ";
+    return "PUMP ANALİZİ";
+  }
+
+  String _getIntroText() {
+    if (_isLowConfidence) {
+      return "Pump yapısı izleniyor, ancak merkezi karar short girişi için henüz uygun değil.";
+    }
+    if (_isMediumConfidence) {
+      return "Pump sonrası zayıflama ihtimali var, ancak giriş teyidi henüz tamamlanmış değil.";
+    }
+    return "";
   }
 
   List<String> _getFilteredReasons() {
@@ -94,6 +151,7 @@ class PumpAnalysisCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final List<String> reasons = _getFilteredReasons();
+    final String intro = _getIntroText();
 
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 12),
@@ -106,14 +164,26 @@ class PumpAnalysisCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            "PUMP ANALİZİ",
-            style: TextStyle(
+          Text(
+            _getSectionTitle(),
+            style: const TextStyle(
               color: Colors.orange,
               fontWeight: FontWeight.bold,
               fontSize: 16,
             ),
           ),
+          if (intro.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            Text(
+              intro,
+              style: const TextStyle(
+                color: Colors.white70,
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                height: 1.35,
+              ),
+            ),
+          ],
           const SizedBox(height: 12),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -155,9 +225,9 @@ class PumpAnalysisCard extends StatelessWidget {
           ),
           const SizedBox(height: 12),
           if (reasons.isNotEmpty) ...[
-            const Text(
-              "Neden?",
-              style: TextStyle(
+            Text(
+              _isLowConfidence ? "Gözlem Notları" : "Neden?",
+              style: const TextStyle(
                 color: Colors.white,
                 fontWeight: FontWeight.bold,
               ),
