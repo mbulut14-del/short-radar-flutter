@@ -127,6 +127,14 @@ class _DetailPageState extends State<DetailPage>
     return value;
   }
 
+  double _normalizeScore(double rawScore) {
+    final double clamped = _clampScore(rawScore);
+
+    if (clamped <= 0) return 10;
+    if (clamped < 10) return 10;
+    return clamped;
+  }
+
   double _scoreFromOiPriceSignal(String signal) {
     switch (signal.toUpperCase()) {
       case 'STRONG_SHORT':
@@ -194,6 +202,7 @@ class _DetailPageState extends State<DetailPage>
         if (normalized.contains('uygun')) score += 10;
         if (normalized.contains('güçlü')) score += 8;
         if (normalized.contains('zayıf')) score -= 8;
+        if (normalized.contains('bekle')) score -= 4;
       }
     } catch (_) {}
 
@@ -230,6 +239,7 @@ class _DetailPageState extends State<DetailPage>
         if (normalized.contains('hazır')) score += 10;
         if (normalized.contains('uygun')) score += 8;
         if (normalized.contains('geç')) score -= 12;
+        if (normalized.contains('bekle')) score -= 5;
       }
     } catch (_) {}
 
@@ -408,22 +418,22 @@ class _DetailPageState extends State<DetailPage>
       setupResult: setupResult,
     );
 
-    final double finalScore = _clampScore(score);
+    final double finalScore = _normalizeScore(score);
 
-    if (finalScore >= 85) {
+    if (finalScore >= 75) {
       return FinalScoreResult(
         score: finalScore,
         label: 'Güçlü fırsat',
         summary:
-            'Merkezi short skoru güçlü. Erken giriş ile tetik birlikte oluşuyor.',
+            'Merkezi short skoru güçlü. Kurulum ve giriş kalitesi birlikte güçleniyor.',
       );
     }
 
-    if (finalScore >= 70) {
+    if (finalScore >= 60) {
       return FinalScoreResult(
         score: finalScore,
         label: 'Kurulum var',
-        summary: 'Short kurulumu oluşuyor. Giriş bölgesi yakın olabilir.',
+        summary: 'Short kurulumu belirginleşiyor. Giriş bölgesi yaklaşıyor olabilir.',
       );
     }
 
@@ -435,11 +445,18 @@ class _DetailPageState extends State<DetailPage>
       );
     }
 
+    if (finalScore >= 25) {
+      return FinalScoreResult(
+        score: finalScore,
+        label: 'Zayıf',
+        summary: 'Short tarafında bazı işaretler olsa da kalite düşük. Şimdilik temkinli kalmak daha doğru.',
+      );
+    }
+
     return FinalScoreResult(
       score: finalScore,
-      label: 'Zayıf',
-      summary:
-          'Short fırsatı için merkezi skor düşük. Şimdilik beklemek daha sağlıklı.',
+      label: 'İşlem dışı',
+      summary: 'Görüntü short tarafı için zayıf ya da nötr. Şu an işlem dışı kalmak daha sağlıklı.',
     );
   }
 
