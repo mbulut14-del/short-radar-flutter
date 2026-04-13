@@ -586,6 +586,7 @@ class DetailPageContent extends StatelessWidget {
               oiPriceSignal: combinedSignal,
               orderFlowDirection: orderFlowDirection,
               openInterestDisplay: openInterestDisplay,
+              finalScore: finalScore,
             ),
             const SizedBox(height: 12),
             if (pumpAnalysis != null) ...[
