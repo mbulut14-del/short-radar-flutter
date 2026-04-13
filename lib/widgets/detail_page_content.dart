@@ -138,6 +138,38 @@ class DetailPageContent extends StatelessWidget {
     return 'Merkezi skor zayıf. Şimdilik beklemek daha sağlıklı.';
   }
 
+  bool _shouldShowShortSetupCard() {
+    if (finalScore == null) return true;
+    return finalScore! >= 70;
+  }
+
+  bool _shouldShowWhyCard() {
+    if (setupResult == null) return false;
+    if (setupResult!.reasons.isEmpty) return false;
+    if (finalScore == null) return true;
+    return finalScore! >= 40;
+  }
+
+  String _getAnalysisSectionTitle() {
+    if (finalScore == null) return 'ALT ANALİZLER';
+    if (finalScore! >= 70) return 'ALT ANALİZLER';
+    if (finalScore! >= 40) return 'ERKEN SİNYAL DETAYLARI';
+    return 'GÖZLEM VERİLERİ';
+  }
+
+  String _getAnalysisSectionSubtitle() {
+    if (finalScore == null) {
+      return 'Bu bölüm final score\'u besleyen alt verileri gösterir.';
+    }
+    if (finalScore! >= 70) {
+      return 'Aşağıdaki veriler merkezi karar skorunu destekleyen alt bileşenlerdir.';
+    }
+    if (finalScore! >= 40) {
+      return 'Kurulum ihtimali var, ancak aşağıdaki veriler henüz tam teyit üretmiyor.';
+    }
+    return 'Aşağıdaki kartlar bilgi amaçlıdır. Henüz aktif short kurulumu onaylanmış değil.';
+  }
+
   Widget _buildFinalScoreCard() {
     if (finalScore == null) {
       return const SizedBox();
@@ -253,9 +285,9 @@ class DetailPageContent extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'NEDEN?',
-            style: TextStyle(
+          Text(
+            finalScore != null && finalScore! < 70 ? 'İLK İŞARETLER' : 'NEDEN?',
+            style: const TextStyle(
               color: Colors.white70,
               fontSize: 12,
               fontWeight: FontWeight.w800,
@@ -288,6 +320,63 @@ class DetailPageContent extends StatelessWidget {
                   ),
                 ],
               ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPassiveSetupBox() {
+    final double safeScore = (finalScore ?? 0).clamp(0, 100);
+
+    final String title;
+    final String text;
+    final Color borderColor;
+    final Color bgColor;
+
+    if (safeScore < 40) {
+      title = 'AKTİF SHORT SETUP YOK';
+      text =
+          'Final score şu an aktif short kurulumu desteklemiyor. Giriş, stop ve hedef alanları bilinçli olarak gizlendi.';
+      borderColor = Colors.redAccent.withOpacity(0.45);
+      bgColor = Colors.red.withOpacity(0.12);
+    } else {
+      title = 'SETUP HENÜZ TAM OLUŞMADI';
+      text =
+          'Erken short işaretleri var ama merkezi skor henüz tam giriş kalitesine ulaşmadı. Giriş planı bu yüzden beklemede tutuluyor.';
+      borderColor = Colors.orangeAccent.withOpacity(0.45);
+      bgColor = Colors.orange.withOpacity(0.12);
+    }
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: borderColor),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 13,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 0.4,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            text,
+            style: const TextStyle(
+              color: Colors.white70,
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              height: 1.4,
             ),
           ),
         ],
@@ -400,7 +489,7 @@ class DetailPageContent extends StatelessWidget {
 
   Widget _buildSectionTitle(String title) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.only(bottom: 6),
       child: Text(
         title,
         style: const TextStyle(
@@ -408,6 +497,21 @@ class DetailPageContent extends StatelessWidget {
           fontSize: 12,
           fontWeight: FontWeight.w800,
           letterSpacing: 0.6,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSectionSubtitle(String text) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Text(
+        text,
+        style: const TextStyle(
+          color: Colors.white54,
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
+          height: 1.35,
         ),
       ),
     );
@@ -474,7 +578,8 @@ class DetailPageContent extends StatelessWidget {
               _buildFinalScoreCard(),
               const SizedBox(height: 12),
             ],
-            _buildSectionTitle('ALT ANALİZLER'),
+            _buildSectionTitle(_getAnalysisSectionTitle()),
+            _buildSectionSubtitle(_getAnalysisSectionSubtitle()),
             OiPriceAnalysisCard(
               oiDirection: oiDirection,
               priceDirection: priceDirection,
@@ -487,18 +592,26 @@ class DetailPageContent extends StatelessWidget {
               PumpAnalysisCard(result: pumpAnalysis!),
               const SizedBox(height: 12),
             ],
-            ShortSetupCard(
-              entry: _formatPrice(setupResult!.entry),
-              stopLoss: _formatPrice(setupResult!.stopLoss),
-              target1: _formatPrice(setupResult!.target1),
-              target2: _formatPrice(setupResult!.target2),
-              rr: setupResult!.rr.toStringAsFixed(2),
-              riskPercent:
-                  '${(((setupResult!.stopLoss - setupResult!.entry) / setupResult!.entry) * 100).toStringAsFixed(2)}%',
-            ),
-            const SizedBox(height: 12),
-            _buildWhyCard(),
-            const SizedBox(height: 18),
+            if (_shouldShowShortSetupCard()) ...[
+              ShortSetupCard(
+                entry: _formatPrice(setupResult!.entry),
+                stopLoss: _formatPrice(setupResult!.stopLoss),
+                target1: _formatPrice(setupResult!.target1),
+                target2: _formatPrice(setupResult!.target2),
+                rr: setupResult!.rr.toStringAsFixed(2),
+                riskPercent:
+                    '${(((setupResult!.stopLoss - setupResult!.entry) / setupResult!.entry) * 100).toStringAsFixed(2)}%',
+              ),
+              const SizedBox(height: 12),
+            ] else ...[
+              _buildPassiveSetupBox(),
+              const SizedBox(height: 12),
+            ],
+            if (_shouldShowWhyCard()) ...[
+              _buildWhyCard(),
+              const SizedBox(height: 18),
+            ] else
+              const SizedBox(height: 6),
             Row(
               children: [
                 Expanded(
