@@ -1,6 +1,8 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 import '../models/candle_data.dart';
 import '../models/coin_radar_data.dart';
@@ -46,6 +48,8 @@ class DetailPage extends StatefulWidget {
 
 class _DetailPageState extends State<DetailPage>
     with SingleTickerProviderStateMixin {
+  static final Map<String, DateTime> _lastAlertTimes = {};
+
   Timer? _detailTimer;
   bool detailLoading = true;
   String detailError = '';
@@ -54,6 +58,9 @@ class _DetailPageState extends State<DetailPage>
   late AnimationController _spinnerController;
   late final String contractName;
   late CoinRadarData selectedCoin;
+
+  final FlutterLocalNotificationsPlugin _notificationsPlugin =
+      FlutterLocalNotificationsPlugin();
 
   List<CandleData> candles = [];
   List<CandleData> visibleCandles = [];
@@ -64,6 +71,7 @@ class _DetailPageState extends State<DetailPage>
   FinalScoreResult? finalScoreResult;
 
   bool _isFetchingDetail = false;
+  bool _notificationsReady = false;
   String _openInterestDisplay = '-';
 
   @override
@@ -81,6 +89,7 @@ class _DetailPageState extends State<DetailPage>
       duration: const Duration(milliseconds: 1100),
     )..repeat();
 
+    _initLocalNotifications();
     fetchDetail();
 
     _detailTimer = Timer.periodic(const Duration(seconds: 5), (_) {
@@ -88,6 +97,21 @@ class _DetailPageState extends State<DetailPage>
         fetchDetail(showLoader: false);
       }
     });
+  }
+
+  Future<void> _initLocalNotifications() async {
+    const AndroidInitializationSettings androidSettings =
+        AndroidInitializationSettings('@mipmap/ic_launcher');
+
+    const InitializationSettings initSettings =
+        InitializationSettings(android: androidSettings);
+
+    try {
+      await _notificationsPlugin.initialize(initSettings);
+      _notificationsReady = true;
+    } catch (_) {
+      _notificationsReady = false;
+    }
   }
 
   @override
@@ -433,7 +457,8 @@ class _DetailPageState extends State<DetailPage>
       return FinalScoreResult(
         score: finalScore,
         label: 'Kurulum var',
-        summary: 'Short kurulumu belirginleşiyor. Giriş bölgesi yaklaşıyor olabilir.',
+        summary:
+            'Short kurulumu belirginleşiyor. Giriş bölgesi yaklaşıyor olabilir.',
       );
     }
 
@@ -441,7 +466,8 @@ class _DetailPageState extends State<DetailPage>
       return FinalScoreResult(
         score: finalScore,
         label: 'İzlenmeli',
-        summary: 'Erken short sinyali var ama teyit henüz yeterince güçlü değil.',
+        summary:
+            'Erken short sinyali var ama teyit henüz yeterince güçlü değil.',
       );
     }
 
@@ -449,15 +475,67 @@ class _DetailPageState extends State<DetailPage>
       return FinalScoreResult(
         score: finalScore,
         label: 'Zayıf',
-        summary: 'Short tarafında bazı işaretler olsa da kalite düşük. Şimdilik temkinli kalmak daha doğru.',
+        summary:
+            'Short tarafında bazı işaretler olsa da kalite düşük. Şimdilik temkinli kalmak daha doğru.',
       );
     }
 
     return FinalScoreResult(
       score: finalScore,
       label: 'İşlem dışı',
-      summary: 'Görüntü short tarafı için zayıf ya da nötr. Şu an işlem dışı kalmak daha sağlıklı.',
+      summary:
+          'Görüntü short tarafı için zayıf ya da nötr. Şu an işlem dışı kalmak daha sağlıklı.',
     );
+  }
+
+  bool _shouldTriggerShortAlert(FinalScoreResult result) {
+    if (result.score < 75) return false;
+    if (widget.orderFlowDirection == 'BUY_PRESSURE') return false;
+    if (widget.oiPriceSignal == 'SHORT_SQUEEZE') return false;
+    return true;
+  }
+
+  Future<void> _triggerShortAlert(FinalScoreResult result) async {
+    final DateTime now = DateTime.now();
+    final DateTime? lastAlertAt = _lastAlertTimes[contractName];
+
+    if (lastAlertAt != null &&
+        now.difference(lastAlertAt) < const Duration(minutes: 10)) {
+      return;
+    }
+
+    _lastAlertTimes[contractName] = now;
+
+    try {
+      await HapticFeedback.heavyImpact();
+      await HapticFeedback.vibrate();
+    } catch (_) {}
+
+    if (!_notificationsReady) return;
+
+    const AndroidNotificationDetails androidDetails =
+        AndroidNotificationDetails(
+      'short_setup_alerts',
+      'Short Setup Alerts',
+      channelDescription: 'Final score eşiği geçen short fırsat alarmları',
+      importance: Importance.max,
+      priority: Priority.high,
+      enableVibration: true,
+      playSound: true,
+      ticker: 'short-alert',
+    );
+
+    const NotificationDetails notificationDetails =
+        NotificationDetails(android: androidDetails);
+
+    try {
+      await _notificationsPlugin.show(
+        contractName.hashCode,
+        'Short setup hazır olabilir',
+        '$contractName • Score ${result.score.toStringAsFixed(0)} • ${result.label}',
+        notificationDetails,
+      );
+    } catch (_) {}
   }
 
   Future<void> fetchDetail({bool showLoader = true}) async {
@@ -505,6 +583,10 @@ class _DetailPageState extends State<DetailPage>
         detailLoading = false;
         detailError = '';
       });
+
+      if (_shouldTriggerShortAlert(calculatedFinalScore)) {
+        await _triggerShortAlert(calculatedFinalScore);
+      }
     } on TimeoutException {
       if (!mounted) return;
       setState(() {
