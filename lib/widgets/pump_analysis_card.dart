@@ -1,4 +1,3 @@
-
 import 'package:flutter/material.dart';
 import '../models/pump_analysis_result.dart';
 
@@ -50,8 +49,52 @@ class PumpAnalysisCard extends StatelessWidget {
     return Colors.redAccent;
   }
 
+  List<String> _getFilteredReasons() {
+    final List<String> allReasons = result.reasons;
+
+    bool isPumpReason(String text) {
+      final String lower = text.toLowerCase();
+
+      final List<String> keepKeywords = [
+        'pump',
+        'şişme',
+        'gövde küçül',
+        'kapanış zayıf',
+        'yeni high denen',
+        'new high',
+      ];
+
+      final List<String> removeKeywords = [
+        'üst fitil',
+        'satış baskısı',
+        'momentum',
+        'kırmızı mum',
+        'önceki mumun altında',
+        'taşınamamış',
+        'lower-high',
+        'lower high',
+      ];
+
+      final bool hasKeep = keepKeywords.any(lower.contains);
+      final bool hasRemove = removeKeywords.any(lower.contains);
+
+      return hasKeep && !hasRemove;
+    }
+
+    final List<String> filtered =
+        allReasons.where(isPumpReason).take(3).toList();
+
+    if (filtered.isNotEmpty) {
+      return filtered;
+    }
+
+    return allReasons.take(2).toList();
+  }
+
   @override
   Widget build(BuildContext context) {
+    final List<String> reasons = _getFilteredReasons();
+
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 12),
       padding: const EdgeInsets.all(16),
@@ -63,7 +106,6 @@ class PumpAnalysisCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          /// 🔥 BAŞLIK
           const Text(
             "PUMP ANALİZİ",
             style: TextStyle(
@@ -72,10 +114,7 @@ class PumpAnalysisCard extends StatelessWidget {
               fontSize: 16,
             ),
           ),
-
           const SizedBox(height: 12),
-
-          /// 📊 PUMP TİPİ
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -89,10 +128,7 @@ class PumpAnalysisCard extends StatelessWidget {
               ),
             ],
           ),
-
           const SizedBox(height: 8),
-
-          /// ⚡ SCORE
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -103,10 +139,7 @@ class PumpAnalysisCard extends StatelessWidget {
               ),
             ],
           ),
-
           const SizedBox(height: 8),
-
-          /// ⏱ ENTRY
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -120,26 +153,26 @@ class PumpAnalysisCard extends StatelessWidget {
               ),
             ],
           ),
-
           const SizedBox(height: 12),
-
-          /// 🧠 REASONS
-          const Text(
-            "Neden?",
-            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-          ),
-
-          const SizedBox(height: 6),
-
-          ...result.reasons.map(
-            (e) => Padding(
-              padding: const EdgeInsets.only(bottom: 4),
-              child: Text(
-                "• $e",
-                style: const TextStyle(color: Colors.white70),
+          if (reasons.isNotEmpty) ...[
+            const Text(
+              "Neden?",
+              style: TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
               ),
             ),
-          ),
+            const SizedBox(height: 6),
+            ...reasons.map(
+              (e) => Padding(
+                padding: const EdgeInsets.only(bottom: 4),
+                child: Text(
+                  "• $e",
+                  style: const TextStyle(color: Colors.white70),
+                ),
+              ),
+            ),
+          ],
         ],
       ),
     );
