@@ -6,6 +6,7 @@ import '../models/entry_timing_result.dart';
 import '../models/pump_analysis_result.dart';
 import '../models/short_setup_result.dart';
 import 'detail_page_analysis_helpers.dart';
+import 'oi_price_analysis_card.dart';
 import 'price_box.dart';
 import 'pump_analysis_card.dart';
 import 'risk_panel_card.dart';
@@ -207,10 +208,65 @@ class DetailPageContent extends StatelessWidget {
     );
   }
 
+  Widget _buildOpenInterestBox() {
+    final Color valueColor = DetailPageAnalysisHelpers.getOiColor(
+      oiDirection: oiDirection,
+      openInterestDisplay: openInterestDisplay,
+    );
+
+    final String arrow = DetailPageAnalysisHelpers.getOiArrow(
+      oiDirection: oiDirection,
+      openInterestDisplay: openInterestDisplay,
+    );
+
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.black,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.white12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text.rich(
+            TextSpan(
+              children: [
+                const TextSpan(
+                  text: 'OI (Son 30dk - canlı) ',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                TextSpan(
+                  text: arrow,
+                  style: TextStyle(
+                    color: valueColor,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            DetailPageAnalysisHelpers.getOiValue(openInterestDisplay),
+            style: TextStyle(
+              color: valueColor,
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-
-    // 🔥 EKLENEN (SİNYAL MOTORU)
     final combinedSignal = DetailPageAnalysisHelpers.getCombinedSignal(
       oiDirection: oiDirection,
       priceDirection: priceDirection,
@@ -269,8 +325,7 @@ class DetailPageContent extends StatelessWidget {
             SetupStatusCard(setup: setupResult!),
             const SizedBox(height: 12),
 
-            // 🔥 SADECE BURASI DEĞİŞTİ
-            DetailPageAnalysisHelpers.buildOiPriceAnalysisCard(
+            OiPriceAnalysisCard(
               oiDirection: oiDirection,
               priceDirection: priceDirection,
               oiPriceSignal: combinedSignal,
@@ -332,10 +387,7 @@ class DetailPageContent extends StatelessWidget {
             Row(
               children: [
                 Expanded(
-                  child: DetailPageAnalysisHelpers.buildOpenInterestBox(
-                    oiDirection: oiDirection,
-                    openInterestDisplay: openInterestDisplay,
-                  ),
+                  child: _buildOpenInterestBox(),
                 ),
                 const SizedBox(width: 8),
                 const Expanded(
