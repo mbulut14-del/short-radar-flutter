@@ -293,7 +293,8 @@ class _DetailPageState extends State<DetailPage>
 
     final double lastBody = (last.close - last.open).abs();
     final double lastRange = (last.high - last.low).abs();
-    final double upperWick = last.high - (last.open > last.close ? last.open : last.close);
+    final double upperWick =
+        last.high - (last.open > last.close ? last.open : last.close);
 
     if (last.close < last.open) {
       score += 6;
@@ -314,7 +315,9 @@ class _DetailPageState extends State<DetailPage>
       score += 5;
     }
 
-    if (prev2.close < prev2.open && prev.close < prev.open && last.close < last.open) {
+    if (prev2.close < prev2.open &&
+        prev.close < prev.open &&
+        last.close < last.open) {
       score += 6;
     }
 
@@ -411,7 +414,8 @@ class _DetailPageState extends State<DetailPage>
       return FinalScoreResult(
         score: finalScore,
         label: 'Güçlü fırsat',
-        summary: 'Merkezi short skoru güçlü. Erken giriş ile tetik birlikte oluşuyor.',
+        summary:
+            'Merkezi short skoru güçlü. Erken giriş ile tetik birlikte oluşuyor.',
       );
     }
 
@@ -434,7 +438,8 @@ class _DetailPageState extends State<DetailPage>
     return FinalScoreResult(
       score: finalScore,
       label: 'Zayıf',
-      summary: 'Short fırsatı için merkezi skor düşük. Şimdilik beklemek daha sağlıklı.',
+      summary:
+          'Short fırsatı için merkezi skor düşük. Şimdilik beklemek daha sağlıklı.',
     );
   }
 
@@ -566,6 +571,9 @@ class _DetailPageState extends State<DetailPage>
               priceDirection: widget.priceDirection,
               oiPriceSignal: widget.oiPriceSignal,
               orderFlowDirection: widget.orderFlowDirection,
+              finalScore: finalScoreResult?.score,
+              finalScoreLabel: finalScoreResult?.label,
+              finalScoreSummary: finalScoreResult?.summary,
             ),
           ),
         ],
