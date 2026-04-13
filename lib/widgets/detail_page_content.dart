@@ -753,7 +753,10 @@ class DetailPageContent extends StatelessWidget {
             ),
             const SizedBox(height: 12),
             if (pumpAnalysis != null) ...[
-              PumpAnalysisCard(result: pumpAnalysis!),
+              PumpAnalysisCard(
+                result: pumpAnalysis!,
+                finalScore: finalScore,
+              ),
               const SizedBox(height: 12),
             ],
             if (_shouldShowShortSetupCard()) ...[
