@@ -2,9 +2,6 @@ import 'package:flutter/material.dart';
 import '../services/analysis_engine.dart';
 
 class DetailPageAnalysisHelpers {
-
-  // ===== ENGINE WRAPPER (GEÇİŞ İÇİN)
-
   static String normalizeDirection(String value) {
     return AnalysisEngine.normalizeDirection(value);
   }
@@ -37,8 +34,6 @@ class DetailPageAnalysisHelpers {
     );
   }
 
-  // ===== OI HELPERS
-
   static String getOiDirection({
     required String oiDirection,
     required String openInterestDisplay,
@@ -56,10 +51,11 @@ class DetailPageAnalysisHelpers {
     required String oiDirection,
     required String openInterestDisplay,
   }) {
-    switch (getOiDirection(
-      oiDirection: oiDirection,
-      openInterestDisplay: openInterestDisplay,
-    )) {
+    switch (
+        getOiDirection(
+          oiDirection: oiDirection,
+          openInterestDisplay: openInterestDisplay,
+        )) {
       case 'up':
         return Colors.greenAccent;
       case 'down':
@@ -73,10 +69,11 @@ class DetailPageAnalysisHelpers {
     required String oiDirection,
     required String openInterestDisplay,
   }) {
-    switch (getOiDirection(
-      oiDirection: oiDirection,
-      openInterestDisplay: openInterestDisplay,
-    )) {
+    switch (
+        getOiDirection(
+          oiDirection: oiDirection,
+          openInterestDisplay: openInterestDisplay,
+        )) {
       case 'up':
         return '▲';
       case 'down':
@@ -172,12 +169,104 @@ class DetailPageAnalysisHelpers {
       case 'WEAK_DROP':
         return 'OI ve fiyat birlikte düşüyor. Hareket var ama baskı zayıf olabilir.';
       case 'EARLY_ACCUMULATION':
-        return 'OI ve fiyat yatay kalırken alış baskısı öne çıkıyor.';
+        return 'OI ve fiyat yatay kalırken alış baskısı öne çıkıyor. Erken bir birikim olabilir.';
       case 'EARLY_DISTRIBUTION':
-        return 'OI ve fiyat yatay kalırken satış baskısı öne çıkıyor.';
+        return 'OI ve fiyat yatay kalırken satış baskısı öne çıkıyor. Erken bir dağılım olabilir.';
       default:
         return 'Şu an net bir baskı veya güçlü fırsat görünmüyor.';
     }
+  }
+
+  static String getMarketStateTitle({
+    required String oiPriceSignal,
+    required String orderFlowDirection,
+  }) {
+    final String signal = oiPriceSignal.toUpperCase();
+    final String flow = normalizeOrderFlow(orderFlowDirection);
+
+    if (signal == 'STRONG_SHORT' && flow == 'SELL_PRESSURE') {
+      return 'Satış baskısı destekleniyor';
+    }
+    if (signal == 'STRONG_SHORT' && flow == 'BUY_PRESSURE') {
+      return 'Karşı alım tepkisi var';
+    }
+    if (signal == 'PUMP_RISK' && flow == 'SELL_PRESSURE') {
+      return 'Yukarı hareket şüpheli';
+    }
+    if (signal == 'PUMP_RISK' && flow == 'BUY_PRESSURE') {
+      return 'Yukarı hareket destek buluyor';
+    }
+    if (signal == 'SHORT_SQUEEZE' && flow == 'BUY_PRESSURE') {
+      return 'Yukarı baskı destekleniyor';
+    }
+    if (signal == 'SHORT_SQUEEZE' && flow == 'SELL_PRESSURE') {
+      return 'Squeeze zayıflıyor olabilir';
+    }
+    if (signal == 'WEAK_DROP' && flow == 'SELL_PRESSURE') {
+      return 'Düşüş var ama sınırlı';
+    }
+    if (signal == 'WEAK_DROP' && flow == 'BUY_PRESSURE') {
+      return 'Düşüşe tepki geliyor';
+    }
+    if (signal == 'EARLY_ACCUMULATION') {
+      return 'Erken birikim sinyali';
+    }
+    if (signal == 'EARLY_DISTRIBUTION') {
+      return 'Erken dağılım sinyali';
+    }
+    if (flow == 'SELL_PRESSURE') {
+      return 'Satış tarafı önde';
+    }
+    if (flow == 'BUY_PRESSURE') {
+      return 'Alış tarafı önde';
+    }
+    return 'Net baskı yok';
+  }
+
+  static String getMarketStateDescription({
+    required String oiPriceSignal,
+    required String orderFlowDirection,
+  }) {
+    final String signal = oiPriceSignal.toUpperCase();
+    final String flow = normalizeOrderFlow(orderFlowDirection);
+
+    if (signal == 'STRONG_SHORT' && flow == 'SELL_PRESSURE') {
+      return 'OI ve fiyat short yönünde hizalanırken emir akışında da satış tarafı daha baskın görünüyor.';
+    }
+    if (signal == 'STRONG_SHORT' && flow == 'BUY_PRESSURE') {
+      return 'Short baskısı sinyali var ancak emir akışında alıcılar karşılık veriyor. Baskı tek yönlü değil.';
+    }
+    if (signal == 'PUMP_RISK' && flow == 'SELL_PRESSURE') {
+      return 'Fiyat yükselse de emir akışı satış tarafına yaslanıyor. Yukarı hareket zayıflayabilir.';
+    }
+    if (signal == 'PUMP_RISK' && flow == 'BUY_PRESSURE') {
+      return 'Yukarı hareket emir akışından destek görüyor. Buna rağmen OI artışı nedeniyle yapı temkinli izlenmeli.';
+    }
+    if (signal == 'SHORT_SQUEEZE' && flow == 'BUY_PRESSURE') {
+      return 'Fiyat yukarı itilirken alım tarafı da baskın. Sıkışma etkisi daha görünür olabilir.';
+    }
+    if (signal == 'SHORT_SQUEEZE' && flow == 'SELL_PRESSURE') {
+      return 'Squeeze sinyali var ama emir akışı bunu tam desteklemiyor. Hareket gücü sınırlı kalabilir.';
+    }
+    if (signal == 'WEAK_DROP' && flow == 'SELL_PRESSURE') {
+      return 'Aşağı yönlü hareket sürüyor ancak yapı güçlü değil. Satış baskısı var ama kuvveti sınırlı.';
+    }
+    if (signal == 'WEAK_DROP' && flow == 'BUY_PRESSURE') {
+      return 'Düşüş görülse de emir akışında alıcılar devreye giriyor. Hareketin devamı zayıflayabilir.';
+    }
+    if (signal == 'EARLY_ACCUMULATION') {
+      return 'Fiyat ve OI henüz net yön üretmiyor ancak alış tarafı erken üstünlük kuruyor olabilir.';
+    }
+    if (signal == 'EARLY_DISTRIBUTION') {
+      return 'Fiyat ve OI henüz net yön üretmiyor ancak satış tarafı erken üstünlük kuruyor olabilir.';
+    }
+    if (flow == 'SELL_PRESSURE') {
+      return 'Fiyat ve OI tarafı net bir yön üretmese de emir akışında satış tarafı daha baskın görünüyor.';
+    }
+    if (flow == 'BUY_PRESSURE') {
+      return 'Fiyat ve OI tarafı net bir yön üretmese de emir akışında alış tarafı daha baskın görünüyor.';
+    }
+    return 'Pozisyon akışı ve fiyat ilişkisi net bir baskı üretmiyor. Emir tarafında da belirgin üstünlük görünmüyor.';
   }
 
   static Color getSignalColor(String oiPriceSignal) {
@@ -218,22 +307,129 @@ class DetailPageAnalysisHelpers {
     }
   }
 
-  // ===== UI (KORUNDU)
+  static String getOiDirectionLabel({
+    required String oiDirection,
+    required String openInterestDisplay,
+  }) {
+    switch (
+        getOiDirection(
+          oiDirection: oiDirection,
+          openInterestDisplay: openInterestDisplay,
+        )) {
+      case 'up':
+        return '↑ Artıyor';
+      case 'down':
+        return '↓ Düşüyor';
+      default:
+        return '→ Yatay';
+    }
+  }
+
+  static Widget buildMiniBadge({
+    required String label,
+    required String value,
+    required Color valueColor,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.04),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.white.withOpacity(0.08)),
+      ),
+      child: RichText(
+        text: TextSpan(
+          children: [
+            TextSpan(
+              text: '$label: ',
+              style: const TextStyle(
+                color: Colors.white60,
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            TextSpan(
+              text: value,
+              style: TextStyle(
+                color: valueColor,
+                fontSize: 11,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  static Widget buildOpenInterestBox({
+    required String oiDirection,
+    required String openInterestDisplay,
+  }) {
+    final Color valueColor = getOiColor(
+      oiDirection: oiDirection,
+      openInterestDisplay: openInterestDisplay,
+    );
+
+    final String arrow = getOiArrow(
+      oiDirection: oiDirection,
+      openInterestDisplay: openInterestDisplay,
+    );
+
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.black,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.white12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text.rich(
+            TextSpan(
+              children: [
+                const TextSpan(
+                  text: 'OI (Son 30dk - canlı) ',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                TextSpan(
+                  text: arrow,
+                  style: TextStyle(
+                    color: valueColor,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            getOiValue(openInterestDisplay),
+            style: TextStyle(
+              color: valueColor,
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 
   static Widget buildOiPriceAnalysisCard({
     required String oiDirection,
     required String priceDirection,
+    required String oiPriceSignal,
     required String orderFlowDirection,
     required String openInterestDisplay,
   }) {
-
-    final String signal = getCombinedSignal(
-      oiDirection: oiDirection,
-      priceDirection: priceDirection,
-      orderFlow: orderFlowDirection,
-    );
-
-    final Color signalColor = getSignalColor(signal);
+    final Color signalColor = getSignalColor(oiPriceSignal);
 
     return Container(
       width: double.infinity,
@@ -242,22 +438,136 @@ class DetailPageAnalysisHelpers {
         color: Colors.black.withOpacity(0.36),
         borderRadius: BorderRadius.circular(18),
         border: Border.all(color: signalColor.withOpacity(0.55), width: 1.2),
+        boxShadow: [
+          BoxShadow(
+            color: signalColor.withOpacity(0.10),
+            blurRadius: 16,
+            spreadRadius: 1,
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            getSignalTitle(signal),
+          const Text(
+            'OI + Fiyat Analizi',
             style: TextStyle(
-              color: signalColor,
-              fontSize: 16,
-              fontWeight: FontWeight.w900,
+              color: Colors.white70,
+              fontSize: 12,
+              fontWeight: FontWeight.w800,
             ),
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Icon(
+                getSignalIcon(oiPriceSignal),
+                color: signalColor,
+                size: 20,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  getSignalTitle(oiPriceSignal),
+                  style: TextStyle(
+                    color: signalColor,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: 8),
           Text(
-            getSignalDescription(signal),
-            style: const TextStyle(color: Colors.white),
+            getSignalDescription(oiPriceSignal),
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              height: 1.35,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              buildMiniBadge(
+                label: 'OI Yönü',
+                value: getOiDirectionLabel(
+                  oiDirection: oiDirection,
+                  openInterestDisplay: openInterestDisplay,
+                ),
+                valueColor: getOiColor(
+                  oiDirection: oiDirection,
+                  openInterestDisplay: openInterestDisplay,
+                ),
+              ),
+              buildMiniBadge(
+                label: 'Fiyat Yönü',
+                value: getPriceDirectionLabel(priceDirection),
+                valueColor: getPriceDirectionColor(priceDirection),
+              ),
+              buildMiniBadge(
+                label: 'Order Flow',
+                value: getOrderFlowLabel(orderFlowDirection),
+                valueColor: getOrderFlowColor(orderFlowDirection),
+              ),
+              buildMiniBadge(
+                label: 'Sinyal',
+                value: oiPriceSignal.toUpperCase(),
+                valueColor: signalColor,
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.04),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: Colors.white.withOpacity(0.08)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Durum Değerlendirmesi',
+                  style: TextStyle(
+                    color: Colors.white60,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  getMarketStateTitle(
+                    oiPriceSignal: oiPriceSignal,
+                    orderFlowDirection: orderFlowDirection,
+                  ),
+                  style: TextStyle(
+                    color: signalColor,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  getMarketStateDescription(
+                    oiPriceSignal: oiPriceSignal,
+                    orderFlowDirection: orderFlowDirection,
+                  ),
+                  style: const TextStyle(
+                    color: Colors.white70,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    height: 1.35,
+                  ),
+                ),
+              ],
+            ),
           ),
         ],
       ),
