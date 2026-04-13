@@ -517,6 +517,33 @@ class DetailPageContent extends StatelessWidget {
     );
   }
 
+  Widget _buildHeaderPriceBlock() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        const Text(
+          'Fiyat',
+          style: TextStyle(
+            color: Colors.white54,
+            fontSize: 10,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 0.3,
+          ),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          selectedCoin.lastPriceText,
+          textAlign: TextAlign.right,
+          style: const TextStyle(
+            color: Colors.greenAccent,
+            fontSize: 18,
+            fontWeight: FontWeight.w900,
+          ),
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final combinedSignal = DetailPageAnalysisHelpers.getCombinedSignal(
@@ -541,6 +568,9 @@ class DetailPageContent extends StatelessWidget {
                   ),
                 ),
               ),
+              const SizedBox(width: 12),
+              _buildHeaderPriceBlock(),
+              const SizedBox(width: 10),
               spinner,
             ],
           ),
