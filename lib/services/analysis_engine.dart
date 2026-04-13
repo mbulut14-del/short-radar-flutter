@@ -1,4 +1,3 @@
-
 class AnalysisEngine {
   static String normalizeDirection(String value) {
     final String v = value.trim().toUpperCase();
@@ -73,5 +72,55 @@ class AnalysisEngine {
 
     return score / 6;
   }
+
+  static Map<String, dynamic> getSetupClassification({
+    required String signal,
+    required double strength,
+    required String orderFlow,
+  }) {
+    double score = strength * 100;
+
+    final String s = signal.toUpperCase();
+    final String flow = orderFlow.toUpperCase();
+
+    if (s == 'STRONG_SHORT') score += 25;
+    if (s == 'PUMP_RISK') score += 10;
+    if (s == 'SHORT_SQUEEZE') score += 10;
+    if (s == 'EARLY_DISTRIBUTION') score += 20;
+    if (s == 'EARLY_ACCUMULATION') score += 20;
+
+    if (flow == 'SELL_PRESSURE' && s.contains('DISTRIBUTION')) {
+      score += 15;
+    }
+
+    if (flow == 'BUY_PRESSURE' && s.contains('ACCUMULATION')) {
+      score += 15;
+    }
+
+    if (flow == 'BUY_PRESSURE' && s.contains('SHORT')) {
+      score -= 15;
+    }
+
+    if (flow == 'SELL_PRESSURE' && s.contains('ACCUMULATION')) {
+      score -= 15;
+    }
+
+    score = score.clamp(0, 100);
+
+    String label;
+    if (score < 40) {
+      label = 'Zayıf';
+    } else if (score < 70) {
+      label = 'İzlenmeli';
+    } else if (score < 85) {
+      label = 'Kurulum var';
+    } else {
+      label = 'Güçlü fırsat';
+    }
+
+    return {
+      'score': score,
+      'label': label,
+    };
+  }
 }
-        
