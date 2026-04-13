@@ -9,7 +9,6 @@ import 'detail_page_analysis_helpers.dart';
 import 'oi_price_analysis_card.dart';
 import 'price_box.dart';
 import 'pump_analysis_card.dart';
-import 'setup_status_card.dart';
 import 'short_setup_card.dart';
 
 class DetailPageContent extends StatelessWidget {
@@ -31,6 +30,10 @@ class DetailPageContent extends StatelessWidget {
   final String oiPriceSignal;
   final String orderFlowDirection;
 
+  final double? finalScore;
+  final String? finalScoreLabel;
+  final String? finalScoreSummary;
+
   const DetailPageContent({
     super.key,
     required this.contractName,
@@ -50,6 +53,9 @@ class DetailPageContent extends StatelessWidget {
     this.priceDirection = 'FLAT',
     this.oiPriceSignal = 'NEUTRAL',
     this.orderFlowDirection = 'NEUTRAL',
+    this.finalScore,
+    this.finalScoreLabel,
+    this.finalScoreSummary,
   });
 
   String _formatPrice(double value, {int digits = 6}) {
@@ -108,6 +114,134 @@ class DetailPageContent extends StatelessWidget {
             fontWeight: FontWeight.w800,
           ),
         ),
+      ),
+    );
+  }
+
+  Color _getFinalScoreColor(double score) {
+    if (score >= 85) return Colors.greenAccent;
+    if (score >= 70) return Colors.lightGreenAccent;
+    if (score >= 40) return Colors.orangeAccent;
+    return Colors.redAccent;
+  }
+
+  String _getFinalScoreHint(double score) {
+    if (score >= 85) {
+      return 'Merkezi karar motoru short tarafında güçlü fırsat görüyor.';
+    }
+    if (score >= 70) {
+      return 'Kurulum oluşuyor. Giriş bölgesi yakın olabilir.';
+    }
+    if (score >= 40) {
+      return 'Erken sinyal var ama teyit henüz tam güçlenmedi.';
+    }
+    return 'Merkezi skor zayıf. Şimdilik beklemek daha sağlıklı.';
+  }
+
+  Widget _buildFinalScoreCard() {
+    if (finalScore == null) {
+      return const SizedBox();
+    }
+
+    final double safeScore = finalScore!.clamp(0, 100);
+    final Color scoreColor = _getFinalScoreColor(safeScore);
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            scoreColor.withOpacity(0.18),
+            Colors.black.withOpacity(0.92),
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+          color: scoreColor.withOpacity(0.55),
+          width: 1.2,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: scoreColor.withOpacity(0.10),
+            blurRadius: 14,
+            spreadRadius: 1,
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'FINAL SHORT SCORE',
+            style: TextStyle(
+              color: Colors.white70,
+              fontSize: 11,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 1.0,
+            ),
+          ),
+          const SizedBox(height: 10),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                safeScore.toStringAsFixed(0),
+                style: TextStyle(
+                  color: scoreColor,
+                  fontSize: 34,
+                  fontWeight: FontWeight.w900,
+                  height: 1,
+                ),
+              ),
+              const SizedBox(width: 6),
+              Padding(
+                padding: const EdgeInsets.only(bottom: 4),
+                child: Text(
+                  '/ 100',
+                  style: TextStyle(
+                    color: Colors.white.withOpacity(0.70),
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+            decoration: BoxDecoration(
+              color: scoreColor.withOpacity(0.12),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: scoreColor.withOpacity(0.35),
+              ),
+            ),
+            child: Text(
+              finalScoreLabel ?? 'İzlenmeli',
+              style: TextStyle(
+                color: scoreColor,
+                fontSize: 13,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            finalScoreSummary?.trim().isNotEmpty == true
+                ? finalScoreSummary!
+                : _getFinalScoreHint(safeScore),
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              height: 1.4,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -264,6 +398,21 @@ class DetailPageContent extends StatelessWidget {
     );
   }
 
+  Widget _buildSectionTitle(String title) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Text(
+        title,
+        style: const TextStyle(
+          color: Colors.white70,
+          fontSize: 12,
+          fontWeight: FontWeight.w800,
+          letterSpacing: 0.6,
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final combinedSignal = DetailPageAnalysisHelpers.getCombinedSignal(
@@ -321,8 +470,11 @@ class DetailPageContent extends StatelessWidget {
               _buildErrorBox(detailError),
               const SizedBox(height: 14),
             ],
-            SetupStatusCard(setup: setupResult!),
-            const SizedBox(height: 12),
+            if (finalScore != null) ...[
+              _buildFinalScoreCard(),
+              const SizedBox(height: 12),
+            ],
+            _buildSectionTitle('ALT ANALİZLER'),
             OiPriceAnalysisCard(
               oiDirection: oiDirection,
               priceDirection: priceDirection,
