@@ -9,7 +9,6 @@ import 'detail_page_analysis_helpers.dart';
 import 'oi_price_analysis_card.dart';
 import 'price_box.dart';
 import 'pump_analysis_card.dart';
-import 'risk_panel_card.dart';
 import 'setup_status_card.dart';
 import 'short_setup_card.dart';
 
@@ -324,7 +323,6 @@ class DetailPageContent extends StatelessWidget {
             ],
             SetupStatusCard(setup: setupResult!),
             const SizedBox(height: 12),
-
             OiPriceAnalysisCard(
               oiDirection: oiDirection,
               priceDirection: priceDirection,
@@ -332,7 +330,6 @@ class DetailPageContent extends StatelessWidget {
               orderFlowDirection: orderFlowDirection,
               openInterestDisplay: openInterestDisplay,
             ),
-
             const SizedBox(height: 12),
             if (pumpAnalysis != null) ...[
               PumpAnalysisCard(result: pumpAnalysis!),
@@ -347,6 +344,8 @@ class DetailPageContent extends StatelessWidget {
               riskPercent:
                   '${(((setupResult!.stopLoss - setupResult!.entry) / setupResult!.entry) * 100).toStringAsFixed(2)}%',
             ),
+            const SizedBox(height: 12),
+            _buildWhyCard(),
             const SizedBox(height: 18),
             Row(
               children: [
@@ -395,10 +394,6 @@ class DetailPageContent extends StatelessWidget {
                 ),
               ],
             ),
-            const SizedBox(height: 18),
-            RiskPanelCard(result: setupResult!),
-            const SizedBox(height: 18),
-            _buildWhyCard(),
           ] else
             _buildCenterState(
               child: _buildWaitingBox(),
