@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:http/http.dart' as http;
 
@@ -25,8 +26,7 @@ class _HomePageState extends State<HomePage> {
   String errorText = '';
   Timer? _refreshTimer;
 
-  String? lastNotifiedCoin;
-  DateTime? lastNotifyTime;
+  final Map<String, DateTime> _lastNotifyTimes = {};
 
   final Map<String, List<double>> _oiHistory = {};
   final Map<String, List<double>> _priceHistory = {};
@@ -52,6 +52,8 @@ class _HomePageState extends State<HomePage> {
 
   static const int _historyLimit = 360;
   static const String _gateUsdtWsUrl = 'wss://fx-ws.gateio.ws/v4/ws/usdt';
+  static const int _alertScoreThreshold = 75;
+  static const Duration _alertCooldown = Duration(minutes: 15);
 
   @override
   void initState() {
@@ -308,6 +310,74 @@ class _HomePageState extends State<HomePage> {
     } catch (_) {}
   }
 
+  bool _shouldAlertCoin(CoinRadarData coin) {
+    final String oiPriceSignal = _oiPriceSignalMap[coin.name] ?? 'NEUTRAL';
+    final String orderFlowDirection = _orderFlowMap[coin.name] ?? 'NEUTRAL';
+    final DateTime now = DateTime.now();
+    final DateTime? lastTime = _lastNotifyTimes[coin.name];
+
+    if (coin.score < _alertScoreThreshold) return false;
+    if (coin.fundingRate <= 0) return false;
+    if (orderFlowDirection == 'BUY_PRESSURE') return false;
+    if (oiPriceSignal == 'SHORT_SQUEEZE') return false;
+    if (lastTime != null && now.difference(lastTime) < _alertCooldown) {
+      return false;
+    }
+
+    return true;
+  }
+
+  Future<void> _notifyForCoin(CoinRadarData coin) async {
+    final String oiPriceSignal = _oiPriceSignalMap[coin.name] ?? 'NEUTRAL';
+    final String orderFlowDirection = _orderFlowMap[coin.name] ?? 'NEUTRAL';
+
+    _lastNotifyTimes[coin.name] = DateTime.now();
+
+    try {
+      await HapticFeedback.heavyImpact();
+      await HapticFeedback.vibrate();
+    } catch (_) {}
+
+    const AndroidNotificationDetails androidDetails =
+        AndroidNotificationDetails(
+      'short_channel',
+      'Short Alerts',
+      channelDescription: 'Short radar fırsat bildirimleri',
+      importance: Importance.max,
+      priority: Priority.high,
+      enableVibration: true,
+      playSound: true,
+      ticker: 'short-alert',
+    );
+
+    const NotificationDetails details =
+        NotificationDetails(android: androidDetails);
+
+    final String signalText = oiPriceSignal == 'STRONG_SHORT'
+        ? 'STRONG_SHORT'
+        : oiPriceSignal == 'WEAK_DROP'
+            ? 'WEAK_DROP'
+            : oiPriceSignal;
+
+    final String body =
+        '${coin.name} • skor ${coin.score} • $signalText • $orderFlowDirection';
+
+    await notificationsPlugin.show(
+      coin.name.hashCode,
+      'Short setup hazır olabilir 🚨',
+      body,
+      details,
+    );
+  }
+
+  Future<void> _checkAndSendAlerts(List<CoinRadarData> candidates) async {
+    for (final coin in candidates) {
+      if (_shouldAlertCoin(coin)) {
+        await _notifyForCoin(coin);
+      }
+    }
+  }
+
   Future<void> fetchCoins() async {
     setState(() {
       isLoading = true;
@@ -376,6 +446,7 @@ class _HomePageState extends State<HomePage> {
 
       final CoinRadarData leader = sortedByScore.first;
       final List<CoinRadarData> topCoins = sortedByChange.take(10).toList();
+      final List<CoinRadarData> alertCandidates = sortedByScore.take(10).toList();
 
       _desiredBookTickerSymbols
         ..clear()
@@ -390,36 +461,7 @@ class _HomePageState extends State<HomePage> {
         errorText = '';
       });
 
-      if (leader.score >= 70 && leader.fundingRate > 0) {
-        final now = DateTime.now();
-
-        final bool isSameCoin = lastNotifiedCoin == leader.name;
-        final bool isTooSoon = lastNotifyTime != null &&
-            now.difference(lastNotifyTime!).inMinutes < 30;
-
-        if (!isSameCoin || !isTooSoon) {
-          const AndroidNotificationDetails androidDetails =
-              AndroidNotificationDetails(
-            'short_channel',
-            'Short Alerts',
-            importance: Importance.max,
-            priority: Priority.high,
-          );
-
-          const NotificationDetails details =
-              NotificationDetails(android: androidDetails);
-
-          await notificationsPlugin.show(
-            0,
-            'SHORT BAŞLIYOR 🚨',
-            '${leader.name} güçlü short sinyali veriyor',
-            details,
-          );
-
-          lastNotifiedCoin = leader.name;
-          lastNotifyTime = now;
-        }
-      }
+      await _checkAndSendAlerts(alertCandidates);
     } catch (_) {
       setState(() {
         isLoading = false;
