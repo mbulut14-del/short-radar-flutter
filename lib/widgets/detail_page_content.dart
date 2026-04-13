@@ -150,6 +150,11 @@ class DetailPageContent extends StatelessWidget {
     return finalScore! >= 40;
   }
 
+  bool _shouldShowTriggerWaitCard() {
+    if (finalScore == null) return false;
+    return finalScore! >= 40 && finalScore! < 70;
+  }
+
   String _getAnalysisSectionTitle() {
     if (finalScore == null) return 'ALT ANALİZLER';
     if (finalScore! >= 70) return 'ALT ANALİZLER';
@@ -315,6 +320,134 @@ class DetailPageContent extends StatelessWidget {
                         color: Colors.white,
                         fontSize: 13,
                         fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  List<String> _buildTriggerConditions() {
+    final List<String> triggers = [];
+
+    if (orderFlowDirection == 'SELL_PRESSURE') {
+      triggers.add('Satış baskısının bir sonraki mumda da devam etmesi');
+    } else {
+      triggers.add('Order flow tarafında satış baskısının netleşmesi');
+    }
+
+    if (priceDirection == 'FLAT') {
+      triggers.add('Yatay yapı bozulup aşağı yönlü zayıf kapanış gelmesi');
+    } else if (priceDirection == 'UP') {
+      triggers.add('Yukarı hareketin zayıflayıp başarısız kapanış üretmesi');
+    } else {
+      triggers.add('Aşağı yönün ikinci mumla teyit edilmesi');
+    }
+
+    if (oiDirection == 'UP') {
+      triggers.add('OI artarken fiyatın yeni high taşıyamaması');
+    } else if (oiDirection == 'FLAT') {
+      triggers.add('OI tarafında aşağı ya da satış lehine ayrışma görülmesi');
+    } else {
+      triggers.add('OI düşüşüyle birlikte fiyatın da zayıf kalmaya devam etmesi');
+    }
+
+    if (pumpAnalysis != null) {
+      final dynamic pump = pumpAnalysis!;
+      try {
+        final dynamic score = pump.score;
+        if (score is num && score >= 55) {
+          triggers.add('Pump sonrası gövde küçülmesinin yeni mumda da sürmesi');
+        }
+      } catch (_) {}
+    }
+
+    if (visibleCandles.length >= 2) {
+      final CandleData last = visibleCandles.last;
+      final CandleData prev = visibleCandles[visibleCandles.length - 2];
+
+      if (last.high >= prev.high) {
+        triggers.add('Yeni high denemesi sonrası zayıf kapanış gelmesi');
+      }
+
+      if (last.close >= prev.low) {
+        triggers.add('Bir önceki mum dibinin altına saatlik kapanış gelmesi');
+      }
+    }
+
+    final List<String> unique = [];
+    for (final item in triggers) {
+      if (!unique.contains(item)) {
+        unique.add(item);
+      }
+    }
+
+    return unique.take(4).toList();
+  }
+
+  Widget _buildTriggerWaitCard() {
+    final List<String> triggers = _buildTriggerConditions();
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.orange.withOpacity(0.10),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: Colors.orangeAccent.withOpacity(0.45),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'TETİK İÇİN BEKLENENLER',
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 13,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 0.4,
+            ),
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'Kurulum var ama aktif short girişi için aşağıdaki teyitlerden en az birkaçı gelmeli:',
+            style: TextStyle(
+              color: Colors.white70,
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              height: 1.4,
+            ),
+          ),
+          const SizedBox(height: 12),
+          ...triggers.map(
+            (item) => Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    '• ',
+                    style: TextStyle(
+                      color: Colors.orangeAccent,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  Expanded(
+                    child: Text(
+                      item,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        height: 1.35,
                       ),
                     ),
                   ),
@@ -636,6 +769,10 @@ class DetailPageContent extends StatelessWidget {
               const SizedBox(height: 12),
             ] else ...[
               _buildPassiveSetupBox(),
+              const SizedBox(height: 12),
+            ],
+            if (_shouldShowTriggerWaitCard()) ...[
+              _buildTriggerWaitCard(),
               const SizedBox(height: 12),
             ],
             if (_shouldShowWhyCard()) ...[
