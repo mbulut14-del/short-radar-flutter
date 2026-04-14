@@ -276,9 +276,12 @@ class AnalysisEngine {
       }
     }
 
-    final int greenCount = [_isGreen(prev4), _isGreen(prev3), _isGreen(prev2), _isGreen(prev)]
-        .where((e) => e)
-        .length;
+    final int greenCount = [
+      _isGreen(prev4),
+      _isGreen(prev3),
+      _isGreen(prev2),
+      _isGreen(prev),
+    ].where((e) => e).length;
 
     if (greenCount >= 3) {
       score += 12;
@@ -310,7 +313,9 @@ class AnalysisEngine {
       reasons.add('Lower high oluşumu başladı.');
     }
 
-    if (_bodySize(prev) > 0 && _bodySize(last) > _bodySize(prev) * 1.05 && _isRed(last)) {
+    if (_bodySize(prev) > 0 &&
+        _bodySize(last) > _bodySize(prev) * 1.05 &&
+        _isRed(last)) {
       score += 8;
       reasons.add('Dönüş mumu gövde olarak güçleniyor.');
     }
@@ -342,35 +347,139 @@ class AnalysisEngine {
     };
   }
 
-  // 🚀 YENİ EKLENDİ
-  static double calculateMomentumShift(List<dynamic> candles) {
-    if (candles.length < 4) return 0;
+  static double _calculateRsi(List<dynamic> candles, {int period = 6}) {
+    if (candles.length < period + 1) return 50;
+
+    double gain = 0;
+    double loss = 0;
+
+    for (int i = candles.length - period; i < candles.length; i++) {
+      final double change = _close(candles[i]) - _close(candles[i - 1]);
+      if (change > 0) {
+        gain += change;
+      } else {
+        loss += change.abs();
+      }
+    }
+
+    if (loss == 0) return 100;
+    if (gain == 0) return 0;
+
+    final double rs = gain / loss;
+    return 100 - (100 / (1 + rs));
+  }
+
+  static bool _isRsiFalling(List<dynamic> candles, {int period = 6}) {
+    if (candles.length < period + 3) return false;
+
+    final List<dynamic> prevCandles = candles.sublist(0, candles.length - 1);
+    final double currentRsi = _calculateRsi(candles, period: period);
+    final double previousRsi = _calculateRsi(prevCandles, period: period);
+
+    return currentRsi < previousRsi;
+  }
+
+  static bool _hasBounceRecovery(List<dynamic> candles) {
+    if (candles.length < 3) return false;
 
     final dynamic last = candles[candles.length - 1];
     final dynamic prev = candles[candles.length - 2];
     final dynamic prev2 = candles[candles.length - 3];
 
+    final bool lastGreen = _isGreen(last);
+    final bool prevGreen = _isGreen(prev);
+    final bool higherLow = _low(last) > _low(prev);
+    final bool reclaim = _close(last) > _close(prev);
+
+    return (lastGreen && prevGreen) || (lastGreen && higherLow && reclaim) ||
+        (_isGreen(last) && _isGreen(prev2) && _close(last) > _close(prev));
+  }
+
+  static bool isFirstBreakdown(List<dynamic> candles) {
+    if (candles.length < 4) return false;
+
+    final dynamic last = candles[candles.length - 1];
+    final dynamic prev = candles[candles.length - 2];
+    final dynamic prev2 = candles[candles.length - 3];
+    final dynamic prev3 = candles[candles.length - 4];
+
+    final bool pumpBefore =
+        _isGreen(prev) && (_isGreen(prev2) || _isGreen(prev3));
+
+    final bool weakTop =
+        _hasBigUpperWick(prev, minRatio: 0.30) ||
+        _hasWeakClose(prev, maxCloseRatio: 0.62);
+
+    final bool firstRed = _isGreen(prev) && _isRed(last);
+    final bool lowerHigh = _high(last) <= _high(prev);
+    final bool breakdown = _close(last) < _low(prev);
+
+    return pumpBefore && weakTop && firstRed && lowerHigh && breakdown;
+  }
+
+  // 🚀 GÜNCELLENDİ
+  static double calculateMomentumShift(List<dynamic> candles) {
+    if (candles.length < 6) return 0;
+
+    final dynamic last = candles[candles.length - 1];
+    final dynamic prev = candles[candles.length - 2];
+    final dynamic prev2 = candles[candles.length - 3];
+    final dynamic prev3 = candles[candles.length - 4];
+
     double score = 0;
 
+    // 1) İlk çatlak
     if (_isGreen(prev) && _isRed(last)) {
-      score += 30;
-    }
-
-    if (_high(last) < _high(prev)) {
-      score += 25;
-    }
-
-    if (_close(last) < _close(prev)) {
       score += 20;
     }
 
-    if (_bodySize(prev) > 0 &&
-        _bodySize(last) < _bodySize(prev) * 0.7) {
+    // 2) Lower high
+    if (_high(last) < _high(prev)) {
       score += 15;
     }
 
-    if (_hasBigUpperWick(last, minRatio: 0.3)) {
+    // 3) Breakdown
+    if (_close(last) < _low(prev)) {
+      score += 30;
+    }
+
+    // 4) Üst wick / tepe zayıflığı
+    if (_hasBigUpperWick(prev, minRatio: 0.30) ||
+        _hasBigUpperWick(last, minRatio: 0.30)) {
       score += 10;
+    }
+
+    // 5) RSI aşırı alım + düşüş
+    final double rsi6 = _calculateRsi(candles, period: 6);
+    final double rsi12 = _calculateRsi(candles, period: 12);
+
+    if (rsi6 >= 75) {
+      score += 10;
+    }
+
+    if (rsi12 >= 70) {
+      score += 5;
+    }
+
+    if (_isRsiFalling(candles, period: 6)) {
+      score += 10;
+    }
+
+    // 6) Güçlü bounce geldiyse short setup öldü
+    if (_hasBounceRecovery(candles)) {
+      score -= 45;
+    }
+
+    // 7) Son mum kırmızı değil ve breakdown yoksa giriş yok
+    if (!_isRed(last) && _close(last) >= _low(prev)) {
+      score -= 20;
+    }
+
+    // 8) Klasik mini pump geçmişi
+    final bool miniPump =
+        _isGreen(prev) && (_isGreen(prev2) || _isGreen(prev3));
+    if (miniPump) {
+      score += 5;
     }
 
     return score.clamp(0, 100).toDouble();
