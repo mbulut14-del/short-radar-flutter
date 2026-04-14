@@ -351,6 +351,7 @@ class _DetailPageState extends State<DetailPage>
     if (oiPriceSignal == 'STRONG_SHORT') score += 12;
     if (oiPriceSignal == 'FAKE_PUMP') score += 8;
     if (oiPriceSignal == 'SHORT_SQUEEZE') score -= 18;
+    if (oiPriceSignal == 'EARLY_ACCUMULATION') score -= 10;
 
     if (pumpAnalysis != null) {
       final String summary = _safeLower(_extractDynamicSummary(pumpAnalysis));
@@ -359,6 +360,8 @@ class _DetailPageState extends State<DetailPage>
       if (summary.contains('liq')) score += 8;
       if (summary.contains('short')) score += 4;
       if (signal.contains('pump')) score += 4;
+      if (summary.contains('alıcı')) score -= 8;
+      if (summary.contains('toplanma')) score -= 6;
     }
 
     if (setupResult != null) {
@@ -366,6 +369,8 @@ class _DetailPageState extends State<DetailPage>
       if (summary.contains('squeeze')) score -= 10;
       if (summary.contains('risk')) score -= 6;
       if (summary.contains('uygun')) score += 4;
+      if (summary.contains('alıcı')) score -= 8;
+      if (summary.contains('birikim')) score -= 8;
     }
 
     return _clampScore(score);
@@ -432,34 +437,39 @@ class _DetailPageState extends State<DetailPage>
       return 'SHORT';
     }
 
-    if (oiPriceSignal == 'SHORT_SQUEEZE' ||
-        oiPriceSignal == 'EARLY_ACCUMULATION') {
-      return 'LONG';
-    }
-
     int shortVotes = 0;
-    int longVotes = 0;
+    int neutralPenalty = 0;
 
     if (oiDirection == 'UP') {
       shortVotes += 1;
     } else if (oiDirection == 'DOWN') {
-      longVotes += 1;
+      neutralPenalty += 1;
     }
 
     if (priceDirection == 'DOWN') {
       shortVotes += 2;
     } else if (priceDirection == 'UP') {
-      longVotes += 2;
+      neutralPenalty += 2;
     }
 
     if (orderFlowDirection == 'SELL_PRESSURE') {
       shortVotes += 2;
     } else if (orderFlowDirection == 'BUY_PRESSURE') {
-      longVotes += 2;
+      neutralPenalty += 2;
     }
 
-    if (shortVotes > longVotes) return 'SHORT';
-    if (longVotes > shortVotes) return 'LONG';
+    if (oiPriceSignal == 'SHORT_SQUEEZE') {
+      neutralPenalty += 3;
+    }
+
+    if (oiPriceSignal == 'EARLY_ACCUMULATION') {
+      neutralPenalty += 3;
+    }
+
+    if (shortVotes >= 3 && shortVotes > neutralPenalty) {
+      return 'SHORT';
+    }
+
     return 'NEUTRAL';
   }
 
@@ -502,12 +512,7 @@ class _DetailPageState extends State<DetailPage>
         (priceDirection == 'DOWN' || oiPriceSignal == 'FAKE_PUMP') &&
         orderFlowDirection == 'SELL_PRESSURE';
 
-    final bool longAligned =
-        tradeBias == 'LONG' &&
-        priceDirection == 'UP' &&
-        orderFlowDirection == 'BUY_PRESSURE';
-
-    if (shortAligned || longAligned) {
+    if (shortAligned) {
       confidence += 16;
     }
 
@@ -530,16 +535,16 @@ class _DetailPageState extends State<DetailPage>
       confidence -= 10;
     }
 
-    if (tradeBias == 'SHORT' && oiPriceSignal == 'SHORT_SQUEEZE') {
+    if (oiPriceSignal == 'SHORT_SQUEEZE') {
       confidence -= 20;
     }
 
-    if (tradeBias == 'SHORT' && orderFlowDirection == 'BUY_PRESSURE') {
+    if (orderFlowDirection == 'BUY_PRESSURE') {
       confidence -= 16;
     }
 
-    if (tradeBias == 'LONG' && orderFlowDirection == 'SELL_PRESSURE') {
-      confidence -= 16;
+    if (oiPriceSignal == 'EARLY_ACCUMULATION') {
+      confidence -= 14;
     }
 
     if (tradeBias == 'SHORT' && oiDirection == 'UP') {
@@ -570,30 +575,29 @@ class _DetailPageState extends State<DetailPage>
       return 'NO TRADE';
     }
 
-    if (finalScore < 70) {
-      if (tradeBias == 'SHORT') return 'WATCH';
-      if (tradeBias == 'LONG') return 'WATCH';
-      return 'WAIT FOR CONFIRMATION';
+    if (tradeBias != 'SHORT') {
+      return finalScore >= 40 ? 'WATCH' : 'NO TRADE';
     }
 
-    if (finalScore < 85) {
-      if (confidence < 60) return 'WAIT FOR CONFIRMATION';
-      if (tradeBias == 'SHORT') return 'PREPARE SHORT';
-      if (tradeBias == 'LONG') return 'PREPARE LONG';
+    if (finalScore < 70) {
       return 'WATCH';
     }
 
+    if (finalScore < 85) {
+      if (confidence < 60) return 'WATCH';
+      return 'PREPARE SHORT';
+    }
+
     if (confidence < 68) {
-      return 'WAIT FOR CONFIRMATION';
+      return 'WATCH';
     }
 
-    if (oiPriceSignal == 'SHORT_SQUEEZE') {
-      return 'WAIT FOR CONFIRMATION';
+    if (oiPriceSignal == 'SHORT_SQUEEZE' ||
+        oiPriceSignal == 'EARLY_ACCUMULATION') {
+      return 'WATCH';
     }
 
-    if (tradeBias == 'SHORT') return 'ENTER SHORT';
-    if (tradeBias == 'LONG') return 'ENTER LONG';
-    return 'WATCH';
+    return 'ENTER SHORT';
   }
 
   List<String> _buildMarketReadBullets({
@@ -617,7 +621,7 @@ class _DetailPageState extends State<DetailPage>
     if (priceDirection == 'DOWN') {
       bullets.add('Fiyat aşağı yönlü baskı gösteriyor.');
     } else if (priceDirection == 'UP') {
-      bullets.add('Fiyat yukarı gidiyor, tek başına short için risk oluşturabilir.');
+      bullets.add('Fiyat yukarı gidiyor, short tarafı için risk oluşturabilir.');
     } else {
       bullets.add('Fiyat yatay seyirde, net kırılım henüz gelmemiş olabilir.');
     }
@@ -625,7 +629,7 @@ class _DetailPageState extends State<DetailPage>
     if (orderFlowDirection == 'SELL_PRESSURE') {
       bullets.add('Order flow satış baskısını destekliyor.');
     } else if (orderFlowDirection == 'BUY_PRESSURE') {
-      bullets.add('Order flow alıcı baskısını gösteriyor.');
+      bullets.add('Order flow alıcı baskısını gösteriyor; short için ters rüzgar var.');
     } else {
       bullets.add('Order flow tarafında belirgin üstünlük yok.');
     }
@@ -641,13 +645,13 @@ class _DetailPageState extends State<DetailPage>
         bullets.add('Düşüş var ama henüz tam kuvvetli görünmüyor.');
         break;
       case 'EARLY_DISTRIBUTION':
-        bullets.add('Erken dağıtım sinyali oluşuyor olabilir.');
+        bullets.add('Erken dağıtım sinyali short lehine öncü işaret olabilir.');
         break;
       case 'EARLY_ACCUMULATION':
-        bullets.add('Erken toplama sinyali short için ters risk üretebilir.');
+        bullets.add('Erken toplama sinyali var; short tarafı için negatif filtre oluşuyor.');
         break;
       case 'SHORT_SQUEEZE':
-        bullets.add('Kısa pozisyonlar sıkışıyor olabilir; squeeze riski yüksek.');
+        bullets.add('Kısa pozisyonlar sıkışıyor olabilir; short açmak için risk yüksek.');
         break;
       default:
         bullets.add('Ana sinyal nötr bölgede, ek teyit gerekiyor.');
@@ -684,12 +688,12 @@ class _DetailPageState extends State<DetailPage>
       warnings.add('Short squeeze riski var.');
     }
 
-    if (tradeBias == 'SHORT' && orderFlowDirection == 'BUY_PRESSURE') {
-      warnings.add('Short bias ile order flow çelişiyor.');
+    if (oiPriceSignal == 'EARLY_ACCUMULATION') {
+      warnings.add('Erken birikim sinyali short girişini zayıflatıyor.');
     }
 
-    if (tradeBias == 'LONG' && orderFlowDirection == 'SELL_PRESSURE') {
-      warnings.add('Long bias ile order flow çelişiyor.');
+    if (tradeBias == 'SHORT' && orderFlowDirection == 'BUY_PRESSURE') {
+      warnings.add('Short bias ile order flow çelişiyor.');
     }
 
     if (confidence < 60) {
@@ -726,18 +730,10 @@ class _DetailPageState extends State<DetailPage>
     } else if (action == 'PREPARE SHORT') {
       notes.add('Short hazırlığı var; tetik için ek fiyat teyidi beklenmeli.');
       notes.add('Zayıflayan mum yapısı gelirse giriş kalitesi artar.');
-    } else if (action == 'ENTER LONG') {
-      notes.add('Long tarafı güçleniyor; giriş fırsatı oluşmuş olabilir.');
-      notes.add('Stop bölgesi son dip altı izlenebilir.');
-    } else if (action == 'PREPARE LONG') {
-      notes.add('Long hazırlığı var; net kırılım beklemek daha sağlıklı.');
-      notes.add('Alıcı baskısı sürerse giriş kalitesi artar.');
-    } else if (action == 'WAIT FOR CONFIRMATION') {
-      notes.add('Kurulum var ama teyit tamamlanmadan acele giriş riskli.');
     } else if (action == 'WATCH') {
       notes.add('Şimdilik izleme modunda kalmak daha doğru.');
     } else {
-      notes.add('Mevcut görüntü işlem kalitesi için yeterli değil.');
+      notes.add('Mevcut görüntü short işlemi için yeterli kalite üretmiyor.');
     }
 
     if (oiPriceSignal == 'FAKE_PUMP') {
@@ -746,6 +742,10 @@ class _DetailPageState extends State<DetailPage>
 
     if (oiPriceSignal == 'EARLY_DISTRIBUTION') {
       notes.add('Erken dağıtım sinyali nedeniyle sabırlı bekleme avantajlı olabilir.');
+    }
+
+    if (oiPriceSignal == 'EARLY_ACCUMULATION') {
+      notes.add('Alıcı tarafı erken üstünlük kuruyor olabilir; short için acele etme.');
     }
 
     if (confidence < 60) {
@@ -759,8 +759,12 @@ class _DetailPageState extends State<DetailPage>
       } else if (label.contains('erken')) {
         notes.add('Kurulum erken aşamada olabilir; net tetik beklemek mantıklı.');
       } else if (label.contains('hazır')) {
-        notes.add('Entry timing tarafı girişe daha yakın görünüyor.');
+        notes.add('Entry timing tarafı short girişine daha yakın görünüyor.');
       }
+    }
+
+    if (tradeBias != 'SHORT') {
+      notes.add('Sistem şu an short yönünde net üstünlük görmüyor.');
     }
 
     return notes;
@@ -780,15 +784,10 @@ class _DetailPageState extends State<DetailPage>
       if (priceDirection == 'UP' || oiPriceSignal == 'FAKE_PUMP') {
         triggers.add('Yukarı fitil sonrası reddedilme');
       }
-    } else if (tradeBias == 'LONG') {
-      triggers.add('Kırılım üstü kapanış');
-      triggers.add('Alıcı baskısının devam etmesi');
-      if (orderFlowDirection == 'BUY_PRESSURE') {
-        triggers.add('Hacim destekli yukarı devam');
-      }
     } else {
-      triggers.add('Net yön teyidi');
-      triggers.add('Order flow baskısının belirginleşmesi');
+      triggers.add('Net short yön teyidi');
+      triggers.add('Order flow tarafında satış baskısının belirginleşmesi');
+      triggers.add('Alıcı baskısının zayıflaması');
     }
 
     return triggers;
@@ -1045,17 +1044,11 @@ class _DetailPageState extends State<DetailPage>
     final bool strongPersistence =
         latest.finalScore >= 80 && previous.finalScore >= 80;
     final bool strongBiasPersistence =
-        latest.tradeBias == dominantBias && previous.tradeBias == dominantBias;
+        latest.tradeBias == 'SHORT' && previous.tradeBias == 'SHORT';
 
-    if ((action == 'ENTER SHORT' || action == 'ENTER LONG') &&
+    if (action == 'ENTER SHORT' &&
         (!strongPersistence || !strongBiasPersistence)) {
-      if (dominantBias == 'SHORT') {
-        action = 'PREPARE SHORT';
-      } else if (dominantBias == 'LONG') {
-        action = 'PREPARE LONG';
-      } else {
-        action = 'WAIT FOR CONFIRMATION';
-      }
+      action = 'PREPARE SHORT';
     }
 
     final String scoreClass = _scoreClassFromScore(averageFinalScore);
@@ -1072,7 +1065,8 @@ class _DetailPageState extends State<DetailPage>
 
     final List<String> warnings = _mergeUniqueLists(
       priorityItems: [
-        if (!strongPersistence) 'Son iki ölçüm tam güçte hizalanmadı.',
+        if (!strongPersistence && dominantBias == 'SHORT')
+          'Son iki ölçüm tam güçte hizalanmadı.',
         ...latest.warnings,
       ],
       secondaryItems:
@@ -1153,6 +1147,7 @@ class _DetailPageState extends State<DetailPage>
     }
     if (widget.orderFlowDirection == 'BUY_PRESSURE') return false;
     if (widget.oiPriceSignal == 'SHORT_SQUEEZE') return false;
+    if (widget.oiPriceSignal == 'EARLY_ACCUMULATION') return false;
     return true;
   }
 
