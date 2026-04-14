@@ -341,4 +341,38 @@ class AnalysisEngine {
       'reasons': reasons,
     };
   }
+
+  // 🚀 YENİ EKLENDİ
+  static double calculateMomentumShift(List<dynamic> candles) {
+    if (candles.length < 4) return 0;
+
+    final dynamic last = candles[candles.length - 1];
+    final dynamic prev = candles[candles.length - 2];
+    final dynamic prev2 = candles[candles.length - 3];
+
+    double score = 0;
+
+    if (_isGreen(prev) && _isRed(last)) {
+      score += 30;
+    }
+
+    if (_high(last) < _high(prev)) {
+      score += 25;
+    }
+
+    if (_close(last) < _close(prev)) {
+      score += 20;
+    }
+
+    if (_bodySize(prev) > 0 &&
+        _bodySize(last) < _bodySize(prev) * 0.7) {
+      score += 15;
+    }
+
+    if (_hasBigUpperWick(last, minRatio: 0.3)) {
+      score += 10;
+    }
+
+    return score.clamp(0, 100).toDouble();
+  }
 }
