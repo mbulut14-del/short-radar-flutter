@@ -24,6 +24,56 @@ class FinalScoreResult {
   });
 }
 
+class FinalTradeDecision {
+  final double finalScore;
+  final String scoreClass;
+  final double confidence;
+  final String primarySignal;
+  final String tradeBias;
+  final String action;
+  final String summary;
+
+  final double oiScore;
+  final double priceScore;
+  final double orderFlowScore;
+  final double volumeScore;
+  final double liquidationScore;
+  final double momentumScore;
+
+  final List<String> marketReadBullets;
+  final List<String> entryNotes;
+  final List<String> warnings;
+  final List<String> triggerConditions;
+
+  const FinalTradeDecision({
+    required this.finalScore,
+    required this.scoreClass,
+    required this.confidence,
+    required this.primarySignal,
+    required this.tradeBias,
+    required this.action,
+    required this.summary,
+    required this.oiScore,
+    required this.priceScore,
+    required this.orderFlowScore,
+    required this.volumeScore,
+    required this.liquidationScore,
+    required this.momentumScore,
+    required this.marketReadBullets,
+    required this.entryNotes,
+    required this.warnings,
+    required this.triggerConditions,
+  });
+
+  FinalScoreResult toLegacyScoreResult() {
+    return FinalScoreResult(
+      score: finalScore,
+      label: scoreClass,
+      summary: summary,
+    );
+  }
+}
+
 class DetailPage extends StatefulWidget {
   final CoinRadarData coinData;
   final CoinRadarData? leaderData;
@@ -69,6 +119,7 @@ class _DetailPageState extends State<DetailPage>
   PumpAnalysisResult? pumpAnalysis;
   EntryTimingResult? entryTiming;
   FinalScoreResult? finalScoreResult;
+  FinalTradeDecision? finalTradeDecision;
 
   bool _isFetchingDetail = false;
   bool _notificationsReady = false;
@@ -151,268 +202,604 @@ class _DetailPageState extends State<DetailPage>
     return value;
   }
 
-  double _normalizeScore(double rawScore) {
-    final double clamped = _clampScore(rawScore);
-
-    if (clamped <= 0) return 10;
-    if (clamped < 10) return 10;
-    return clamped;
+  String _safeLower(dynamic value) {
+    if (value is String) {
+      return value.toLowerCase();
+    }
+    return '';
   }
 
-  double _scoreFromOiPriceSignal(String signal) {
-    switch (signal.toUpperCase()) {
-      case 'STRONG_SHORT':
-        return 24;
-      case 'FAKE_PUMP':
-        return 22;
-      case 'EARLY_DISTRIBUTION':
-        return 18;
-      case 'WEAK_DROP':
-        return 14;
-      case 'NEUTRAL':
-        return 8;
-      case 'SHORT_SQUEEZE':
-        return 2;
-      case 'EARLY_ACCUMULATION':
-        return 1;
+  double _extractDynamicScore(dynamic source) {
+    try {
+      final dynamic score = source.score;
+      if (score is num) {
+        return _clampScore(score.toDouble());
+      }
+    } catch (_) {}
+    return 0;
+  }
+
+  String _extractDynamicLabel(dynamic source) {
+    try {
+      final dynamic label = source.label;
+      if (label is String) return label;
+    } catch (_) {}
+    return '';
+  }
+
+  String _extractDynamicSummary(dynamic source) {
+    try {
+      final dynamic summary = source.summary;
+      if (summary is String) return summary;
+    } catch (_) {}
+    return '';
+  }
+
+  String _extractDynamicSignal(dynamic source) {
+    try {
+      final dynamic signal = source.signal;
+      if (signal is String) return signal;
+    } catch (_) {}
+    return '';
+  }
+
+  double _componentOiScore(String oiDirection) {
+    switch (oiDirection) {
+      case 'UP':
+        return 78;
+      case 'DOWN':
+        return 34;
       default:
-        return 6;
+        return 50;
     }
   }
 
-  double _scoreFromDirectionCombo({
+  double _componentPriceScore(String priceDirection, String oiPriceSignal) {
+    double score;
+
+    switch (priceDirection) {
+      case 'DOWN':
+        score = 82;
+        break;
+      case 'UP':
+        score = 38;
+        break;
+      default:
+        score = 55;
+        break;
+    }
+
+    switch (oiPriceSignal) {
+      case 'STRONG_SHORT':
+        score += 12;
+        break;
+      case 'FAKE_PUMP':
+        score += 10;
+        break;
+      case 'WEAK_DROP':
+        score += 6;
+        break;
+      case 'EARLY_DISTRIBUTION':
+        score += 4;
+        break;
+      case 'SHORT_SQUEEZE':
+        score -= 20;
+        break;
+      case 'EARLY_ACCUMULATION':
+        score -= 15;
+        break;
+      default:
+        break;
+    }
+
+    return _clampScore(score);
+  }
+
+  double _componentOrderFlowScore(String orderFlowDirection) {
+    switch (orderFlowDirection) {
+      case 'SELL_PRESSURE':
+        return 88;
+      case 'BUY_PRESSURE':
+        return 18;
+      default:
+        return 52;
+    }
+  }
+
+  double _componentVolumeScore(PumpAnalysisResult? result) {
+    if (result == null) return 48;
+
+    final dynamic dynamicResult = result;
+    double score = 46;
+
+    final double rawScore = _extractDynamicScore(dynamicResult);
+    if (rawScore > 0) {
+      score = 35 + (rawScore * 0.55);
+    }
+
+    final String label = _safeLower(_extractDynamicLabel(dynamicResult));
+    final String signal = _safeLower(_extractDynamicSignal(dynamicResult));
+    final String summary = _safeLower(_extractDynamicSummary(dynamicResult));
+
+    if (label.contains('güçlü')) score += 8;
+    if (label.contains('uygun')) score += 6;
+    if (label.contains('zayıf')) score -= 10;
+    if (label.contains('bekle')) score -= 5;
+
+    if (signal.contains('short')) score += 5;
+    if (signal.contains('pump')) score += 4;
+
+    if (summary.contains('hacim')) score += 4;
+    if (summary.contains('zayıf')) score -= 4;
+
+    return _clampScore(score);
+  }
+
+  double _componentLiquidationScore(
+    PumpAnalysisResult? pumpAnalysis,
+    ShortSetupResult? setupResult,
+    String oiPriceSignal,
+  ) {
+    double score = 50;
+
+    if (oiPriceSignal == 'STRONG_SHORT') score += 12;
+    if (oiPriceSignal == 'FAKE_PUMP') score += 8;
+    if (oiPriceSignal == 'SHORT_SQUEEZE') score -= 18;
+
+    if (pumpAnalysis != null) {
+      final String summary = _safeLower(_extractDynamicSummary(pumpAnalysis));
+      final String signal = _safeLower(_extractDynamicSignal(pumpAnalysis));
+
+      if (summary.contains('liq')) score += 8;
+      if (summary.contains('short')) score += 4;
+      if (signal.contains('pump')) score += 4;
+    }
+
+    if (setupResult != null) {
+      final String summary = _safeLower(_extractDynamicSummary(setupResult));
+      if (summary.contains('squeeze')) score -= 10;
+      if (summary.contains('risk')) score -= 6;
+      if (summary.contains('uygun')) score += 4;
+    }
+
+    return _clampScore(score);
+  }
+
+  double _componentMomentumScore(
+    EntryTimingResult? entryTiming,
+    List<CandleData> candleList,
+  ) {
+    double score = 50;
+
+    if (entryTiming != null) {
+      final dynamic dynamicResult = entryTiming;
+      final double rawScore = _extractDynamicScore(dynamicResult);
+      final String label = _safeLower(_extractDynamicLabel(dynamicResult));
+      final String summary = _safeLower(_extractDynamicSummary(dynamicResult));
+
+      if (rawScore > 0) {
+        score = 35 + (rawScore * 0.55);
+      }
+
+      if (label.contains('hazır')) score += 10;
+      if (label.contains('uygun')) score += 6;
+      if (label.contains('erken')) score += 4;
+      if (label.contains('geç')) score -= 12;
+      if (label.contains('bekle')) score -= 6;
+
+      if (summary.contains('yakın')) score += 4;
+      if (summary.contains('geç')) score -= 8;
+      if (summary.contains('bekle')) score -= 4;
+    }
+
+    if (candleList.length >= 3) {
+      final CandleData last = candleList.last;
+      final CandleData prev = candleList[candleList.length - 2];
+      final CandleData prev2 = candleList[candleList.length - 3];
+
+      if (last.close < last.open) score += 6;
+      if (prev.close < prev.open) score += 4;
+      if (prev2.close < prev2.open) score += 3;
+
+      final double range = (last.high - last.low).abs();
+      if (range > 0) {
+        final double upperWick =
+            last.high - (last.open > last.close ? last.open : last.close);
+        final double upperWickRatio = upperWick / range;
+        if (upperWickRatio >= 0.35) score += 7;
+      }
+    }
+
+    return _clampScore(score);
+  }
+
+  String _determineTradeBias({
+    required String oiPriceSignal,
     required String oiDirection,
     required String priceDirection,
     required String orderFlowDirection,
   }) {
-    double score = 0;
+    if (oiPriceSignal == 'STRONG_SHORT' ||
+        oiPriceSignal == 'FAKE_PUMP' ||
+        oiPriceSignal == 'WEAK_DROP' ||
+        oiPriceSignal == 'EARLY_DISTRIBUTION') {
+      return 'SHORT';
+    }
 
-    if (oiDirection == 'UP' && priceDirection == 'UP') {
-      score -= 6;
-    } else if (oiDirection == 'UP' && priceDirection == 'DOWN') {
-      score += 12;
-    } else if (oiDirection == 'DOWN' && priceDirection == 'UP') {
-      score += 8;
-    } else if (oiDirection == 'DOWN' && priceDirection == 'DOWN') {
-      score += 4;
+    if (oiPriceSignal == 'SHORT_SQUEEZE' ||
+        oiPriceSignal == 'EARLY_ACCUMULATION') {
+      return 'LONG';
+    }
+
+    int shortVotes = 0;
+    int longVotes = 0;
+
+    if (oiDirection == 'UP') {
+      shortVotes += 1;
+    } else if (oiDirection == 'DOWN') {
+      longVotes += 1;
+    }
+
+    if (priceDirection == 'DOWN') {
+      shortVotes += 2;
+    } else if (priceDirection == 'UP') {
+      longVotes += 2;
     }
 
     if (orderFlowDirection == 'SELL_PRESSURE') {
-      score += 12;
+      shortVotes += 2;
     } else if (orderFlowDirection == 'BUY_PRESSURE') {
-      score -= 10;
+      longVotes += 2;
     }
 
-    return score;
+    if (shortVotes > longVotes) return 'SHORT';
+    if (longVotes > shortVotes) return 'LONG';
+    return 'NEUTRAL';
   }
 
-  double _scoreFromPumpAnalysis(PumpAnalysisResult? result) {
-    if (result == null) return 0;
-
-    final dynamic dynamicResult = result;
-    double score = 0;
-
-    try {
-      final dynamic rawScore = dynamicResult.score;
-      if (rawScore is num) {
-        score += rawScore.clamp(0, 100) * 0.24;
-      }
-    } catch (_) {}
-
-    try {
-      final dynamic label = dynamicResult.label;
-      if (label is String) {
-        final normalized = label.toLowerCase();
-        if (normalized.contains('uygun')) score += 10;
-        if (normalized.contains('güçlü')) score += 8;
-        if (normalized.contains('zayıf')) score -= 8;
-        if (normalized.contains('bekle')) score -= 4;
-      }
-    } catch (_) {}
-
-    try {
-      final dynamic signal = dynamicResult.signal;
-      if (signal is String) {
-        final normalized = signal.toLowerCase();
-        if (normalized.contains('short')) score += 8;
-        if (normalized.contains('pump')) score += 5;
-      }
-    } catch (_) {}
-
-    return score;
-  }
-
-  double _scoreFromEntryTiming(EntryTimingResult? result) {
-    if (result == null) return 0;
-
-    final dynamic dynamicResult = result;
-    double score = 0;
-
-    try {
-      final dynamic timingScore = dynamicResult.score;
-      if (timingScore is num) {
-        score += timingScore.clamp(0, 100) * 0.18;
-      }
-    } catch (_) {}
-
-    try {
-      final dynamic label = dynamicResult.label;
-      if (label is String) {
-        final normalized = label.toLowerCase();
-        if (normalized.contains('erken')) score += 12;
-        if (normalized.contains('hazır')) score += 10;
-        if (normalized.contains('uygun')) score += 8;
-        if (normalized.contains('geç')) score -= 12;
-        if (normalized.contains('bekle')) score -= 5;
-      }
-    } catch (_) {}
-
-    try {
-      final dynamic summary = dynamicResult.summary;
-      if (summary is String) {
-        final normalized = summary.toLowerCase();
-        if (normalized.contains('geç')) score -= 8;
-        if (normalized.contains('bekle')) score -= 4;
-        if (normalized.contains('yakın')) score += 4;
-      }
-    } catch (_) {}
-
-    return score;
-  }
-
-  double _scoreFromShortSetup(ShortSetupResult? result) {
-    if (result == null) return 0;
-
-    final dynamic dynamicResult = result;
-    double score = 0;
-
-    try {
-      final dynamic qualityScore = dynamicResult.score;
-      if (qualityScore is num) {
-        score += qualityScore.clamp(0, 100) * 0.18;
-      }
-    } catch (_) {}
-
-    try {
-      final dynamic label = dynamicResult.label;
-      if (label is String) {
-        final normalized = label.toLowerCase();
-        if (normalized.contains('güçlü')) score += 10;
-        if (normalized.contains('kurulum')) score += 6;
-        if (normalized.contains('zayıf')) score -= 10;
-      }
-    } catch (_) {}
-
-    try {
-      final dynamic summary = dynamicResult.summary;
-      if (summary is String) {
-        final normalized = summary.toLowerCase();
-        if (normalized.contains('squeeze')) score -= 10;
-        if (normalized.contains('risk')) score -= 6;
-        if (normalized.contains('uygun')) score += 5;
-      }
-    } catch (_) {}
-
-    return score;
-  }
-
-  double _scoreFromCandles(List<CandleData> candleList) {
-    if (candleList.length < 3) return 0;
-
-    final CandleData last = candleList.last;
-    final CandleData prev = candleList[candleList.length - 2];
-    final CandleData prev2 = candleList[candleList.length - 3];
-
-    double score = 0;
-
-    final double lastBody = (last.close - last.open).abs();
-    final double lastRange = (last.high - last.low).abs();
-    final double upperWick =
-        last.high - (last.open > last.close ? last.open : last.close);
-
-    if (last.close < last.open) {
-      score += 6;
-    }
-
-    if (lastRange > 0) {
-      final double upperWickRatio = upperWick / lastRange;
-      if (upperWickRatio >= 0.35) {
-        score += 8;
-      }
-    }
-
-    if (last.high > prev.high && last.close < last.high) {
-      score += 5;
-    }
-
-    if (prev.close >= prev.open && last.close < last.open) {
-      score += 5;
-    }
-
-    if (prev2.close < prev2.open &&
-        prev.close < prev.open &&
-        last.close < last.open) {
-      score += 6;
-    }
-
-    if (lastRange > 0 && lastBody / lastRange < 0.25) {
-      score += 3;
-    }
-
-    return score;
-  }
-
-  double _riskPenalty({
-    required String oiPriceSignal,
-    required String orderFlowDirection,
-    required EntryTimingResult? entryTiming,
-    required ShortSetupResult? setupResult,
+  double _weightedFinalScore({
+    required double oiScore,
+    required double priceScore,
+    required double orderFlowScore,
+    required double volumeScore,
+    required double liquidationScore,
+    required double momentumScore,
   }) {
-    double penalty = 0;
+    final double raw =
+        (oiScore * 0.20) +
+        (priceScore * 0.20) +
+        (orderFlowScore * 0.25) +
+        (volumeScore * 0.15) +
+        (liquidationScore * 0.10) +
+        (momentumScore * 0.10);
+
+    return _clampScore(raw);
+  }
+
+  double _confidenceScore({
+    required double oiScore,
+    required double priceScore,
+    required double orderFlowScore,
+    required double volumeScore,
+    required double liquidationScore,
+    required double momentumScore,
+    required String tradeBias,
+    required String oiDirection,
+    required String priceDirection,
+    required String orderFlowDirection,
+    required String oiPriceSignal,
+  }) {
+    double confidence = 58;
+
+    final bool shortAligned =
+        tradeBias == 'SHORT' &&
+        (priceDirection == 'DOWN' || oiPriceSignal == 'FAKE_PUMP') &&
+        orderFlowDirection == 'SELL_PRESSURE';
+
+    final bool longAligned =
+        tradeBias == 'LONG' &&
+        priceDirection == 'UP' &&
+        orderFlowDirection == 'BUY_PRESSURE';
+
+    if (shortAligned || longAligned) {
+      confidence += 16;
+    }
+
+    final double spread =
+        ([oiScore, priceScore, orderFlowScore, volumeScore, liquidationScore, momentumScore]
+              ..sort())
+            .last -
+        ([oiScore, priceScore, orderFlowScore, volumeScore, liquidationScore, momentumScore]
+              ..sort())
+            .first;
+
+    if (spread <= 20) {
+      confidence += 8;
+    } else if (spread <= 35) {
+      confidence += 4;
+    } else if (spread >= 55) {
+      confidence -= 10;
+    }
+
+    if (tradeBias == 'SHORT' && oiPriceSignal == 'SHORT_SQUEEZE') {
+      confidence -= 20;
+    }
+
+    if (tradeBias == 'SHORT' && orderFlowDirection == 'BUY_PRESSURE') {
+      confidence -= 16;
+    }
+
+    if (tradeBias == 'LONG' && orderFlowDirection == 'SELL_PRESSURE') {
+      confidence -= 16;
+    }
+
+    if (tradeBias == 'SHORT' && oiDirection == 'UP') {
+      confidence += 4;
+    }
+
+    if (tradeBias == 'NEUTRAL') {
+      confidence -= 12;
+    }
+
+    return _clampScore(confidence);
+  }
+
+  String _scoreClassFromScore(double finalScore) {
+    if (finalScore >= 85) return 'Güçlü fırsat';
+    if (finalScore >= 70) return 'Kurulum var';
+    if (finalScore >= 40) return 'İzlenmeli';
+    return 'Zayıf';
+  }
+
+  String _actionFromDecision({
+    required double finalScore,
+    required double confidence,
+    required String tradeBias,
+    required String oiPriceSignal,
+  }) {
+    if (finalScore < 40) {
+      return 'NO TRADE';
+    }
+
+    if (finalScore < 70) {
+      if (tradeBias == 'SHORT') return 'WATCH';
+      if (tradeBias == 'LONG') return 'WATCH';
+      return 'WAIT FOR CONFIRMATION';
+    }
+
+    if (finalScore < 85) {
+      if (confidence < 60) return 'WAIT FOR CONFIRMATION';
+      if (tradeBias == 'SHORT') return 'PREPARE SHORT';
+      if (tradeBias == 'LONG') return 'PREPARE LONG';
+      return 'WATCH';
+    }
+
+    if (confidence < 68) {
+      return 'WAIT FOR CONFIRMATION';
+    }
 
     if (oiPriceSignal == 'SHORT_SQUEEZE') {
-      penalty += 18;
+      return 'WAIT FOR CONFIRMATION';
     }
 
-    if (orderFlowDirection == 'BUY_PRESSURE') {
-      penalty += 10;
+    if (tradeBias == 'SHORT') return 'ENTER SHORT';
+    if (tradeBias == 'LONG') return 'ENTER LONG';
+    return 'WATCH';
+  }
+
+  List<String> _buildMarketReadBullets({
+    required String oiDirection,
+    required String priceDirection,
+    required String oiPriceSignal,
+    required String orderFlowDirection,
+    required double volumeScore,
+    required double momentumScore,
+  }) {
+    final List<String> bullets = [];
+
+    if (oiDirection == 'UP') {
+      bullets.add('Open interest artıyor, piyasaya yeni pozisyon girişi var.');
+    } else if (oiDirection == 'DOWN') {
+      bullets.add('Open interest düşüyor, pozisyon çözülmesi görülüyor.');
+    } else {
+      bullets.add('Open interest tarafı yatay, güçlü yön teyidi sınırlı.');
+    }
+
+    if (priceDirection == 'DOWN') {
+      bullets.add('Fiyat aşağı yönlü baskı gösteriyor.');
+    } else if (priceDirection == 'UP') {
+      bullets.add('Fiyat yukarı gidiyor, tek başına short için risk oluşturabilir.');
+    } else {
+      bullets.add('Fiyat yatay seyirde, net kırılım henüz gelmemiş olabilir.');
+    }
+
+    if (orderFlowDirection == 'SELL_PRESSURE') {
+      bullets.add('Order flow satış baskısını destekliyor.');
+    } else if (orderFlowDirection == 'BUY_PRESSURE') {
+      bullets.add('Order flow alıcı baskısını gösteriyor.');
+    } else {
+      bullets.add('Order flow tarafında belirgin üstünlük yok.');
+    }
+
+    switch (oiPriceSignal) {
+      case 'STRONG_SHORT':
+        bullets.add('OI + fiyat yapısı güçlü short senaryosuna işaret ediyor.');
+        break;
+      case 'FAKE_PUMP':
+        bullets.add('Yukarı hareket trap olabilir, fake pump ihtimali var.');
+        break;
+      case 'WEAK_DROP':
+        bullets.add('Düşüş var ama henüz tam kuvvetli görünmüyor.');
+        break;
+      case 'EARLY_DISTRIBUTION':
+        bullets.add('Erken dağıtım sinyali oluşuyor olabilir.');
+        break;
+      case 'EARLY_ACCUMULATION':
+        bullets.add('Erken toplama sinyali short için ters risk üretebilir.');
+        break;
+      case 'SHORT_SQUEEZE':
+        bullets.add('Kısa pozisyonlar sıkışıyor olabilir; squeeze riski yüksek.');
+        break;
+      default:
+        bullets.add('Ana sinyal nötr bölgede, ek teyit gerekiyor.');
+        break;
+    }
+
+    if (volumeScore >= 70) {
+      bullets.add('Hacim tarafı hareketi destekliyor.');
+    } else if (volumeScore <= 40) {
+      bullets.add('Hacim teyidi zayıf, hareket güven vermiyor.');
+    }
+
+    if (momentumScore >= 72) {
+      bullets.add('Momentum kurulum lehine güçleniyor.');
+    } else if (momentumScore <= 40) {
+      bullets.add('Momentum tarafı zayıf, giriş acele olabilir.');
+    }
+
+    return bullets;
+  }
+
+  List<String> _buildWarnings({
+    required String tradeBias,
+    required String oiPriceSignal,
+    required String orderFlowDirection,
+    required double confidence,
+    required double volumeScore,
+    required double liquidationScore,
+    required double momentumScore,
+  }) {
+    final List<String> warnings = [];
+
+    if (oiPriceSignal == 'SHORT_SQUEEZE') {
+      warnings.add('Short squeeze riski var.');
+    }
+
+    if (tradeBias == 'SHORT' && orderFlowDirection == 'BUY_PRESSURE') {
+      warnings.add('Short bias ile order flow çelişiyor.');
+    }
+
+    if (tradeBias == 'LONG' && orderFlowDirection == 'SELL_PRESSURE') {
+      warnings.add('Long bias ile order flow çelişiyor.');
+    }
+
+    if (confidence < 60) {
+      warnings.add('Sinyal uyumu düşük.');
+    }
+
+    if (volumeScore < 45) {
+      warnings.add('Hacim teyidi zayıf.');
+    }
+
+    if (liquidationScore < 45) {
+      warnings.add('Likidasyon desteği sınırlı.');
+    }
+
+    if (momentumScore < 45) {
+      warnings.add('Momentum zayıf.');
+    }
+
+    return warnings;
+  }
+
+  List<String> _buildEntryNotes({
+    required String tradeBias,
+    required String action,
+    required double confidence,
+    required String oiPriceSignal,
+    required EntryTimingResult? entryTiming,
+  }) {
+    final List<String> notes = [];
+
+    if (action == 'ENTER SHORT') {
+      notes.add('Kurulum güçlü; agresif short giriş düşünülebilir.');
+      notes.add('Stop bölgesi son yukarı wick üstü izlenebilir.');
+    } else if (action == 'PREPARE SHORT') {
+      notes.add('Short hazırlığı var; tetik için ek fiyat teyidi beklenmeli.');
+      notes.add('Zayıflayan mum yapısı gelirse giriş kalitesi artar.');
+    } else if (action == 'ENTER LONG') {
+      notes.add('Long tarafı güçleniyor; giriş fırsatı oluşmuş olabilir.');
+      notes.add('Stop bölgesi son dip altı izlenebilir.');
+    } else if (action == 'PREPARE LONG') {
+      notes.add('Long hazırlığı var; net kırılım beklemek daha sağlıklı.');
+      notes.add('Alıcı baskısı sürerse giriş kalitesi artar.');
+    } else if (action == 'WAIT FOR CONFIRMATION') {
+      notes.add('Kurulum var ama teyit tamamlanmadan acele giriş riskli.');
+    } else if (action == 'WATCH') {
+      notes.add('Şimdilik izleme modunda kalmak daha doğru.');
+    } else {
+      notes.add('Mevcut görüntü işlem kalitesi için yeterli değil.');
+    }
+
+    if (oiPriceSignal == 'FAKE_PUMP') {
+      notes.add('Yukarı spike sonrası zayıflama short için tetik olabilir.');
+    }
+
+    if (oiPriceSignal == 'EARLY_DISTRIBUTION') {
+      notes.add('Erken dağıtım sinyali nedeniyle sabırlı bekleme avantajlı olabilir.');
+    }
+
+    if (confidence < 60) {
+      notes.add('Sinyaller tam hizalanmadığı için pozisyon boyutu küçük tutulmalı.');
     }
 
     if (entryTiming != null) {
-      final dynamic dynamicEntry = entryTiming;
-
-      try {
-        final dynamic label = dynamicEntry.label;
-        if (label is String && label.toLowerCase().contains('geç')) {
-          penalty += 14;
-        }
-      } catch (_) {}
-
-      try {
-        final dynamic summary = dynamicEntry.summary;
-        if (summary is String && summary.toLowerCase().contains('geç')) {
-          penalty += 8;
-        }
-      } catch (_) {}
+      final String label = _safeLower(_extractDynamicLabel(entryTiming));
+      if (label.contains('geç')) {
+        notes.add('Giriş geç kalmış olabilir; FOMO ile işlem açma.');
+      } else if (label.contains('erken')) {
+        notes.add('Kurulum erken aşamada olabilir; net tetik beklemek mantıklı.');
+      } else if (label.contains('hazır')) {
+        notes.add('Entry timing tarafı girişe daha yakın görünüyor.');
+      }
     }
 
-    if (setupResult != null) {
-      final dynamic dynamicSetup = setupResult;
-
-      try {
-        final dynamic summary = dynamicSetup.summary;
-        if (summary is String) {
-          final normalized = summary.toLowerCase();
-          if (normalized.contains('yüksek risk')) penalty += 10;
-          if (normalized.contains('squeeze')) penalty += 8;
-        }
-      } catch (_) {}
-    }
-
-    return penalty;
+    return notes;
   }
 
-  FinalScoreResult _buildFinalScore({
+  List<String> _buildTriggerConditions({
+    required String tradeBias,
+    required String oiPriceSignal,
+    required String priceDirection,
+    required String orderFlowDirection,
+  }) {
+    final List<String> triggers = [];
+
+    if (tradeBias == 'SHORT') {
+      triggers.add('Zayıf kapanış veya breakdown teyidi');
+      triggers.add('Satış baskısının devam etmesi');
+      if (priceDirection == 'UP' || oiPriceSignal == 'FAKE_PUMP') {
+        triggers.add('Yukarı fitil sonrası reddedilme');
+      }
+    } else if (tradeBias == 'LONG') {
+      triggers.add('Kırılım üstü kapanış');
+      triggers.add('Alıcı baskısının devam etmesi');
+      if (orderFlowDirection == 'BUY_PRESSURE') {
+        triggers.add('Hacim destekli yukarı devam');
+      }
+    } else {
+      triggers.add('Net yön teyidi');
+      triggers.add('Order flow baskısının belirginleşmesi');
+    }
+
+    return triggers;
+  }
+
+  String _buildDecisionSummary({
+    required double finalScore,
+    required String scoreClass,
+    required double confidence,
+    required String primarySignal,
+    required String tradeBias,
+    required String action,
+  }) {
+    final String scoreText = finalScore.toStringAsFixed(0);
+    final String confidenceText = confidence.toStringAsFixed(0);
+
+    return '$scoreClass • Score $scoreText • Confidence $confidenceText% • Signal: $primarySignal • Bias: $tradeBias • Action: $action';
+  }
+
+  FinalTradeDecision _buildFinalTradeDecision({
     required String oiPriceSignal,
     required String oiDirection,
     required String priceDirection,
@@ -422,80 +809,132 @@ class _DetailPageState extends State<DetailPage>
     required ShortSetupResult? setupResult,
     required List<CandleData> visibleCandles,
   }) {
-    double score = 0;
+    final double oiScore = _componentOiScore(oiDirection);
+    final double priceScore = _componentPriceScore(priceDirection, oiPriceSignal);
+    final double orderFlowScore = _componentOrderFlowScore(orderFlowDirection);
+    final double volumeScore = _componentVolumeScore(pumpAnalysis);
+    final double liquidationScore = _componentLiquidationScore(
+      pumpAnalysis,
+      setupResult,
+      oiPriceSignal,
+    );
+    final double momentumScore =
+        _componentMomentumScore(entryTiming, visibleCandles);
 
-    score += _scoreFromOiPriceSignal(oiPriceSignal);
-    score += _scoreFromDirectionCombo(
+    final double finalScore = _weightedFinalScore(
+      oiScore: oiScore,
+      priceScore: priceScore,
+      orderFlowScore: orderFlowScore,
+      volumeScore: volumeScore,
+      liquidationScore: liquidationScore,
+      momentumScore: momentumScore,
+    );
+
+    final String tradeBias = _determineTradeBias(
+      oiPriceSignal: oiPriceSignal,
       oiDirection: oiDirection,
       priceDirection: priceDirection,
       orderFlowDirection: orderFlowDirection,
     );
-    score += _scoreFromPumpAnalysis(pumpAnalysis);
-    score += _scoreFromEntryTiming(entryTiming);
-    score += _scoreFromShortSetup(setupResult);
-    score += _scoreFromCandles(visibleCandles);
 
-    score -= _riskPenalty(
-      oiPriceSignal: oiPriceSignal,
+    final double confidence = _confidenceScore(
+      oiScore: oiScore,
+      priceScore: priceScore,
+      orderFlowScore: orderFlowScore,
+      volumeScore: volumeScore,
+      liquidationScore: liquidationScore,
+      momentumScore: momentumScore,
+      tradeBias: tradeBias,
+      oiDirection: oiDirection,
+      priceDirection: priceDirection,
       orderFlowDirection: orderFlowDirection,
-      entryTiming: entryTiming,
-      setupResult: setupResult,
+      oiPriceSignal: oiPriceSignal,
     );
 
-    final double finalScore = _normalizeScore(score);
+    final String scoreClass = _scoreClassFromScore(finalScore);
+    final String action = _actionFromDecision(
+      finalScore: finalScore,
+      confidence: confidence,
+      tradeBias: tradeBias,
+      oiPriceSignal: oiPriceSignal,
+    );
 
-    if (finalScore >= 75) {
-      return FinalScoreResult(
-        score: finalScore,
-        label: 'Güçlü fırsat',
-        summary:
-            'Merkezi short skoru güçlü. Kurulum ve giriş kalitesi birlikte güçleniyor.',
-      );
-    }
+    final List<String> marketReadBullets = _buildMarketReadBullets(
+      oiDirection: oiDirection,
+      priceDirection: priceDirection,
+      oiPriceSignal: oiPriceSignal,
+      orderFlowDirection: orderFlowDirection,
+      volumeScore: volumeScore,
+      momentumScore: momentumScore,
+    );
 
-    if (finalScore >= 60) {
-      return FinalScoreResult(
-        score: finalScore,
-        label: 'Kurulum var',
-        summary:
-            'Short kurulumu belirginleşiyor. Giriş bölgesi yaklaşıyor olabilir.',
-      );
-    }
+    final List<String> warnings = _buildWarnings(
+      tradeBias: tradeBias,
+      oiPriceSignal: oiPriceSignal,
+      orderFlowDirection: orderFlowDirection,
+      confidence: confidence,
+      volumeScore: volumeScore,
+      liquidationScore: liquidationScore,
+      momentumScore: momentumScore,
+    );
 
-    if (finalScore >= 40) {
-      return FinalScoreResult(
-        score: finalScore,
-        label: 'İzlenmeli',
-        summary:
-            'Erken short sinyali var ama teyit henüz yeterince güçlü değil.',
-      );
-    }
+    final List<String> entryNotes = _buildEntryNotes(
+      tradeBias: tradeBias,
+      action: action,
+      confidence: confidence,
+      oiPriceSignal: oiPriceSignal,
+      entryTiming: entryTiming,
+    );
 
-    if (finalScore >= 25) {
-      return FinalScoreResult(
-        score: finalScore,
-        label: 'Zayıf',
-        summary:
-            'Short tarafında bazı işaretler olsa da kalite düşük. Şimdilik temkinli kalmak daha doğru.',
-      );
-    }
+    final List<String> triggerConditions = _buildTriggerConditions(
+      tradeBias: tradeBias,
+      oiPriceSignal: oiPriceSignal,
+      priceDirection: priceDirection,
+      orderFlowDirection: orderFlowDirection,
+    );
 
-    return FinalScoreResult(
-      score: finalScore,
-      label: 'İşlem dışı',
-      summary:
-          'Görüntü short tarafı için zayıf ya da nötr. Şu an işlem dışı kalmak daha sağlıklı.',
+    final String summary = _buildDecisionSummary(
+      finalScore: finalScore,
+      scoreClass: scoreClass,
+      confidence: confidence,
+      primarySignal: oiPriceSignal,
+      tradeBias: tradeBias,
+      action: action,
+    );
+
+    return FinalTradeDecision(
+      finalScore: finalScore,
+      scoreClass: scoreClass,
+      confidence: confidence,
+      primarySignal: oiPriceSignal,
+      tradeBias: tradeBias,
+      action: action,
+      summary: summary,
+      oiScore: oiScore,
+      priceScore: priceScore,
+      orderFlowScore: orderFlowScore,
+      volumeScore: volumeScore,
+      liquidationScore: liquidationScore,
+      momentumScore: momentumScore,
+      marketReadBullets: marketReadBullets,
+      entryNotes: entryNotes,
+      warnings: warnings,
+      triggerConditions: triggerConditions,
     );
   }
 
-  bool _shouldTriggerShortAlert(FinalScoreResult result) {
-    if (result.score < 75) return false;
+  bool _shouldTriggerShortAlert(FinalTradeDecision result) {
+    if (result.finalScore < 85) return false;
+    if (result.tradeBias != 'SHORT') return false;
+    if (result.action != 'ENTER SHORT' && result.action != 'PREPARE SHORT') {
+      return false;
+    }
     if (widget.orderFlowDirection == 'BUY_PRESSURE') return false;
     if (widget.oiPriceSignal == 'SHORT_SQUEEZE') return false;
     return true;
   }
 
-  Future<void> _triggerShortAlert(FinalScoreResult result) async {
+  Future<void> _triggerShortAlert(FinalTradeDecision result) async {
     final DateTime now = DateTime.now();
     final DateTime? lastAlertAt = _lastAlertTimes[contractName];
 
@@ -532,7 +971,7 @@ class _DetailPageState extends State<DetailPage>
       await _notificationsPlugin.show(
         contractName.hashCode,
         'Short setup hazır olabilir',
-        '$contractName • Score ${result.score.toStringAsFixed(0)} • ${result.label}',
+        '$contractName • Score ${result.finalScore.toStringAsFixed(0)} • ${result.scoreClass}',
         notificationDetails,
       );
     } catch (_) {}
@@ -556,7 +995,7 @@ class _DetailPageState extends State<DetailPage>
         fallbackCoin: selectedCoin,
       );
 
-      final FinalScoreResult calculatedFinalScore = _buildFinalScore(
+      final FinalTradeDecision calculatedDecision = _buildFinalTradeDecision(
         oiPriceSignal: widget.oiPriceSignal,
         oiDirection: widget.oiDirection,
         priceDirection: widget.priceDirection,
@@ -575,7 +1014,8 @@ class _DetailPageState extends State<DetailPage>
         setupResult = bundle.setupResult;
         pumpAnalysis = bundle.pumpAnalysis;
         entryTiming = bundle.entryTiming;
-        finalScoreResult = calculatedFinalScore;
+        finalTradeDecision = calculatedDecision;
+        finalScoreResult = calculatedDecision.toLegacyScoreResult();
         _openInterestDisplay = _buildOpenInterestDisplay(
           bundle.selectedCoin.openInterest,
           widget.oiDirection,
@@ -584,8 +1024,8 @@ class _DetailPageState extends State<DetailPage>
         detailError = '';
       });
 
-      if (_shouldTriggerShortAlert(calculatedFinalScore)) {
-        await _triggerShortAlert(calculatedFinalScore);
+      if (_shouldTriggerShortAlert(calculatedDecision)) {
+        await _triggerShortAlert(calculatedDecision);
       }
     } on TimeoutException {
       if (!mounted) return;
