@@ -100,6 +100,11 @@ class _DetailPageState extends State<DetailPage>
     with SingleTickerProviderStateMixin {
   static final Map<String, DateTime> _lastAlertTimes = {};
 
+  static final Map<String, List<FinalTradeDecision>> _decisionBuffers = {};
+  static final Map<String, DateTime?> _lastDecisionTimes = {};
+  static final Map<String, FinalTradeDecision?> _lastDisplayDecisions = {};
+  static final Map<String, FinalScoreResult?> _lastLegacyScores = {};
+
   static const Duration _dataRefreshInterval = Duration(seconds: 5);
   static const Duration _decisionInterval = Duration(minutes: 3);
 
@@ -115,9 +120,6 @@ class _DetailPageState extends State<DetailPage>
   final FlutterLocalNotificationsPlugin _notificationsPlugin =
       FlutterLocalNotificationsPlugin();
 
-  final List<FinalTradeDecision> _decisionBuffer = [];
-  DateTime? _lastDecisionAt;
-
   List<CandleData> candles = [];
   List<CandleData> visibleCandles = [];
 
@@ -131,6 +133,28 @@ class _DetailPageState extends State<DetailPage>
   bool _notificationsReady = false;
   String _openInterestDisplay = '-';
 
+  List<FinalTradeDecision> get _decisionBuffer =>
+      _decisionBuffers.putIfAbsent(contractName, () => []);
+
+  DateTime? get _lastDecisionAt => _lastDecisionTimes[contractName];
+
+  set _lastDecisionAt(DateTime? value) {
+    _lastDecisionTimes[contractName] = value;
+  }
+
+  FinalTradeDecision? get _cachedDisplayDecision =>
+      _lastDisplayDecisions[contractName];
+
+  set _cachedDisplayDecision(FinalTradeDecision? value) {
+    _lastDisplayDecisions[contractName] = value;
+  }
+
+  FinalScoreResult? get _cachedLegacyScore => _lastLegacyScores[contractName];
+
+  set _cachedLegacyScore(FinalScoreResult? value) {
+    _lastLegacyScores[contractName] = value;
+  }
+
   @override
   void initState() {
     super.initState();
@@ -140,6 +164,9 @@ class _DetailPageState extends State<DetailPage>
       widget.coinData.openInterest,
       widget.oiDirection,
     );
+
+    finalTradeDecision = _cachedDisplayDecision;
+    finalScoreResult = _cachedLegacyScore;
 
     _spinnerController = AnimationController(
       vsync: this,
@@ -932,8 +959,11 @@ class _DetailPageState extends State<DetailPage>
   }
 
   void _resetDecisionEngine() {
-    _decisionBuffer.clear();
-    _lastDecisionAt = null;
+    _decisionBuffers.remove(contractName);
+    _lastDecisionTimes.remove(contractName);
+    _lastDisplayDecisions.remove(contractName);
+    _lastLegacyScores.remove(contractName);
+
     finalTradeDecision = null;
     finalScoreResult = null;
   }
@@ -1059,7 +1089,9 @@ class _DetailPageState extends State<DetailPage>
         ...latest.marketReadBullets,
       ],
       secondaryItems:
-          decisions.length > 2 ? decisions[decisions.length - 2].marketReadBullets : const [],
+          decisions.length > 2
+              ? decisions[decisions.length - 2].marketReadBullets
+              : const [],
       maxItems: 7,
     );
 
@@ -1070,7 +1102,9 @@ class _DetailPageState extends State<DetailPage>
         ...latest.warnings,
       ],
       secondaryItems:
-          decisions.length > 2 ? decisions[decisions.length - 2].warnings : const [],
+          decisions.length > 2
+              ? decisions[decisions.length - 2].warnings
+              : const [],
       maxItems: 6,
     );
 
@@ -1080,14 +1114,18 @@ class _DetailPageState extends State<DetailPage>
         ...latest.entryNotes,
       ],
       secondaryItems:
-          decisions.length > 2 ? decisions[decisions.length - 2].entryNotes : const [],
+          decisions.length > 2
+              ? decisions[decisions.length - 2].entryNotes
+              : const [],
       maxItems: 6,
     );
 
     final List<String> triggerConditions = _mergeUniqueLists(
       priorityItems: latest.triggerConditions,
       secondaryItems:
-          decisions.length > 2 ? decisions[decisions.length - 2].triggerConditions : const [],
+          decisions.length > 2
+              ? decisions[decisions.length - 2].triggerConditions
+              : const [],
       maxItems: 5,
     );
 
@@ -1125,18 +1163,32 @@ class _DetailPageState extends State<DetailPage>
     _pushDecisionToBuffer(rawDecision);
 
     final DateTime now = DateTime.now();
+    final FinalTradeDecision? cachedDecision = _cachedDisplayDecision;
+    final DateTime? lastDecisionAt = _lastDecisionAt;
 
-    if (finalTradeDecision == null || _lastDecisionAt == null) {
+    if (cachedDecision == null || lastDecisionAt == null) {
       _lastDecisionAt = now;
+      _cachedDisplayDecision = rawDecision;
+      _cachedLegacyScore = rawDecision.toLegacyScoreResult();
       return rawDecision;
     }
 
-    if (now.difference(_lastDecisionAt!) < _decisionInterval) {
-      return finalTradeDecision!;
+    if (now.difference(lastDecisionAt) < _decisionInterval) {
+      return cachedDecision;
     }
 
+    final FinalTradeDecision filteredDecision =
+        _buildBufferedDecision(_decisionBuffer);
+
     _lastDecisionAt = now;
-    return _buildBufferedDecision(_decisionBuffer);
+    _cachedDisplayDecision = filteredDecision;
+    _cachedLegacyScore = filteredDecision.toLegacyScoreResult();
+
+    _decisionBuffer
+      ..clear()
+      ..add(filteredDecision);
+
+    return filteredDecision;
   }
 
   bool _shouldTriggerShortAlert(FinalTradeDecision result) {
@@ -1243,6 +1295,9 @@ class _DetailPageState extends State<DetailPage>
         detailLoading = false;
         detailError = '';
       });
+
+      _cachedDisplayDecision = displayDecision;
+      _cachedLegacyScore = displayDecision.toLegacyScoreResult();
 
       if (_shouldTriggerShortAlert(displayDecision)) {
         await _triggerShortAlert(displayDecision);
