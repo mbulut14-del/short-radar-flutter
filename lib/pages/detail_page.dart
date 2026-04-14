@@ -505,13 +505,16 @@ class _DetailPageState extends State<DetailPage>
       confidence += 16;
     }
 
-    final double spread =
-        ([oiScore, priceScore, orderFlowScore, volumeScore, liquidationScore, momentumScore]
-              ..sort())
-            .last -
-        ([oiScore, priceScore, orderFlowScore, volumeScore, liquidationScore, momentumScore]
-              ..sort())
-            .first;
+    final List<double> scores = [
+      oiScore,
+      priceScore,
+      orderFlowScore,
+      volumeScore,
+      liquidationScore,
+      momentumScore,
+    ]..sort();
+
+    final double spread = scores.last - scores.first;
 
     if (spread <= 20) {
       confidence += 8;
@@ -1113,6 +1116,20 @@ class _DetailPageState extends State<DetailPage>
               finalScore: finalScoreResult?.score,
               finalScoreLabel: finalScoreResult?.label,
               finalScoreSummary: finalScoreResult?.summary,
+              decisionConfidence: finalTradeDecision?.confidence,
+              decisionPrimarySignal: finalTradeDecision?.primarySignal,
+              decisionTradeBias: finalTradeDecision?.tradeBias,
+              decisionAction: finalTradeDecision?.action,
+              oiComponentScore: finalTradeDecision?.oiScore,
+              priceComponentScore: finalTradeDecision?.priceScore,
+              orderFlowComponentScore: finalTradeDecision?.orderFlowScore,
+              volumeComponentScore: finalTradeDecision?.volumeScore,
+              liquidationComponentScore: finalTradeDecision?.liquidationScore,
+              momentumComponentScore: finalTradeDecision?.momentumScore,
+              marketReadBullets: finalTradeDecision?.marketReadBullets,
+              entryNotes: finalTradeDecision?.entryNotes,
+              warnings: finalTradeDecision?.warnings,
+              triggerConditions: finalTradeDecision?.triggerConditions,
             ),
           ),
         ],
