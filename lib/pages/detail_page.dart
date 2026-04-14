@@ -100,6 +100,9 @@ class _DetailPageState extends State<DetailPage>
     with SingleTickerProviderStateMixin {
   static final Map<String, DateTime> _lastAlertTimes = {};
 
+  static const Duration _dataRefreshInterval = Duration(seconds: 5);
+  static const Duration _decisionInterval = Duration(minutes: 3);
+
   Timer? _detailTimer;
   bool detailLoading = true;
   String detailError = '';
@@ -111,6 +114,9 @@ class _DetailPageState extends State<DetailPage>
 
   final FlutterLocalNotificationsPlugin _notificationsPlugin =
       FlutterLocalNotificationsPlugin();
+
+  final List<FinalTradeDecision> _decisionBuffer = [];
+  DateTime? _lastDecisionAt;
 
   List<CandleData> candles = [];
   List<CandleData> visibleCandles = [];
@@ -143,7 +149,7 @@ class _DetailPageState extends State<DetailPage>
     _initLocalNotifications();
     fetchDetail();
 
-    _detailTimer = Timer.periodic(const Duration(seconds: 5), (_) {
+    _detailTimer = Timer.periodic(_dataRefreshInterval, (_) {
       if (mounted) {
         fetchDetail(showLoader: false);
       }
@@ -926,6 +932,219 @@ class _DetailPageState extends State<DetailPage>
     );
   }
 
+  void _resetDecisionEngine() {
+    _decisionBuffer.clear();
+    _lastDecisionAt = null;
+    finalTradeDecision = null;
+    finalScoreResult = null;
+  }
+
+  int get _maxBufferLength =>
+      (_decisionInterval.inSeconds / _dataRefreshInterval.inSeconds).round();
+
+  void _pushDecisionToBuffer(FinalTradeDecision decision) {
+    _decisionBuffer.add(decision);
+
+    while (_decisionBuffer.length > _maxBufferLength) {
+      _decisionBuffer.removeAt(0);
+    }
+  }
+
+  double _averageScore(
+    List<FinalTradeDecision> decisions,
+    double Function(FinalTradeDecision item) getter,
+  ) {
+    if (decisions.isEmpty) return 0;
+
+    double total = 0;
+    for (final item in decisions) {
+      total += getter(item);
+    }
+    return _clampScore(total / decisions.length);
+  }
+
+  String _dominantText(
+    List<FinalTradeDecision> decisions,
+    String Function(FinalTradeDecision item) getter,
+  ) {
+    if (decisions.isEmpty) return '';
+
+    final Map<String, int> counts = {};
+    for (final item in decisions) {
+      final String value = getter(item);
+      counts[value] = (counts[value] ?? 0) + 1;
+    }
+
+    String winner = getter(decisions.last);
+    int bestCount = -1;
+
+    counts.forEach((key, value) {
+      if (value > bestCount) {
+        winner = key;
+        bestCount = value;
+      }
+    });
+
+    return winner;
+  }
+
+  List<String> _mergeUniqueLists({
+    required List<String> priorityItems,
+    required List<String> secondaryItems,
+    int maxItems = 6,
+  }) {
+    final List<String> merged = [];
+
+    for (final item in [...priorityItems, ...secondaryItems]) {
+      if (item.trim().isEmpty) continue;
+      if (!merged.contains(item)) {
+        merged.add(item);
+      }
+      if (merged.length >= maxItems) break;
+    }
+
+    return merged;
+  }
+
+  FinalTradeDecision _buildBufferedDecision(
+    List<FinalTradeDecision> decisions,
+  ) {
+    final FinalTradeDecision latest = decisions.last;
+    final FinalTradeDecision previous =
+        decisions.length >= 2 ? decisions[decisions.length - 2] : latest;
+
+    final double averageFinalScore =
+        _averageScore(decisions, (item) => item.finalScore);
+    final double averageConfidence =
+        _averageScore(decisions, (item) => item.confidence);
+
+    final double averageOiScore = _averageScore(decisions, (item) => item.oiScore);
+    final double averagePriceScore =
+        _averageScore(decisions, (item) => item.priceScore);
+    final double averageOrderFlowScore =
+        _averageScore(decisions, (item) => item.orderFlowScore);
+    final double averageVolumeScore =
+        _averageScore(decisions, (item) => item.volumeScore);
+    final double averageLiquidationScore =
+        _averageScore(decisions, (item) => item.liquidationScore);
+    final double averageMomentumScore =
+        _averageScore(decisions, (item) => item.momentumScore);
+
+    final String dominantBias =
+        _dominantText(decisions, (item) => item.tradeBias);
+    final String dominantSignal =
+        _dominantText(decisions, (item) => item.primarySignal);
+
+    String action = _actionFromDecision(
+      finalScore: averageFinalScore,
+      confidence: averageConfidence,
+      tradeBias: dominantBias,
+      oiPriceSignal: dominantSignal,
+    );
+
+    final bool strongPersistence =
+        latest.finalScore >= 80 && previous.finalScore >= 80;
+    final bool strongBiasPersistence =
+        latest.tradeBias == dominantBias && previous.tradeBias == dominantBias;
+
+    if ((action == 'ENTER SHORT' || action == 'ENTER LONG') &&
+        (!strongPersistence || !strongBiasPersistence)) {
+      if (dominantBias == 'SHORT') {
+        action = 'PREPARE SHORT';
+      } else if (dominantBias == 'LONG') {
+        action = 'PREPARE LONG';
+      } else {
+        action = 'WAIT FOR CONFIRMATION';
+      }
+    }
+
+    final String scoreClass = _scoreClassFromScore(averageFinalScore);
+
+    final List<String> marketReadBullets = _mergeUniqueLists(
+      priorityItems: [
+        'Karar 3 dakikalık filtrelenmiş veri penceresine göre üretildi.',
+        ...latest.marketReadBullets,
+      ],
+      secondaryItems:
+          decisions.length > 2 ? decisions[decisions.length - 2].marketReadBullets : const [],
+      maxItems: 7,
+    );
+
+    final List<String> warnings = _mergeUniqueLists(
+      priorityItems: [
+        if (!strongPersistence) 'Son iki ölçüm tam güçte hizalanmadı.',
+        ...latest.warnings,
+      ],
+      secondaryItems:
+          decisions.length > 2 ? decisions[decisions.length - 2].warnings : const [],
+      maxItems: 6,
+    );
+
+    final List<String> entryNotes = _mergeUniqueLists(
+      priorityItems: [
+        'Karar her 5 saniyede değil, 3 dakikalık ortalama akışla güncellenir.',
+        ...latest.entryNotes,
+      ],
+      secondaryItems:
+          decisions.length > 2 ? decisions[decisions.length - 2].entryNotes : const [],
+      maxItems: 6,
+    );
+
+    final List<String> triggerConditions = _mergeUniqueLists(
+      priorityItems: latest.triggerConditions,
+      secondaryItems:
+          decisions.length > 2 ? decisions[decisions.length - 2].triggerConditions : const [],
+      maxItems: 5,
+    );
+
+    final String summary = _buildDecisionSummary(
+      finalScore: averageFinalScore,
+      scoreClass: scoreClass,
+      confidence: averageConfidence,
+      primarySignal: dominantSignal,
+      tradeBias: dominantBias,
+      action: action,
+    );
+
+    return FinalTradeDecision(
+      finalScore: averageFinalScore,
+      scoreClass: scoreClass,
+      confidence: averageConfidence,
+      primarySignal: dominantSignal,
+      tradeBias: dominantBias,
+      action: action,
+      summary: summary,
+      oiScore: averageOiScore,
+      priceScore: averagePriceScore,
+      orderFlowScore: averageOrderFlowScore,
+      volumeScore: averageVolumeScore,
+      liquidationScore: averageLiquidationScore,
+      momentumScore: averageMomentumScore,
+      marketReadBullets: marketReadBullets,
+      entryNotes: entryNotes,
+      warnings: warnings,
+      triggerConditions: triggerConditions,
+    );
+  }
+
+  FinalTradeDecision _resolveDecisionForDisplay(FinalTradeDecision rawDecision) {
+    _pushDecisionToBuffer(rawDecision);
+
+    final DateTime now = DateTime.now();
+
+    if (finalTradeDecision == null || _lastDecisionAt == null) {
+      _lastDecisionAt = now;
+      return rawDecision;
+    }
+
+    if (now.difference(_lastDecisionAt!) < _decisionInterval) {
+      return finalTradeDecision!;
+    }
+
+    _lastDecisionAt = now;
+    return _buildBufferedDecision(_decisionBuffer);
+  }
+
   bool _shouldTriggerShortAlert(FinalTradeDecision result) {
     if (result.finalScore < 85) return false;
     if (result.tradeBias != 'SHORT') return false;
@@ -998,7 +1217,7 @@ class _DetailPageState extends State<DetailPage>
         fallbackCoin: selectedCoin,
       );
 
-      final FinalTradeDecision calculatedDecision = _buildFinalTradeDecision(
+      final FinalTradeDecision rawDecision = _buildFinalTradeDecision(
         oiPriceSignal: widget.oiPriceSignal,
         oiDirection: widget.oiDirection,
         priceDirection: widget.priceDirection,
@@ -1009,6 +1228,9 @@ class _DetailPageState extends State<DetailPage>
         visibleCandles: bundle.visibleCandles,
       );
 
+      final FinalTradeDecision displayDecision =
+          _resolveDecisionForDisplay(rawDecision);
+
       if (!mounted) return;
       setState(() {
         selectedCoin = bundle.selectedCoin;
@@ -1017,8 +1239,8 @@ class _DetailPageState extends State<DetailPage>
         setupResult = bundle.setupResult;
         pumpAnalysis = bundle.pumpAnalysis;
         entryTiming = bundle.entryTiming;
-        finalTradeDecision = calculatedDecision;
-        finalScoreResult = calculatedDecision.toLegacyScoreResult();
+        finalTradeDecision = displayDecision;
+        finalScoreResult = displayDecision.toLegacyScoreResult();
         _openInterestDisplay = _buildOpenInterestDisplay(
           bundle.selectedCoin.openInterest,
           widget.oiDirection,
@@ -1027,8 +1249,8 @@ class _DetailPageState extends State<DetailPage>
         detailError = '';
       });
 
-      if (_shouldTriggerShortAlert(calculatedDecision)) {
-        await _triggerShortAlert(calculatedDecision);
+      if (_shouldTriggerShortAlert(displayDecision)) {
+        await _triggerShortAlert(displayDecision);
       }
     } on TimeoutException {
       if (!mounted) return;
@@ -1071,9 +1293,12 @@ class _DetailPageState extends State<DetailPage>
 
   Future<void> _handleIntervalChange(String value) async {
     if (selectedInterval == value) return;
+
     setState(() {
       selectedInterval = value;
+      _resetDecisionEngine();
     });
+
     await fetchDetail();
   }
 
