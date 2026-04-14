@@ -161,15 +161,15 @@ class DetailPageContent extends StatelessWidget {
 
   String _getFinalScoreHint(double score) {
     if (score >= 85) {
-      return 'Merkezi karar motoru short tarafında güçlü fırsat görüyor.';
+      return 'Merkezi karar motoru, filtrelenmiş akışta short tarafında güçlü fırsat görüyor.';
     }
     if (score >= 70) {
-      return 'Kurulum oluşuyor. Giriş bölgesi yakın olabilir.';
+      return 'Kurulum oluşuyor. Filtrelenmiş karar akışında giriş bölgesi yakın olabilir.';
     }
     if (score >= 40) {
-      return 'Erken sinyal var ama teyit henüz tam güçlenmedi.';
+      return 'Erken sinyal var ama karar filtresinde teyit henüz tam güçlenmedi.';
     }
-    return 'Merkezi skor zayıf. Şimdilik beklemek daha sağlıklı.';
+    return 'Merkezi skor zayıf. Şimdilik beklemek daha sağlıklı görünüyor.';
   }
 
   bool _shouldShowShortSetupCard() {
@@ -403,6 +403,16 @@ class DetailPageContent extends StatelessWidget {
             ),
           ),
           if (_hasDecisionMeta()) ...[
+            const SizedBox(height: 10),
+            Text(
+              'Bu karar filtrelenmiş veri akışına göre üretilir; veri canlı aksa da karar her tikte zıplamaz.',
+              style: TextStyle(
+                color: Colors.white.withOpacity(0.72),
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                height: 1.35,
+              ),
+            ),
             const SizedBox(height: 14),
             Wrap(
               spacing: 8,
@@ -547,6 +557,16 @@ class DetailPageContent extends StatelessWidget {
               fontSize: 12,
               fontWeight: FontWeight.w800,
               letterSpacing: 0.5,
+            ),
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'Bunlar alt bileşen skorlarıdır; nihai aksiyon filtrelenmiş merkezi karar motorundan çıkar.',
+            style: TextStyle(
+              color: Colors.white54,
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              height: 1.35,
             ),
           ),
           const SizedBox(height: 12),
@@ -801,7 +821,7 @@ class DetailPageContent extends StatelessWidget {
     } else {
       title = 'SETUP HENÜZ TAM OLUŞMADI';
       text =
-          'Erken short işaretleri var ama merkezi skor henüz tam giriş kalitesine ulaşmadı. Giriş planı bu yüzden beklemede tutuluyor.';
+          'Erken short işaretleri var ama merkezi skor henüz tam giriş kalitesine ulaşmadı. Karar filtresi nedeniyle giriş planı beklemede tutuluyor.';
       borderColor = Colors.orangeAccent.withOpacity(0.45);
       bgColor = Colors.orange.withOpacity(0.12);
     }
