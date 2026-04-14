@@ -599,6 +599,98 @@ class _DetailPageState extends State<DetailPage>
     };
   }
 
+  Map<String, dynamic> _detectFirstBreak(List<CandleData> candles) {
+    if (candles.length < 5) {
+      return {
+        'detected': false,
+        'score': 0.0,
+        'label': 'NONE',
+        'reasons': <String>[],
+      };
+    }
+
+    final CandleData last = candles[candles.length - 1];
+    final CandleData prev = candles[candles.length - 2];
+    final CandleData prev2 = candles[candles.length - 3];
+    final CandleData prev3 = candles[candles.length - 4];
+    final CandleData prev4 = candles[candles.length - 5];
+
+    double score = 0;
+    final List<String> reasons = [];
+
+    final double baseClose = prev4.close;
+    if (baseClose > 0) {
+      final double pumpPct = ((prev.high - baseClose) / baseClose) * 100;
+      if (pumpPct >= 6) {
+        score += 18;
+        reasons.add('Kırılma öncesi güçlü pump var.');
+      } else if (pumpPct >= 3.5) {
+        score += 12;
+        reasons.add('Kırılma öncesi anlamlı yükseliş var.');
+      }
+    }
+
+    if (_hasBigUpperWick(prev, minRatio: 0.40)) {
+      score += 24;
+      reasons.add('Önceki mumda güçlü üst wick oluştu.');
+    }
+
+    if (_hasWeakClose(prev, maxCloseRatio: 0.50)) {
+      score += 18;
+      reasons.add('Önceki mum zayıf kapanış yaptı.');
+    }
+
+    final double prevAvgVolume =
+        (prev2.volume + prev3.volume + prev4.volume) / 3;
+    if (prevAvgVolume > 0 && prev.volume >= prevAvgVolume * 1.20) {
+      score += 14;
+      reasons.add('Red mumunda hacim genişledi.');
+    }
+
+    if (last.high < prev.high) {
+      score += 14;
+      reasons.add('Son mum lower high üretiyor.');
+    }
+
+    if (last.close < last.open) {
+      score += 8;
+      reasons.add('Son mum kırmızı baskı gösteriyor.');
+    }
+
+    final double prevMid =
+        prev.low + ((_rangeSize(prev)) * 0.5);
+    if (last.close < prevMid) {
+      score += 10;
+      reasons.add('Son kapanış önceki mumun orta bandı altında.');
+    }
+
+    if (_bodySize(last) > 0 &&
+        _bodySize(prev) > 0 &&
+        _bodySize(last) >= _bodySize(prev) * 0.85 &&
+        last.close < last.open) {
+      score += 8;
+      reasons.add('Satıcı gövdesi zayıflamıyor.');
+    }
+
+    score = score.clamp(0, 100).toDouble();
+
+    String label = 'NONE';
+    if (score >= 80) {
+      label = 'FIRST_BREAK_STRONG';
+    } else if (score >= 60) {
+      label = 'FIRST_BREAK';
+    } else if (score >= 40) {
+      label = 'EARLY_WEAKENING';
+    }
+
+    return {
+      'detected': score >= 60,
+      'score': score,
+      'label': label,
+      'reasons': reasons,
+    };
+  }
+
   String _determineTradeBias({
     required String oiPriceSignal,
     required String oiDirection,
@@ -606,6 +698,8 @@ class _DetailPageState extends State<DetailPage>
     required String orderFlowDirection,
     required bool structureDetected,
     required double structureScore,
+    required bool firstBreakDetected,
+    required double firstBreakScore,
   }) {
     if (oiPriceSignal == 'STRONG_SHORT' ||
         oiPriceSignal == 'FAKE_PUMP' ||
@@ -645,6 +739,10 @@ class _DetailPageState extends State<DetailPage>
 
     if (structureDetected) {
       shortVotes += structureScore >= 70 ? 3 : 2;
+    }
+
+    if (firstBreakDetected) {
+      shortVotes += firstBreakScore >= 80 ? 3 : 2;
     }
 
     if (shortVotes >= 3 && shortVotes > neutralPenalty) {
@@ -753,13 +851,23 @@ class _DetailPageState extends State<DetailPage>
     required String oiPriceSignal,
     required bool structureDetected,
     required double structureScore,
+    required bool firstBreakDetected,
+    required double firstBreakScore,
   }) {
+    if (firstBreakScore >= 80 && tradeBias == 'SHORT') {
+      return 'ENTER SHORT';
+    }
+
     if (finalScore < 40) {
       return 'NO TRADE';
     }
 
     if (tradeBias != 'SHORT') {
       return finalScore >= 40 ? 'WATCH' : 'NO TRADE';
+    }
+
+    if (firstBreakDetected && firstBreakScore >= 60) {
+      return finalScore >= 70 ? 'PREPARE SHORT' : 'WATCH';
     }
 
     if (finalScore < 70) {
@@ -795,6 +903,9 @@ class _DetailPageState extends State<DetailPage>
     required bool structureDetected,
     required double structureScore,
     required List<String> structureReasons,
+    required bool firstBreakDetected,
+    required double firstBreakScore,
+    required List<String> firstBreakReasons,
   }) {
     final List<String> bullets = [];
 
@@ -846,6 +957,16 @@ class _DetailPageState extends State<DetailPage>
         break;
     }
 
+    if (firstBreakDetected) {
+      if (firstBreakScore >= 80) {
+        bullets.add('İlk kırılma motoru güçlü şekilde tetiklendi.');
+      } else {
+        bullets.add('İlk kırılma motoru erken short zayıflaması yakaladı.');
+      }
+    } else if (firstBreakScore >= 40) {
+      bullets.add('İlk kırılma belirtileri oluşuyor ama henüz tam teyit yok.');
+    }
+
     if (structureDetected) {
       if (structureScore >= 70) {
         bullets.add('Price structure tarafında güçlü tepe / exhaustion oluşumu var.');
@@ -854,6 +975,10 @@ class _DetailPageState extends State<DetailPage>
       }
     } else if (structureScore >= 35) {
       bullets.add('Yapısal olarak tepe oluşumu başlayabilir ama teyit henüz zayıf.');
+    }
+
+    for (final reason in firstBreakReasons.take(2)) {
+      bullets.add(reason);
     }
 
     for (final reason in structureReasons.take(2)) {
@@ -884,6 +1009,7 @@ class _DetailPageState extends State<DetailPage>
     required double liquidationScore,
     required double momentumScore,
     required bool structureDetected,
+    required bool firstBreakDetected,
   }) {
     final List<String> warnings = [];
 
@@ -901,6 +1027,10 @@ class _DetailPageState extends State<DetailPage>
 
     if (!structureDetected) {
       warnings.add('Geçmiş fiyat yapısı henüz güçlü tepe teyidi vermiyor.');
+    }
+
+    if (!firstBreakDetected) {
+      warnings.add('İlk kırılma motoru henüz tam tetik vermedi.');
     }
 
     if (confidence < 60) {
@@ -931,6 +1061,9 @@ class _DetailPageState extends State<DetailPage>
     required bool structureDetected,
     required double structureScore,
     required List<String> structureReasons,
+    required bool firstBreakDetected,
+    required double firstBreakScore,
+    required List<String> firstBreakReasons,
   }) {
     final List<String> notes = [];
 
@@ -944,6 +1077,18 @@ class _DetailPageState extends State<DetailPage>
       notes.add('Şimdilik izleme modunda kalmak daha doğru.');
     } else {
       notes.add('Mevcut görüntü short işlemi için yeterli kalite üretmiyor.');
+    }
+
+    if (firstBreakDetected) {
+      if (firstBreakScore >= 80) {
+        notes.add('İlk kırılma motoru giriş anına çok yakın görüntü üretiyor.');
+      } else {
+        notes.add('İlk kırılma başladı; tam breakdown teyidi gelirse giriş kalitesi artar.');
+      }
+    }
+
+    if (firstBreakReasons.isNotEmpty) {
+      notes.add(firstBreakReasons.first);
     }
 
     if (structureDetected) {
@@ -998,10 +1143,14 @@ class _DetailPageState extends State<DetailPage>
     required String priceDirection,
     required String orderFlowDirection,
     required bool structureDetected,
+    required bool firstBreakDetected,
   }) {
     final List<String> triggers = [];
 
     if (tradeBias == 'SHORT') {
+      if (firstBreakDetected) {
+        triggers.add('İlk kırılma sonrası zayıf kapanışın devam etmesi');
+      }
       triggers.add('Zayıf kapanış veya breakdown teyidi');
       triggers.add('Satış baskısının devam etmesi');
       if (priceDirection == 'UP' || oiPriceSignal == 'FAKE_PUMP') {
@@ -1051,6 +1200,14 @@ class _DetailPageState extends State<DetailPage>
     final List<String> structureReasons =
         List<String>.from(structureResult['reasons'] ?? const []);
 
+    final Map<String, dynamic> firstBreakResult =
+        _detectFirstBreak(visibleCandles);
+    final bool firstBreakDetected = firstBreakResult['detected'] == true;
+    final double firstBreakScore =
+        ((firstBreakResult['score'] ?? 0) as num).toDouble();
+    final List<String> firstBreakReasons =
+        List<String>.from(firstBreakResult['reasons'] ?? const []);
+
     final double oiScore = _componentOiScore(oiDirection);
     final double priceScore = _componentPriceScore(priceDirection, oiPriceSignal);
     final double orderFlowScore = _componentOrderFlowScore(orderFlowDirection);
@@ -1087,6 +1244,12 @@ class _DetailPageState extends State<DetailPage>
       finalScore += 3;
     }
 
+    if (firstBreakDetected) {
+      finalScore += firstBreakScore >= 80 ? 20 : 12;
+    } else if (firstBreakScore >= 40) {
+      finalScore += 5;
+    }
+
     String tradeBias = _determineTradeBias(
       oiPriceSignal: oiPriceSignal,
       oiDirection: oiDirection,
@@ -1094,15 +1257,20 @@ class _DetailPageState extends State<DetailPage>
       orderFlowDirection: orderFlowDirection,
       structureDetected: structureDetected,
       structureScore: structureScore,
+      firstBreakDetected: firstBreakDetected,
+      firstBreakScore: firstBreakScore,
     );
 
-    // STRUCTURE OVERRIDE
     if (structureScore >= 70) {
       finalScore += 15;
 
       if (structureScore >= 80) {
         tradeBias = 'SHORT';
       }
+    }
+
+    if (firstBreakScore >= 80) {
+      tradeBias = 'SHORT';
     }
 
     finalScore = _clampScore(finalScore);
@@ -1133,9 +1301,14 @@ class _DetailPageState extends State<DetailPage>
       confidence += 2;
     }
 
-    // STRUCTURE CONFIDENCE BOOST
     if (structureScore >= 70) {
       confidence += structureScore >= 80 ? 12 : 8;
+    }
+
+    if (firstBreakDetected) {
+      confidence += firstBreakScore >= 80 ? 15 : 8;
+    } else if (firstBreakScore >= 40) {
+      confidence += 3;
     }
 
     confidence = _clampScore(confidence);
@@ -1149,12 +1322,19 @@ class _DetailPageState extends State<DetailPage>
       oiPriceSignal: oiPriceSignal,
       structureDetected: structureDetected,
       structureScore: structureScore,
+      firstBreakDetected: firstBreakDetected,
+      firstBreakScore: firstBreakScore,
     );
 
-    // STRUCTURE ACTION OVERRIDE
     if (structureScore >= 80) {
       action = 'PREPARE SHORT';
     } else if (structureScore >= 70 && action == 'WATCH') {
+      action = 'PREPARE SHORT';
+    }
+
+    if (firstBreakScore >= 80) {
+      action = 'ENTER SHORT';
+    } else if (firstBreakScore >= 60 && action == 'WATCH') {
       action = 'PREPARE SHORT';
     }
 
@@ -1168,6 +1348,9 @@ class _DetailPageState extends State<DetailPage>
       structureDetected: structureDetected,
       structureScore: structureScore,
       structureReasons: structureReasons,
+      firstBreakDetected: firstBreakDetected,
+      firstBreakScore: firstBreakScore,
+      firstBreakReasons: firstBreakReasons,
     );
 
     final List<String> warnings = _buildWarnings(
@@ -1179,6 +1362,7 @@ class _DetailPageState extends State<DetailPage>
       liquidationScore: liquidationScore,
       momentumScore: momentumScore,
       structureDetected: structureDetected,
+      firstBreakDetected: firstBreakDetected,
     );
 
     final List<String> entryNotes = _buildEntryNotes(
@@ -1190,6 +1374,9 @@ class _DetailPageState extends State<DetailPage>
       structureDetected: structureDetected,
       structureScore: structureScore,
       structureReasons: structureReasons,
+      firstBreakDetected: firstBreakDetected,
+      firstBreakScore: firstBreakScore,
+      firstBreakReasons: firstBreakReasons,
     );
 
     final List<String> triggerConditions = _buildTriggerConditions(
@@ -1198,6 +1385,7 @@ class _DetailPageState extends State<DetailPage>
       priceDirection: priceDirection,
       orderFlowDirection: orderFlowDirection,
       structureDetected: structureDetected,
+      firstBreakDetected: firstBreakDetected,
     );
 
     final String summary = _buildDecisionSummary(
@@ -1336,15 +1524,22 @@ class _DetailPageState extends State<DetailPage>
     final String dominantSignal =
         _dominantText(decisions, (item) => item.primarySignal);
 
+    final bool structureDetected = latest.marketReadBullets.any(
+      (e) => e.toLowerCase().contains('price structure'),
+    );
+    final bool firstBreakDetected = latest.marketReadBullets.any(
+      (e) => e.toLowerCase().contains('ilk kırılma'),
+    );
+
     String action = _actionFromDecision(
       finalScore: averageFinalScore,
       confidence: averageConfidence,
       tradeBias: dominantBias,
       oiPriceSignal: dominantSignal,
-      structureDetected: latest.marketReadBullets.any(
-        (e) => e.toLowerCase().contains('price structure'),
-      ),
+      structureDetected: structureDetected,
       structureScore: averageFinalScore,
+      firstBreakDetected: firstBreakDetected,
+      firstBreakScore: averageFinalScore,
     );
 
     final bool strongPersistence =
