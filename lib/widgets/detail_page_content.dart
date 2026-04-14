@@ -1069,16 +1069,9 @@ class DetailPageContent extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 18),
-          Wrap(
-            spacing: 10,
-            runSpacing: 10,
-            alignment: WrapAlignment.center,
-            children: [
-              _timeframeChip('1h'),
-              _timeframeChip('4h'),
-              _timeframeChip('8h'),
-              _timeframeChip('12h'),
-            ],
+          Align(
+            alignment: Alignment.centerLeft,
+            child: _timeframeChip('1h'),
           ),
           const SizedBox(height: 14),
           if (detailError.isNotEmpty && !hasData)
