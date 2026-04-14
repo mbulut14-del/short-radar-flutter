@@ -1096,6 +1096,7 @@ class _DetailPageState extends State<DetailPage>
       structureScore: structureScore,
     );
 
+    // STRUCTURE OVERRIDE
     if (structureScore >= 70) {
       finalScore += 15;
 
@@ -1132,6 +1133,7 @@ class _DetailPageState extends State<DetailPage>
       confidence += 2;
     }
 
+    // STRUCTURE CONFIDENCE BOOST
     if (structureScore >= 70) {
       confidence += structureScore >= 80 ? 12 : 8;
     }
@@ -1149,6 +1151,7 @@ class _DetailPageState extends State<DetailPage>
       structureScore: structureScore,
     );
 
+    // STRUCTURE ACTION OVERRIDE
     if (structureScore >= 80) {
       action = 'PREPARE SHORT';
     } else if (structureScore >= 70 && action == 'WATCH') {
