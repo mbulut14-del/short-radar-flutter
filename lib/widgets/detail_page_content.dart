@@ -161,15 +161,15 @@ class DetailPageContent extends StatelessWidget {
 
   String _getFinalScoreHint(double score) {
     if (score >= 85) {
-      return 'Merkezi karar motoru, filtrelenmiş akışta short tarafında güçlü fırsat görüyor.';
+      return 'Merkezi short karar motoru, filtrelenmiş akışta güçlü short fırsatı görüyor.';
     }
     if (score >= 70) {
-      return 'Kurulum oluşuyor. Filtrelenmiş karar akışında giriş bölgesi yakın olabilir.';
+      return 'Short kurulumu oluşuyor. Giriş bölgesi yakın olabilir ancak tetik teyidi hâlâ önemli.';
     }
     if (score >= 40) {
-      return 'Erken sinyal var ama karar filtresinde teyit henüz tam güçlenmedi.';
+      return 'Erken short işaretleri var ama karar filtresinde teyit henüz tam güçlenmedi.';
     }
-    return 'Merkezi skor zayıf. Şimdilik beklemek daha sağlıklı görünüyor.';
+    return 'Merkezi short skoru zayıf. Şimdilik beklemek daha sağlıklı görünüyor.';
   }
 
   bool _shouldShowShortSetupCard() {
@@ -224,19 +224,19 @@ class DetailPageContent extends StatelessWidget {
   String _getAnalysisSectionTitle() {
     if (finalScore == null) return 'ALT ANALİZLER';
     if (finalScore! >= 70) return 'ALT ANALİZLER';
-    if (finalScore! >= 40) return 'ERKEN SİNYAL DETAYLARI';
+    if (finalScore! >= 40) return 'ERKEN SHORT SİNYAL DETAYLARI';
     return 'GÖZLEM VERİLERİ';
   }
 
   String _getAnalysisSectionSubtitle() {
     if (finalScore == null) {
-      return 'Bu bölüm final score\'u besleyen alt verileri gösterir.';
+      return 'Bu bölüm final short score\'u besleyen alt verileri gösterir.';
     }
     if (finalScore! >= 70) {
-      return 'Aşağıdaki veriler merkezi karar skorunu destekleyen alt bileşenlerdir.';
+      return 'Aşağıdaki veriler merkezi short karar skorunu destekleyen alt bileşenlerdir.';
     }
     if (finalScore! >= 40) {
-      return 'Kurulum ihtimali var, ancak aşağıdaki veriler henüz tam teyit üretmiyor.';
+      return 'Short kurulumu ihtimali var, ancak aşağıdaki veriler henüz tam teyit üretmiyor.';
     }
     return 'Aşağıdaki kartlar bilgi amaçlıdır. Henüz aktif short kurulumu onaylanmış değil.';
   }
@@ -283,20 +283,37 @@ class DetailPageContent extends StatelessWidget {
     switch (value) {
       case 'SHORT':
         return Colors.redAccent;
-      case 'LONG':
-        return Colors.greenAccent;
       default:
         return Colors.orangeAccent;
     }
   }
 
+  String _getBiasText(String value) {
+    if (value == 'SHORT') return 'SHORT';
+    return 'NO SHORT EDGE';
+  }
+
   Color _getActionColor(String value) {
     if (value.contains('ENTER SHORT')) return Colors.redAccent;
     if (value.contains('PREPARE SHORT')) return Colors.orangeAccent;
-    if (value.contains('ENTER LONG')) return Colors.greenAccent;
-    if (value.contains('PREPARE LONG')) return Colors.lightGreenAccent;
-    if (value.contains('WAIT')) return Colors.orangeAccent;
+    if (value.contains('WATCH')) return Colors.orangeAccent;
+    if (value.contains('NO TRADE')) return Colors.white70;
     return Colors.white70;
+  }
+
+  String _getActionText(String value) {
+    switch (value) {
+      case 'ENTER SHORT':
+        return 'ENTER SHORT';
+      case 'PREPARE SHORT':
+        return 'PREPARE SHORT';
+      case 'WATCH':
+        return 'WATCH';
+      case 'NO TRADE':
+        return 'NO TRADE';
+      default:
+        return value;
+    }
   }
 
   Widget _buildFinalScoreCard() {
@@ -405,7 +422,7 @@ class DetailPageContent extends StatelessWidget {
           if (_hasDecisionMeta()) ...[
             const SizedBox(height: 10),
             Text(
-              'Bu karar filtrelenmiş veri akışına göre üretilir; veri canlı aksa da karar her tikte zıplamaz.',
+              'Bu karar filtrelenmiş veri akışına göre üretilir; veri canlı aksa da short kararı her tikte zıplamaz.',
               style: TextStyle(
                 color: Colors.white.withOpacity(0.72),
                 fontSize: 11,
@@ -433,13 +450,13 @@ class DetailPageContent extends StatelessWidget {
                 if ((decisionTradeBias ?? '').trim().isNotEmpty)
                   _buildDecisionBadge(
                     title: 'TRADE BIAS',
-                    value: decisionTradeBias!,
+                    value: _getBiasText(decisionTradeBias!),
                     color: _getBiasColor(decisionTradeBias!),
                   ),
                 if ((decisionAction ?? '').trim().isNotEmpty)
                   _buildDecisionBadge(
                     title: 'ACTION',
-                    value: decisionAction!,
+                    value: _getActionText(decisionAction!),
                     color: _getActionColor(decisionAction!),
                   ),
               ],
@@ -561,7 +578,7 @@ class DetailPageContent extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           const Text(
-            'Bunlar alt bileşen skorlarıdır; nihai aksiyon filtrelenmiş merkezi karar motorundan çıkar.',
+            'Bunlar alt bileşen skorlarıdır; nihai short aksiyonu filtrelenmiş merkezi karar motorundan çıkar.',
             style: TextStyle(
               color: Colors.white54,
               fontSize: 11,
@@ -815,7 +832,7 @@ class DetailPageContent extends StatelessWidget {
     if (safeScore < 40) {
       title = 'AKTİF SHORT SETUP YOK';
       text =
-          'Final score şu an aktif short kurulumu desteklemiyor. Giriş, stop ve hedef alanları bilinçli olarak gizlendi.';
+          'Final short score şu an aktif short kurulumu desteklemiyor. Giriş, stop ve hedef alanları bilinçli olarak gizlendi.';
       borderColor = Colors.redAccent.withOpacity(0.45);
       bgColor = Colors.red.withOpacity(0.12);
     } else {
