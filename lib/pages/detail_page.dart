@@ -1076,9 +1076,8 @@ class _DetailPageState extends State<DetailPage>
     } else if (structureScore >= 35) {
       finalScore += 3;
     }
-    finalScore = _clampScore(finalScore);
 
-    final String tradeBias = _determineTradeBias(
+    String tradeBias = _determineTradeBias(
       oiPriceSignal: oiPriceSignal,
       oiDirection: oiDirection,
       priceDirection: priceDirection,
@@ -1086,6 +1085,17 @@ class _DetailPageState extends State<DetailPage>
       structureDetected: structureDetected,
       structureScore: structureScore,
     );
+
+    // STRUCTURE OVERRIDE
+    if (structureScore >= 70) {
+      finalScore += 15;
+
+      if (structureScore >= 80) {
+        tradeBias = 'SHORT';
+      }
+    }
+
+    finalScore = _clampScore(finalScore);
 
     double confidence = _confidenceScore(
       oiScore: oiScore,
@@ -1106,10 +1116,17 @@ class _DetailPageState extends State<DetailPage>
     } else if (structureScore >= 35) {
       confidence += 2;
     }
+
+    // STRUCTURE CONFIDENCE BOOST
+    if (structureScore >= 70) {
+      confidence += structureScore >= 80 ? 12 : 8;
+    }
+
     confidence = _clampScore(confidence);
 
     final String scoreClass = _scoreClassFromScore(finalScore);
-    final String action = _actionFromDecision(
+
+    String action = _actionFromDecision(
       finalScore: finalScore,
       confidence: confidence,
       tradeBias: tradeBias,
@@ -1117,6 +1134,13 @@ class _DetailPageState extends State<DetailPage>
       structureDetected: structureDetected,
       structureScore: structureScore,
     );
+
+    // STRUCTURE ACTION OVERRIDE
+    if (structureScore >= 80) {
+      action = 'PREPARE SHORT';
+    } else if (structureScore >= 70 && action == 'WATCH') {
+      action = 'PREPARE SHORT';
+    }
 
     final List<String> marketReadBullets = _buildMarketReadBullets(
       oiDirection: oiDirection,
