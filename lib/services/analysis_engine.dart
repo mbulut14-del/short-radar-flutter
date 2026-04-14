@@ -123,4 +123,36 @@ class AnalysisEngine {
       'label': label,
     };
   }
+
+  // 🔥 YENİ EKLENEN: EARLY SHORT DETECTION
+  static bool detectEarlyShort(List<dynamic> candles) {
+    if (candles.length < 4) return false;
+
+    final last = candles[candles.length - 1];
+    final prev = candles[candles.length - 2];
+    final prev2 = candles[candles.length - 3];
+
+    final double bodyTop = last.close > last.open ? last.close : last.open;
+    final double upperWick = last.high - bodyTop;
+    final double range = last.high - last.low;
+
+    if (range == 0) return false;
+
+    final double wickRatio = upperWick / range;
+
+    final bool bigUpperWick = wickRatio > 0.35;
+
+    final bool pumpBefore =
+        prev.close > prev.open &&
+        prev2.close > prev2.open &&
+        last.high > prev.high;
+
+    final bool weakClose = last.close < last.open;
+
+    if (bigUpperWick && pumpBefore && weakClose) {
+      return true;
+    }
+
+    return false;
+  }
 }
