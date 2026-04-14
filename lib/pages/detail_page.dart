@@ -75,6 +75,56 @@ class FinalTradeDecision {
   }
 }
 
+class EntryEngineState {
+  bool hadPump;
+  bool weaknessSeen;
+  bool breakStarted;
+  int breakdownConfirmations;
+  String phase;
+  List<String> reasons;
+  double score;
+
+  EntryEngineState({
+    this.hadPump = false,
+    this.weaknessSeen = false,
+    this.breakStarted = false,
+    this.breakdownConfirmations = 0,
+    this.phase = 'SEARCHING',
+    List<String>? reasons,
+    this.score = 0,
+  }) : reasons = reasons ?? <String>[];
+
+  void reset() {
+    hadPump = false;
+    weaknessSeen = false;
+    breakStarted = false;
+    breakdownConfirmations = 0;
+    phase = 'SEARCHING';
+    reasons = <String>[];
+    score = 0;
+  }
+}
+
+class EntryEngineSnapshot {
+  final bool hadPump;
+  final bool weaknessSeen;
+  final bool breakStarted;
+  final int breakdownConfirmations;
+  final String phase;
+  final double score;
+  final List<String> reasons;
+
+  const EntryEngineSnapshot({
+    required this.hadPump,
+    required this.weaknessSeen,
+    required this.breakStarted,
+    required this.breakdownConfirmations,
+    required this.phase,
+    required this.score,
+    required this.reasons,
+  });
+}
+
 class DetailPage extends StatefulWidget {
   final CoinRadarData coinData;
   final CoinRadarData? leaderData;
@@ -105,6 +155,7 @@ class _DetailPageState extends State<DetailPage>
   static final Map<String, DateTime?> _lastDecisionTimes = {};
   static final Map<String, FinalTradeDecision?> _lastDisplayDecisions = {};
   static final Map<String, FinalScoreResult?> _lastLegacyScores = {};
+  static final Map<String, EntryEngineState> _entryEngineStates = {};
 
   static const Duration _dataRefreshInterval = Duration(seconds: 5);
   static const Duration _decisionInterval = Duration(minutes: 3);
@@ -155,6 +206,9 @@ class _DetailPageState extends State<DetailPage>
   set _cachedLegacyScore(FinalScoreResult? value) {
     _lastLegacyScores[contractName] = value;
   }
+
+  EntryEngineState get _entryEngineState =>
+      _entryEngineStates.putIfAbsent(contractName, () => EntryEngineState());
 
   @override
   void initState() {
@@ -657,8 +711,7 @@ class _DetailPageState extends State<DetailPage>
       reasons.add('Son mum kırmızı baskı gösteriyor.');
     }
 
-    final double prevMid =
-        prev.low + ((_rangeSize(prev)) * 0.5);
+    final double prevMid = prev.low + (_rangeSize(prev) * 0.5);
     if (last.close < prevMid) {
       score += 10;
       reasons.add('Son kapanış önceki mumun orta bandı altında.');
@@ -691,6 +744,196 @@ class _DetailPageState extends State<DetailPage>
     };
   }
 
+  bool _detectPumpNow(List<CandleData> candles) {
+    if (candles.length < 5) return false;
+
+    final CandleData last = candles[candles.length - 1];
+    final CandleData prev4 = candles[candles.length - 5];
+
+    if (prev4.close <= 0) return false;
+
+    final double risePct = ((last.high - prev4.close) / prev4.close) * 100;
+    final int greenCount = [
+      candles[candles.length - 5].close > candles[candles.length - 5].open,
+      candles[candles.length - 4].close > candles[candles.length - 4].open,
+      candles[candles.length - 3].close > candles[candles.length - 3].open,
+      candles[candles.length - 2].close > candles[candles.length - 2].open,
+    ].where((e) => e).length;
+
+    return risePct >= 4.0 && greenCount >= 3;
+  }
+
+  bool _detectWeaknessNow(List<CandleData> candles) {
+    if (candles.length < 3) return false;
+
+    final CandleData last = candles[candles.length - 1];
+    final CandleData prev = candles[candles.length - 2];
+
+    final bool prevReject =
+        _hasBigUpperWick(prev, minRatio: 0.35) &&
+        _hasWeakClose(prev, maxCloseRatio: 0.58);
+    final bool lastReject =
+        _hasBigUpperWick(last, minRatio: 0.35) &&
+        _hasWeakClose(last, maxCloseRatio: 0.58);
+    final bool lowerHigh = last.high < prev.high;
+    final bool redPressure = last.close < last.open;
+
+    return prevReject || (lastReject && lowerHigh) || (lowerHigh && redPressure);
+  }
+
+  bool _detectBreakdownNow(List<CandleData> candles) {
+    if (candles.length < 4) return false;
+
+    final CandleData last = candles[candles.length - 1];
+    final CandleData prev = candles[candles.length - 2];
+    final CandleData prev2 = candles[candles.length - 3];
+    final CandleData prev3 = candles[candles.length - 4];
+
+    final bool lowerHigh = last.high < prev.high;
+    final bool weakClose = _hasWeakClose(last, maxCloseRatio: 0.55);
+    final bool redBody = last.close < last.open;
+    final double support = prev2.low < prev3.low ? prev2.low : prev3.low;
+    final bool supportBreak = support > 0 && last.close < support;
+    final bool belowPrevMid = last.close < (prev.low + (_rangeSize(prev) * 0.5));
+
+    return (lowerHigh && redBody && weakClose) ||
+        (lowerHigh && belowPrevMid) ||
+        supportBreak;
+  }
+
+  bool _detectRecoveryInvalidation(List<CandleData> candles) {
+    if (candles.length < 3) return false;
+
+    final CandleData last = candles[candles.length - 1];
+    final CandleData prev = candles[candles.length - 2];
+
+    final bool strongGreenRecovery =
+        last.close > last.open &&
+        _bodySize(last) > 0 &&
+        _bodySize(last) >= _rangeSize(last) * 0.45;
+    final bool reclaimedPrevHigh = last.close > prev.high;
+    final bool strongCloseNearHigh = !_hasWeakClose(last, maxCloseRatio: 0.75);
+
+    return strongGreenRecovery && reclaimedPrevHigh && strongCloseNearHigh;
+  }
+
+  EntryEngineSnapshot _evaluateEntryEngine(List<CandleData> candles) {
+    final EntryEngineState state = _entryEngineState;
+
+    if (candles.length < 5) {
+      state.reset();
+      return EntryEngineSnapshot(
+        hadPump: false,
+        weaknessSeen: false,
+        breakStarted: false,
+        breakdownConfirmations: 0,
+        phase: 'SEARCHING',
+        score: 0,
+        reasons: const <String>[],
+      );
+    }
+
+    final bool pumpNow = _detectPumpNow(candles);
+    final bool weaknessNow = _detectWeaknessNow(candles);
+    final bool breakdownNow = _detectBreakdownNow(candles);
+    final bool invalidated = _detectRecoveryInvalidation(candles);
+
+    final List<String> reasons = [];
+
+    if (invalidated) {
+      state.reset();
+      state.phase = 'INVALIDATED';
+      state.reasons = <String>[
+        'Kırılma denemesi sonrası güçlü yukarı toparlama geldi.'
+      ];
+      state.score = 18;
+      return EntryEngineSnapshot(
+        hadPump: state.hadPump,
+        weaknessSeen: state.weaknessSeen,
+        breakStarted: state.breakStarted,
+        breakdownConfirmations: state.breakdownConfirmations,
+        phase: state.phase,
+        score: state.score,
+        reasons: List<String>.from(state.reasons),
+      );
+    }
+
+    if (pumpNow) {
+      state.hadPump = true;
+      state.phase = 'PUMP_TRACKING';
+      reasons.add('Önce güçlü pump tespit edildi.');
+    }
+
+    if (state.hadPump && weaknessNow) {
+      state.weaknessSeen = true;
+      state.phase = 'WEAKNESS_TRACKING';
+      reasons.add('Pump sonrası ilk zayıflama başladı.');
+    }
+
+    if (state.hadPump && state.weaknessSeen && breakdownNow) {
+      state.breakStarted = true;
+      state.breakdownConfirmations += 1;
+      state.phase = 'BREAK_READY';
+      reasons.add('İlk kırılma başladı.');
+      if (state.breakdownConfirmations >= 2) {
+        reasons.add('Kırılma ikinci kez teyit aldı.');
+      }
+    } else if (!breakdownNow && state.breakdownConfirmations > 0) {
+      state.breakdownConfirmations = 1;
+    }
+
+    if (!state.hadPump && !pumpNow) {
+      state.phase = 'SEARCHING';
+      state.reasons = <String>[];
+      state.score = 0;
+      return EntryEngineSnapshot(
+        hadPump: state.hadPump,
+        weaknessSeen: state.weaknessSeen,
+        breakStarted: state.breakStarted,
+        breakdownConfirmations: state.breakdownConfirmations,
+        phase: state.phase,
+        score: state.score,
+        reasons: List<String>.from(state.reasons),
+      );
+    }
+
+    double score = 0;
+
+    if (state.hadPump) score += 26;
+    if (state.weaknessSeen) score += 24;
+    if (state.breakStarted) score += 26;
+    if (state.breakdownConfirmations >= 2) score += 12;
+
+    if (pumpNow) score += 6;
+    if (weaknessNow) score += 8;
+    if (breakdownNow) score += 12;
+
+    score = _clampScore(score);
+
+    if (reasons.isEmpty) {
+      if (state.phase == 'PUMP_TRACKING') {
+        reasons.add('Pump izleniyor, zayıflama bekleniyor.');
+      } else if (state.phase == 'WEAKNESS_TRACKING') {
+        reasons.add('İlk zayıflama izlendi, kırılma teyidi bekleniyor.');
+      } else if (state.phase == 'BREAK_READY') {
+        reasons.add('Entry engine kırılma modunda.');
+      }
+    }
+
+    state.score = score;
+    state.reasons = reasons;
+
+    return EntryEngineSnapshot(
+      hadPump: state.hadPump,
+      weaknessSeen: state.weaknessSeen,
+      breakStarted: state.breakStarted,
+      breakdownConfirmations: state.breakdownConfirmations,
+      phase: state.phase,
+      score: state.score,
+      reasons: List<String>.from(state.reasons),
+    );
+  }
+
   String _determineTradeBias({
     required String oiPriceSignal,
     required String oiDirection,
@@ -700,6 +943,7 @@ class _DetailPageState extends State<DetailPage>
     required double structureScore,
     required bool firstBreakDetected,
     required double firstBreakScore,
+    required EntryEngineSnapshot entryEngine,
   }) {
     if (oiPriceSignal == 'STRONG_SHORT' ||
         oiPriceSignal == 'FAKE_PUMP' ||
@@ -743,6 +987,14 @@ class _DetailPageState extends State<DetailPage>
 
     if (firstBreakDetected) {
       shortVotes += firstBreakScore >= 80 ? 3 : 2;
+    }
+
+    if (entryEngine.phase == 'WEAKNESS_TRACKING') {
+      shortVotes += 2;
+    } else if (entryEngine.phase == 'BREAK_READY') {
+      shortVotes += entryEngine.breakdownConfirmations >= 2 ? 4 : 3;
+    } else if (entryEngine.phase == 'INVALIDATED') {
+      neutralPenalty += 3;
     }
 
     if (shortVotes >= 3 && shortVotes > neutralPenalty) {
@@ -853,7 +1105,23 @@ class _DetailPageState extends State<DetailPage>
     required double structureScore,
     required bool firstBreakDetected,
     required double firstBreakScore,
+    required EntryEngineSnapshot entryEngine,
   }) {
+    if (entryEngine.phase == 'INVALIDATED') {
+      return 'WATCH';
+    }
+
+    if (entryEngine.phase == 'BREAK_READY' &&
+        entryEngine.breakdownConfirmations >= 2 &&
+        tradeBias == 'SHORT' &&
+        confidence >= 60) {
+      return 'ENTER SHORT';
+    }
+
+    if (entryEngine.phase == 'BREAK_READY' && tradeBias == 'SHORT') {
+      return 'PREPARE SHORT';
+    }
+
     if (firstBreakScore >= 80 && tradeBias == 'SHORT') {
       return 'ENTER SHORT';
     }
@@ -864,6 +1132,10 @@ class _DetailPageState extends State<DetailPage>
 
     if (tradeBias != 'SHORT') {
       return finalScore >= 40 ? 'WATCH' : 'NO TRADE';
+    }
+
+    if (entryEngine.phase == 'WEAKNESS_TRACKING') {
+      return 'WATCH';
     }
 
     if (firstBreakDetected && firstBreakScore >= 60) {
@@ -906,6 +1178,7 @@ class _DetailPageState extends State<DetailPage>
     required bool firstBreakDetected,
     required double firstBreakScore,
     required List<String> firstBreakReasons,
+    required EntryEngineSnapshot entryEngine,
   }) {
     final List<String> bullets = [];
 
@@ -955,6 +1228,20 @@ class _DetailPageState extends State<DetailPage>
       default:
         bullets.add('Ana sinyal nötr bölgede, ek teyit gerekiyor.');
         break;
+    }
+
+    if (entryEngine.phase == 'PUMP_TRACKING') {
+      bullets.add('Entry engine pump fazını hafızaya aldı.');
+    } else if (entryEngine.phase == 'WEAKNESS_TRACKING') {
+      bullets.add('Entry engine ilk zayıflamayı yakaladı, kırılma bekliyor.');
+    } else if (entryEngine.phase == 'BREAK_READY') {
+      bullets.add('Entry engine kırılma fazında; girişe en yakın bölge izleniyor.');
+    } else if (entryEngine.phase == 'INVALIDATED') {
+      bullets.add('Entry engine önceki kırılma fikrini geçersiz saydı.');
+    }
+
+    for (final reason in entryEngine.reasons.take(2)) {
+      bullets.add(reason);
     }
 
     if (firstBreakDetected) {
@@ -1010,6 +1297,7 @@ class _DetailPageState extends State<DetailPage>
     required double momentumScore,
     required bool structureDetected,
     required bool firstBreakDetected,
+    required EntryEngineSnapshot entryEngine,
   }) {
     final List<String> warnings = [];
 
@@ -1029,8 +1317,16 @@ class _DetailPageState extends State<DetailPage>
       warnings.add('Geçmiş fiyat yapısı henüz güçlü tepe teyidi vermiyor.');
     }
 
-    if (!firstBreakDetected) {
+    if (!firstBreakDetected && entryEngine.phase != 'BREAK_READY') {
       warnings.add('İlk kırılma motoru henüz tam tetik vermedi.');
+    }
+
+    if (entryEngine.phase == 'WEAKNESS_TRACKING') {
+      warnings.add('Zayıflama var ama breakdown teyidi henüz eksik.');
+    }
+
+    if (entryEngine.phase == 'INVALIDATED') {
+      warnings.add('Önceki kırılma denemesi yukarı toparlama ile bozuldu.');
     }
 
     if (confidence < 60) {
@@ -1064,6 +1360,7 @@ class _DetailPageState extends State<DetailPage>
     required bool firstBreakDetected,
     required double firstBreakScore,
     required List<String> firstBreakReasons,
+    required EntryEngineSnapshot entryEngine,
   }) {
     final List<String> notes = [];
 
@@ -1077,6 +1374,20 @@ class _DetailPageState extends State<DetailPage>
       notes.add('Şimdilik izleme modunda kalmak daha doğru.');
     } else {
       notes.add('Mevcut görüntü short işlemi için yeterli kalite üretmiyor.');
+    }
+
+    if (entryEngine.phase == 'PUMP_TRACKING') {
+      notes.add('Engine pumpı hafızaya aldı; şimdi zayıflama arıyor.');
+    } else if (entryEngine.phase == 'WEAKNESS_TRACKING') {
+      notes.add('İlk zayıflama görüldü; ilk kırılma teyidi gelmeden acele etme.');
+    } else if (entryEngine.phase == 'BREAK_READY') {
+      if (entryEngine.breakdownConfirmations >= 2) {
+        notes.add('Stateful entry engine iki aşamalı kırılma teyidi aldı.');
+      } else {
+        notes.add('Stateful entry engine kırılma başlattı; continuation beklenmeli.');
+      }
+    } else if (entryEngine.phase == 'INVALIDATED') {
+      notes.add('Yukarı toparlama geldiği için önceki setup bozuldu.');
     }
 
     if (firstBreakDetected) {
@@ -1144,10 +1455,17 @@ class _DetailPageState extends State<DetailPage>
     required String orderFlowDirection,
     required bool structureDetected,
     required bool firstBreakDetected,
+    required EntryEngineSnapshot entryEngine,
   }) {
     final List<String> triggers = [];
 
     if (tradeBias == 'SHORT') {
+      if (entryEngine.phase == 'WEAKNESS_TRACKING') {
+        triggers.add('Weakness sonrası yeni lower high oluşması');
+      }
+      if (entryEngine.phase == 'BREAK_READY') {
+        triggers.add('Kırılma sonrası continuation mumu');
+      }
       if (firstBreakDetected) {
         triggers.add('İlk kırılma sonrası zayıf kapanışın devam etmesi');
       }
@@ -1208,6 +1526,9 @@ class _DetailPageState extends State<DetailPage>
     final List<String> firstBreakReasons =
         List<String>.from(firstBreakResult['reasons'] ?? const []);
 
+    final EntryEngineSnapshot entryEngine =
+        _evaluateEntryEngine(visibleCandles);
+
     final double oiScore = _componentOiScore(oiDirection);
     final double priceScore = _componentPriceScore(priceDirection, oiPriceSignal);
     final double orderFlowScore = _componentOrderFlowScore(orderFlowDirection);
@@ -1250,6 +1571,16 @@ class _DetailPageState extends State<DetailPage>
       finalScore += 5;
     }
 
+    if (entryEngine.phase == 'PUMP_TRACKING') {
+      finalScore += 4;
+    } else if (entryEngine.phase == 'WEAKNESS_TRACKING') {
+      finalScore += 10;
+    } else if (entryEngine.phase == 'BREAK_READY') {
+      finalScore += entryEngine.breakdownConfirmations >= 2 ? 22 : 16;
+    } else if (entryEngine.phase == 'INVALIDATED') {
+      finalScore -= 14;
+    }
+
     String tradeBias = _determineTradeBias(
       oiPriceSignal: oiPriceSignal,
       oiDirection: oiDirection,
@@ -1259,11 +1590,11 @@ class _DetailPageState extends State<DetailPage>
       structureScore: structureScore,
       firstBreakDetected: firstBreakDetected,
       firstBreakScore: firstBreakScore,
+      entryEngine: entryEngine,
     );
 
     if (structureScore >= 70) {
       finalScore += 15;
-
       if (structureScore >= 80) {
         tradeBias = 'SHORT';
       }
@@ -1271,6 +1602,16 @@ class _DetailPageState extends State<DetailPage>
 
     if (firstBreakScore >= 80) {
       tradeBias = 'SHORT';
+    }
+
+    if (entryEngine.phase == 'BREAK_READY') {
+      tradeBias = 'SHORT';
+    }
+
+    if (entryEngine.phase == 'INVALIDATED' &&
+        oiPriceSignal != 'STRONG_SHORT' &&
+        oiPriceSignal != 'FAKE_PUMP') {
+      tradeBias = 'NEUTRAL';
     }
 
     finalScore = _clampScore(finalScore);
@@ -1311,6 +1652,14 @@ class _DetailPageState extends State<DetailPage>
       confidence += 3;
     }
 
+    if (entryEngine.phase == 'WEAKNESS_TRACKING') {
+      confidence += 6;
+    } else if (entryEngine.phase == 'BREAK_READY') {
+      confidence += entryEngine.breakdownConfirmations >= 2 ? 16 : 10;
+    } else if (entryEngine.phase == 'INVALIDATED') {
+      confidence -= 12;
+    }
+
     confidence = _clampScore(confidence);
 
     final String scoreClass = _scoreClassFromScore(finalScore);
@@ -1324,17 +1673,26 @@ class _DetailPageState extends State<DetailPage>
       structureScore: structureScore,
       firstBreakDetected: firstBreakDetected,
       firstBreakScore: firstBreakScore,
+      entryEngine: entryEngine,
     );
 
-    if (structureScore >= 80) {
-      action = 'PREPARE SHORT';
-    } else if (structureScore >= 70 && action == 'WATCH') {
+    if (entryEngine.phase == 'BREAK_READY' &&
+        entryEngine.breakdownConfirmations >= 2 &&
+        action == 'PREPARE SHORT') {
+      action = 'ENTER SHORT';
+    }
+
+    if (entryEngine.phase == 'WEAKNESS_TRACKING' &&
+        action == 'ENTER SHORT') {
       action = 'PREPARE SHORT';
     }
 
-    if (firstBreakScore >= 80) {
-      action = 'ENTER SHORT';
-    } else if (firstBreakScore >= 60 && action == 'WATCH') {
+    if (structureScore >= 80 && action == 'WATCH') {
+      action = 'PREPARE SHORT';
+    } else if (structureScore >= 80 &&
+        action != 'ENTER SHORT' &&
+        entryEngine.phase != 'INVALIDATED' &&
+        entryEngine.phase != 'WEAKNESS_TRACKING') {
       action = 'PREPARE SHORT';
     }
 
@@ -1351,6 +1709,7 @@ class _DetailPageState extends State<DetailPage>
       firstBreakDetected: firstBreakDetected,
       firstBreakScore: firstBreakScore,
       firstBreakReasons: firstBreakReasons,
+      entryEngine: entryEngine,
     );
 
     final List<String> warnings = _buildWarnings(
@@ -1363,6 +1722,7 @@ class _DetailPageState extends State<DetailPage>
       momentumScore: momentumScore,
       structureDetected: structureDetected,
       firstBreakDetected: firstBreakDetected,
+      entryEngine: entryEngine,
     );
 
     final List<String> entryNotes = _buildEntryNotes(
@@ -1377,6 +1737,7 @@ class _DetailPageState extends State<DetailPage>
       firstBreakDetected: firstBreakDetected,
       firstBreakScore: firstBreakScore,
       firstBreakReasons: firstBreakReasons,
+      entryEngine: entryEngine,
     );
 
     final List<String> triggerConditions = _buildTriggerConditions(
@@ -1386,6 +1747,7 @@ class _DetailPageState extends State<DetailPage>
       orderFlowDirection: orderFlowDirection,
       structureDetected: structureDetected,
       firstBreakDetected: firstBreakDetected,
+      entryEngine: entryEngine,
     );
 
     final String summary = _buildDecisionSummary(
@@ -1423,6 +1785,7 @@ class _DetailPageState extends State<DetailPage>
     _lastDecisionTimes.remove(contractName);
     _lastDisplayDecisions.remove(contractName);
     _lastLegacyScores.remove(contractName);
+    _entryEngineStates.remove(contractName);
 
     finalTradeDecision = null;
     finalScoreResult = null;
@@ -1507,7 +1870,8 @@ class _DetailPageState extends State<DetailPage>
     final double averageConfidence =
         _averageScore(decisions, (item) => item.confidence);
 
-    final double averageOiScore = _averageScore(decisions, (item) => item.oiScore);
+    final double averageOiScore =
+        _averageScore(decisions, (item) => item.oiScore);
     final double averagePriceScore =
         _averageScore(decisions, (item) => item.priceScore);
     final double averageOrderFlowScore =
@@ -1524,23 +1888,7 @@ class _DetailPageState extends State<DetailPage>
     final String dominantSignal =
         _dominantText(decisions, (item) => item.primarySignal);
 
-    final bool structureDetected = latest.marketReadBullets.any(
-      (e) => e.toLowerCase().contains('price structure'),
-    );
-    final bool firstBreakDetected = latest.marketReadBullets.any(
-      (e) => e.toLowerCase().contains('ilk kırılma'),
-    );
-
-    String action = _actionFromDecision(
-      finalScore: averageFinalScore,
-      confidence: averageConfidence,
-      tradeBias: dominantBias,
-      oiPriceSignal: dominantSignal,
-      structureDetected: structureDetected,
-      structureScore: averageFinalScore,
-      firstBreakDetected: firstBreakDetected,
-      firstBreakScore: averageFinalScore,
-    );
+    String action = latest.action;
 
     final bool strongPersistence =
         latest.finalScore >= 80 && previous.finalScore >= 80;
