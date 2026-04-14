@@ -9,6 +9,7 @@ import '../models/coin_radar_data.dart';
 import '../models/entry_timing_result.dart';
 import '../models/pump_analysis_result.dart';
 import '../models/short_setup_result.dart';
+import '../services/analysis_engine.dart';
 import '../services/detail_data_service.dart';
 import '../widgets/detail_page_content.dart';
 
@@ -1062,6 +1063,9 @@ class _DetailPageState extends State<DetailPage>
     final double momentumScore =
         _componentMomentumScore(entryTiming, visibleCandles);
 
+    final double momentumShift =
+        AnalysisEngine.calculateMomentumShift(visibleCandles);
+
     double finalScore = _weightedFinalScore(
       oiScore: oiScore,
       priceScore: priceScore,
@@ -1070,6 +1074,12 @@ class _DetailPageState extends State<DetailPage>
       liquidationScore: liquidationScore,
       momentumScore: momentumScore,
     );
+
+    if (momentumShift >= 60) {
+      finalScore -= 15;
+    } else if (momentumShift >= 40) {
+      finalScore -= 8;
+    }
 
     if (structureDetected) {
       finalScore += structureScore >= 70 ? 12 : 7;
@@ -1086,7 +1096,6 @@ class _DetailPageState extends State<DetailPage>
       structureScore: structureScore,
     );
 
-    // STRUCTURE OVERRIDE
     if (structureScore >= 70) {
       finalScore += 15;
 
@@ -1111,13 +1120,18 @@ class _DetailPageState extends State<DetailPage>
       oiPriceSignal: oiPriceSignal,
     );
 
+    if (momentumShift >= 60) {
+      confidence -= 15;
+    } else if (momentumShift >= 40) {
+      confidence -= 8;
+    }
+
     if (structureDetected) {
       confidence += structureScore >= 70 ? 10 : 6;
     } else if (structureScore >= 35) {
       confidence += 2;
     }
 
-    // STRUCTURE CONFIDENCE BOOST
     if (structureScore >= 70) {
       confidence += structureScore >= 80 ? 12 : 8;
     }
@@ -1135,7 +1149,6 @@ class _DetailPageState extends State<DetailPage>
       structureScore: structureScore,
     );
 
-    // STRUCTURE ACTION OVERRIDE
     if (structureScore >= 80) {
       action = 'PREPARE SHORT';
     } else if (structureScore >= 70 && action == 'WATCH') {
