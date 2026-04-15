@@ -391,7 +391,8 @@ class AnalysisEngine {
     final bool higherLow = _low(last) > _low(prev);
     final bool reclaim = _close(last) > _close(prev);
 
-    return (lastGreen && prevGreen) || (lastGreen && higherLow && reclaim) ||
+    return (lastGreen && prevGreen) ||
+        (lastGreen && higherLow && reclaim) ||
         (_isGreen(last) && _isGreen(prev2) && _close(last) > _close(prev));
   }
 
@@ -421,31 +422,54 @@ class AnalysisEngine {
   static double calculateMomentumShift(List<dynamic> candles) {
     if (candles.length < 6) return 0;
 
-    final dynamic last = candles[candles.length - 1];
-    final dynamic prev = candles[candles.length - 2];
-    final dynamic prev2 = candles[candles.length - 3];
-    final dynamic prev3 = candles[candles.length - 4];
+    final dynamic c0 = candles[candles.length - 1];
+    final dynamic c1 = candles[candles.length - 2];
+    final dynamic c2 = candles[candles.length - 3];
+    final dynamic c3 = candles[candles.length - 4];
+    final dynamic c4 = candles[candles.length - 5];
+    final dynamic c5 = candles[candles.length - 6];
+
+    // ==============================
+    // 🔥 TREND FILTER
+    // ==============================
+    final bool higherHigh =
+        _high(c0) > _high(c2) && _high(c2) > _high(c4);
+
+    final bool higherLow =
+        _low(c1) > _low(c3) && _low(c3) > _low(c5);
+
+    final bool isUptrend = higherHigh && higherLow;
+
+    final bool hasBreakdown = _close(c0) < _low(c1);
+
+    if (isUptrend) {
+      return 0;
+    }
+
+    if (!hasBreakdown) {
+      return 0;
+    }
 
     double score = 0;
 
     // 1) İlk çatlak
-    if (_isGreen(prev) && _isRed(last)) {
+    if (_isGreen(c1) && _isRed(c0)) {
       score += 20;
     }
 
     // 2) Lower high
-    if (_high(last) < _high(prev)) {
+    if (_high(c0) < _high(c1)) {
       score += 15;
     }
 
     // 3) Breakdown
-    if (_close(last) < _low(prev)) {
+    if (_close(c0) < _low(c1)) {
       score += 30;
     }
 
     // 4) Üst wick / tepe zayıflığı
-    if (_hasBigUpperWick(prev, minRatio: 0.30) ||
-        _hasBigUpperWick(last, minRatio: 0.30)) {
+    if (_hasBigUpperWick(c1, minRatio: 0.30) ||
+        _hasBigUpperWick(c0, minRatio: 0.30)) {
       score += 10;
     }
 
@@ -471,13 +495,13 @@ class AnalysisEngine {
     }
 
     // 7) Son mum kırmızı değil ve breakdown yoksa giriş yok
-    if (!_isRed(last) && _close(last) >= _low(prev)) {
+    if (!_isRed(c0) && _close(c0) >= _low(c1)) {
       score -= 20;
     }
 
     // 8) Klasik mini pump geçmişi
     final bool miniPump =
-        _isGreen(prev) && (_isGreen(prev2) || _isGreen(prev3));
+        _isGreen(c1) && (_isGreen(c2) || _isGreen(c3));
     if (miniPump) {
       score += 5;
     }
