@@ -1,8 +1,10 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 
 import '../models/candle_data.dart';
 import '../models/coin_radar_data.dart';
@@ -12,6 +14,29 @@ import '../models/short_setup_result.dart';
 import '../services/analysis_engine.dart';
 import '../services/detail_data_service.dart';
 import '../widgets/detail_page_content.dart';
+
+@pragma('vm:entry-point')
+void startShortRadarForegroundCallback() {
+  FlutterForegroundTask.setTaskHandler(ShortRadarTaskHandler());
+}
+
+class ShortRadarTaskHandler extends TaskHandler {
+  @override
+  Future<void> onStart(DateTime timestamp, TaskStarter starter) async {}
+
+  @override
+  void onRepeatEvent(DateTime timestamp) {
+    FlutterForegroundTask.sendDataToMain(<String, dynamic>{
+      'timestamp': timestamp.millisecondsSinceEpoch,
+    });
+  }
+
+  @override
+  Future<void> onDestroy(DateTime timestamp, bool isTimeout) async {}
+
+  @override
+  void onReceiveData(Object data) {}
+}
 
 class FinalScoreResult {
   final double score;
@@ -150,6 +175,7 @@ class DetailPage extends StatefulWidget {
 class _DetailPageState extends State<DetailPage>
     with SingleTickerProviderStateMixin {
   static final Map<String, DateTime> _lastAlertTimes = {};
+  static final Map<String, String> _lastAlertStates = {};
 
   static final Map<String, List<FinalTradeDecision>> _decisionBuffers = {};
   static final Map<String, DateTime?> _lastDecisionTimes = {};
@@ -183,6 +209,7 @@ class _DetailPageState extends State<DetailPage>
 
   bool _isFetchingDetail = false;
   bool _notificationsReady = false;
+  bool _foregroundReady = false;
   String _openInterestDisplay = '-';
 
   List<FinalTradeDecision> get _decisionBuffer =>
@@ -228,7 +255,12 @@ class _DetailPageState extends State<DetailPage>
       duration: const Duration(milliseconds: 1100),
     )..repeat();
 
+    FlutterForegroundTask.addTaskDataCallback(_onReceiveTaskData);
     _initLocalNotifications();
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await _initForegroundTask();
+      await _startForegroundMonitoring();
+    });
     fetchDetail();
 
     _detailTimer = Timer.periodic(_dataRefreshInterval, (_) {
@@ -253,9 +285,77 @@ class _DetailPageState extends State<DetailPage>
     }
   }
 
+  void _onReceiveTaskData(Object data) {
+    // Foreground task heartbeat.
+  }
+
+  Future<void> _initForegroundTask() async {
+    try {
+      FlutterForegroundTask.init(
+        androidNotificationOptions: const AndroidNotificationOptions(
+          channelId: 'short_radar_foreground',
+          channelName: 'Short Radar Foreground',
+          channelDescription: 'Short Radar arka planda piyasayi izliyor.',
+          onlyAlertOnce: true,
+        ),
+        iosNotificationOptions: const IOSNotificationOptions(
+          showNotification: false,
+          playSound: false,
+        ),
+        foregroundTaskOptions: const ForegroundTaskOptions(
+          eventAction: ForegroundTaskEventAction.repeat(5000),
+          autoRunOnBoot: false,
+          autoRunOnMyPackageReplaced: false,
+          allowWakeLock: true,
+          allowWifiLock: true,
+        ),
+      );
+
+      if (Platform.isAndroid) {
+        final NotificationPermission permission =
+            await FlutterForegroundTask.checkNotificationPermission();
+        if (permission != NotificationPermission.granted) {
+          await FlutterForegroundTask.requestNotificationPermission();
+        }
+      }
+
+      _foregroundReady = true;
+    } catch (_) {
+      _foregroundReady = false;
+    }
+  }
+
+  Future<void> _startForegroundMonitoring() async {
+    if (!_foregroundReady) return;
+
+    try {
+      if (await FlutterForegroundTask.isRunningService) {
+        await FlutterForegroundTask.restartService();
+      } else {
+        await FlutterForegroundTask.startService(
+          serviceId: 256,
+          notificationTitle: 'Short Radar aktif',
+          notificationText: '$contractName izleniyor...',
+          callback: startShortRadarForegroundCallback,
+        );
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _stopForegroundMonitoring() async {
+    if (!_foregroundReady) return;
+    try {
+      if (await FlutterForegroundTask.isRunningService) {
+        await FlutterForegroundTask.stopService();
+      }
+    } catch (_) {}
+  }
+
   @override
   void dispose() {
     _detailTimer?.cancel();
+    FlutterForegroundTask.removeTaskDataCallback(_onReceiveTaskData);
+    _stopForegroundMonitoring();
     _spinnerController.dispose();
     super.dispose();
   }
@@ -2010,53 +2110,109 @@ class _DetailPageState extends State<DetailPage>
     return filteredDecision;
   }
 
-  bool _shouldTriggerShortAlert(FinalTradeDecision result) {
-    if (result.finalScore < 85) return false;
-    if (result.tradeBias != 'SHORT') return false;
-    if (result.action != 'ENTER SHORT' && result.action != 'PREPARE SHORT') {
-      return false;
+  String _resolveAlertState(FinalTradeDecision result) {
+    if (result.tradeBias != 'SHORT') return 'NONE';
+    if (widget.orderFlowDirection == 'BUY_PRESSURE') return 'NONE';
+    if (widget.oiPriceSignal == 'SHORT_SQUEEZE') return 'NONE';
+    if (widget.oiPriceSignal == 'EARLY_ACCUMULATION') return 'NONE';
+
+    if (result.finalScore >= 85 && result.action == 'ENTER SHORT') {
+      return 'ENTRY';
     }
-    if (widget.orderFlowDirection == 'BUY_PRESSURE') return false;
-    if (widget.oiPriceSignal == 'SHORT_SQUEEZE') return false;
-    if (widget.oiPriceSignal == 'EARLY_ACCUMULATION') return false;
-    return true;
+    if (result.finalScore >= 70 &&
+        (result.action == 'ENTER SHORT' || result.action == 'PREPARE SHORT')) {
+      return 'WARNING';
+    }
+    if (result.finalScore >= 50) {
+      return 'EARLY';
+    }
+    return 'NONE';
   }
 
-  Future<void> _triggerTestNotification() async {
-    if (!_notificationsReady) return;
-
-    try {
-      const AndroidNotificationDetails androidDetails =
-          AndroidNotificationDetails(
-        'short_radar_test_channel',
-        'Short Radar Test',
-        channelDescription: 'Bildirim test kanalı',
-        importance: Importance.max,
-        priority: Priority.high,
-        enableVibration: true,
-        playSound: true,
-      );
-
-      const NotificationDetails notificationDetails =
-          NotificationDetails(android: androidDetails);
-
-      await _notificationsPlugin.show(
-        999001,
-        'TEST',
-        'Çalışıyor mu?',
-        notificationDetails,
-      );
-    } catch (_) {}
+  bool _shouldDispatchAlertState(String nextState) {
+    if (nextState == 'NONE') return false;
+    return _lastAlertStates[contractName] != nextState;
   }
 
-  Future<void> _triggerShortAlert(FinalTradeDecision result) async {
+  Future<void> _triggerScoreAlert(
+    FinalTradeDecision result,
+    String alertState,
+  ) async {
     final DateTime now = DateTime.now();
     final DateTime? lastAlertAt = _lastAlertTimes[contractName];
 
-    if (lastAlertAt != null &&
-        now.difference(lastAlertAt) < const Duration(minutes: 10)) {
+    final Duration cooldown;
+    switch (alertState) {
+      case 'ENTRY':
+        cooldown = const Duration(minutes: 10);
+        break;
+      case 'WARNING':
+        cooldown = const Duration(minutes: 7);
+        break;
+      default:
+        cooldown = const Duration(minutes: 5);
+        break;
+    }
+
+    if (lastAlertAt != null && now.difference(lastAlertAt) < cooldown) {
       return;
     }
+
+    _lastAlertTimes[contractName] = now;
+    _lastAlertStates[contractName] = alertState;
+
+    try {
+      await HapticFeedback.heavyImpact();
+      await HapticFeedback.vibrate();
+    } catch (_) {}
+
+    if (!_notificationsReady) return;
+
+    String title = 'Short Radar';
+    String body = '$contractName izleniyor';
+
+    if (alertState == 'ENTRY') {
+      title = '🚨 SHORT GİRİŞ';
+      body = '$contractName • Score ${result.finalScore.toStringAsFixed(0)} • ${result.scoreClass}';
+    } else if (alertState == 'WARNING') {
+      title = '🔥 Short yakın';
+      body = '$contractName • Setup güçleniyor • Score ${result.finalScore.toStringAsFixed(0)}';
+    } else if (alertState == 'EARLY') {
+      title = '⚠️ Erken short uyarısı';
+      body = '$contractName • Kurulum oluşuyor • Score ${result.finalScore.toStringAsFixed(0)}';
+    }
+
+    const AndroidNotificationDetails androidDetails =
+        AndroidNotificationDetails(
+      'short_setup_alerts',
+      'Short Setup Alerts',
+      channelDescription: 'Short Radar karar motoru bildirimleri',
+      importance: Importance.max,
+      priority: Priority.high,
+      enableVibration: true,
+      playSound: true,
+      ticker: 'short-alert',
+    );
+
+    const NotificationDetails notificationDetails =
+        NotificationDetails(android: androidDetails);
+
+    try {
+      await _notificationsPlugin.show(
+        contractName.hashCode,
+        title,
+        body,
+        notificationDetails,
+      );
+
+      if (_foregroundReady) {
+        await FlutterForegroundTask.updateService(
+          notificationTitle: title,
+          notificationText: body,
+        );
+      }
+    } catch (_) {}
+  }
 
     _lastAlertTimes[contractName] = now;
 
@@ -2145,7 +2301,6 @@ class _DetailPageState extends State<DetailPage>
       _cachedDisplayDecision = displayDecision;
       _cachedLegacyScore = displayDecision.toLegacyScoreResult();
 
-      await _triggerTestNotification();
 
       if (_shouldTriggerShortAlert(displayDecision)) {
         await _triggerShortAlert(displayDecision);
