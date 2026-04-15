@@ -11,6 +11,7 @@ import '../models/pump_analysis_result.dart';
 import '../models/short_setup_result.dart';
 import '../services/analysis_engine.dart';
 import '../services/detail_data_service.dart';
+import '../services/entry_engine.dart';
 import '../widgets/detail_page_content.dart';
 
 class FinalScoreResult {
