@@ -12,8 +12,118 @@ import '../models/short_setup_result.dart';
 import '../services/analysis_engine.dart';
 import '../services/detail_data_service.dart';
 import '../widgets/detail_page_content.dart';
-import '../final_trade_decision.dart';
-import '../entry_engine.dart';
+
+class FinalScoreResult {
+  final double score;
+  final String label;
+  final String summary;
+
+  const FinalScoreResult({
+    required this.score,
+    required this.label,
+    required this.summary,
+  });
+}
+
+class FinalTradeDecision {
+  final double finalScore;
+  final String scoreClass;
+  final double confidence;
+  final String primarySignal;
+  final String tradeBias;
+  final String action;
+  final String summary;
+
+  final double oiScore;
+  final double priceScore;
+  final double orderFlowScore;
+  final double volumeScore;
+  final double liquidationScore;
+  final double momentumScore;
+
+  final List<String> marketReadBullets;
+  final List<String> entryNotes;
+  final List<String> warnings;
+  final List<String> triggerConditions;
+
+  const FinalTradeDecision({
+    required this.finalScore,
+    required this.scoreClass,
+    required this.confidence,
+    required this.primarySignal,
+    required this.tradeBias,
+    required this.action,
+    required this.summary,
+    required this.oiScore,
+    required this.priceScore,
+    required this.orderFlowScore,
+    required this.volumeScore,
+    required this.liquidationScore,
+    required this.momentumScore,
+    required this.marketReadBullets,
+    required this.entryNotes,
+    required this.warnings,
+    required this.triggerConditions,
+  });
+
+  FinalScoreResult toLegacyScoreResult() {
+    return FinalScoreResult(
+      score: finalScore,
+      label: scoreClass,
+      summary: summary,
+    );
+  }
+}
+
+class EntryEngineState {
+  bool hadPump;
+  bool weaknessSeen;
+  bool breakStarted;
+  int breakdownConfirmations;
+  String phase;
+  List<String> reasons;
+  double score;
+
+  EntryEngineState({
+    this.hadPump = false,
+    this.weaknessSeen = false,
+    this.breakStarted = false,
+    this.breakdownConfirmations = 0,
+    this.phase = 'SEARCHING',
+    List<String>? reasons,
+    this.score = 0,
+  }) : reasons = reasons ?? <String>[];
+
+  void reset() {
+    hadPump = false;
+    weaknessSeen = false;
+    breakStarted = false;
+    breakdownConfirmations = 0;
+    phase = 'SEARCHING';
+    reasons = <String>[];
+    score = 0;
+  }
+}
+
+class EntryEngineSnapshot {
+  final bool hadPump;
+  final bool weaknessSeen;
+  final bool breakStarted;
+  final int breakdownConfirmations;
+  final String phase;
+  final double score;
+  final List<String> reasons;
+
+  const EntryEngineSnapshot({
+    required this.hadPump,
+    required this.weaknessSeen,
+    required this.breakStarted,
+    required this.breakdownConfirmations,
+    required this.phase,
+    required this.score,
+    required this.reasons,
+  });
+}
 
 class DetailPage extends StatefulWidget {
   final CoinRadarData coinData;
@@ -707,7 +817,124 @@ class _DetailPageState extends State<DetailPage>
     return strongGreenRecovery && reclaimedPrevHigh && strongCloseNearHigh;
   }
 
-    String _determineTradeBias({
+  EntryEngineSnapshot _evaluateEntryEngine(List<CandleData> candles) {
+    final EntryEngineState state = _entryEngineState;
+
+    if (candles.length < 5) {
+      state.reset();
+      return EntryEngineSnapshot(
+        hadPump: false,
+        weaknessSeen: false,
+        breakStarted: false,
+        breakdownConfirmations: 0,
+        phase: 'SEARCHING',
+        score: 0,
+        reasons: const <String>[],
+      );
+    }
+
+    final bool pumpNow = _detectPumpNow(candles);
+    final bool weaknessNow = _detectWeaknessNow(candles);
+    final bool breakdownNow = _detectBreakdownNow(candles);
+    final bool invalidated = _detectRecoveryInvalidation(candles);
+
+    final List<String> reasons = [];
+
+    if (invalidated) {
+      state.reset();
+      state.phase = 'INVALIDATED';
+      state.reasons = <String>[
+        'Kırılma denemesi sonrası güçlü yukarı toparlama geldi.'
+      ];
+      state.score = 18;
+      return EntryEngineSnapshot(
+        hadPump: state.hadPump,
+        weaknessSeen: state.weaknessSeen,
+        breakStarted: state.breakStarted,
+        breakdownConfirmations: state.breakdownConfirmations,
+        phase: state.phase,
+        score: state.score,
+        reasons: List<String>.from(state.reasons),
+      );
+    }
+
+    if (pumpNow) {
+      state.hadPump = true;
+      state.phase = 'PUMP_TRACKING';
+      reasons.add('Önce güçlü pump tespit edildi.');
+    }
+
+    if (state.hadPump && weaknessNow) {
+      state.weaknessSeen = true;
+      state.phase = 'WEAKNESS_TRACKING';
+      reasons.add('Pump sonrası ilk zayıflama başladı.');
+    }
+
+    if (state.hadPump && state.weaknessSeen && breakdownNow) {
+      state.breakStarted = true;
+      state.breakdownConfirmations += 1;
+      state.phase = 'BREAK_READY';
+      reasons.add('İlk kırılma başladı.');
+      if (state.breakdownConfirmations >= 2) {
+        reasons.add('Kırılma ikinci kez teyit aldı.');
+      }
+    } else if (!breakdownNow && state.breakdownConfirmations > 0) {
+      state.breakdownConfirmations = 1;
+    }
+
+    if (!state.hadPump && !pumpNow) {
+      state.phase = 'SEARCHING';
+      state.reasons = <String>[];
+      state.score = 0;
+      return EntryEngineSnapshot(
+        hadPump: state.hadPump,
+        weaknessSeen: state.weaknessSeen,
+        breakStarted: state.breakStarted,
+        breakdownConfirmations: state.breakdownConfirmations,
+        phase: state.phase,
+        score: state.score,
+        reasons: List<String>.from(state.reasons),
+      );
+    }
+
+    double score = 0;
+
+    if (state.hadPump) score += 26;
+    if (state.weaknessSeen) score += 24;
+    if (state.breakStarted) score += 26;
+    if (state.breakdownConfirmations >= 2) score += 12;
+
+    if (pumpNow) score += 6;
+    if (weaknessNow) score += 8;
+    if (breakdownNow) score += 12;
+
+    score = _clampScore(score);
+
+    if (reasons.isEmpty) {
+      if (state.phase == 'PUMP_TRACKING') {
+        reasons.add('Pump izleniyor, zayıflama bekleniyor.');
+      } else if (state.phase == 'WEAKNESS_TRACKING') {
+        reasons.add('İlk zayıflama izlendi, kırılma teyidi bekleniyor.');
+      } else if (state.phase == 'BREAK_READY') {
+        reasons.add('Entry engine kırılma modunda.');
+      }
+    }
+
+    state.score = score;
+    state.reasons = reasons;
+
+    return EntryEngineSnapshot(
+      hadPump: state.hadPump,
+      weaknessSeen: state.weaknessSeen,
+      breakStarted: state.breakStarted,
+      breakdownConfirmations: state.breakdownConfirmations,
+      phase: state.phase,
+      score: state.score,
+      reasons: List<String>.from(state.reasons),
+    );
+  }
+
+  String _determineTradeBias({
     required String oiPriceSignal,
     required String oiDirection,
     required String priceDirection,
@@ -1300,7 +1527,7 @@ class _DetailPageState extends State<DetailPage>
         List<String>.from(firstBreakResult['reasons'] ?? const []);
 
     final EntryEngineSnapshot entryEngine =
-        EntryEngine.evaluate(state: _entryEngineState, candles: visibleCandles);
+        _evaluateEntryEngine(visibleCandles);
 
     final double oiScore = _componentOiScore(oiDirection);
     final double priceScore = _componentPriceScore(priceDirection, oiPriceSignal);
