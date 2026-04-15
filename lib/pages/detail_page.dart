@@ -2022,6 +2022,33 @@ class _DetailPageState extends State<DetailPage>
     return true;
   }
 
+  Future<void> _triggerTestNotification() async {
+    if (!_notificationsReady) return;
+
+    try {
+      const AndroidNotificationDetails androidDetails =
+          AndroidNotificationDetails(
+        'short_radar_test_channel',
+        'Short Radar Test',
+        channelDescription: 'Bildirim test kanalı',
+        importance: Importance.max,
+        priority: Priority.high,
+        enableVibration: true,
+        playSound: true,
+      );
+
+      const NotificationDetails notificationDetails =
+          NotificationDetails(android: androidDetails);
+
+      await _notificationsPlugin.show(
+        999001,
+        'TEST',
+        'Çalışıyor mu?',
+        notificationDetails,
+      );
+    } catch (_) {}
+  }
+
   Future<void> _triggerShortAlert(FinalTradeDecision result) async {
     final DateTime now = DateTime.now();
     final DateTime? lastAlertAt = _lastAlertTimes[contractName];
@@ -2117,6 +2144,8 @@ class _DetailPageState extends State<DetailPage>
 
       _cachedDisplayDecision = displayDecision;
       _cachedLegacyScore = displayDecision.toLegacyScoreResult();
+
+      await _triggerTestNotification();
 
       if (_shouldTriggerShortAlert(displayDecision)) {
         await _triggerShortAlert(displayDecision);
