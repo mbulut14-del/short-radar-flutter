@@ -46,67 +46,73 @@ jobs:
       - name: Android proje olustur
         run: flutter create . --project-name short_radar_flutter --platforms=android
 
-      - name: Kotlin versiyonunu guncelle
+      - name: Android ayarlarini guncelle
         run: |
           python3 - << 'PY'
           from pathlib import Path
+          import re
 
           settings = Path("android/settings.gradle")
           if settings.exists():
               text = settings.read_text(encoding="utf-8")
-
-              if 'id "org.jetbrains.kotlin.android"' in text:
-                  import re
-                  text = re.sub(
-                      r'id "org\.jetbrains\.kotlin\.android" version "[^"]+"',
-                      'id "org.jetbrains.kotlin.android" version "1.9.22"',
-                      text
-                  )
-
+              text = re.sub(
+                  r'id "org\.jetbrains\.kotlin\.android" version "[^"]+"',
+                  'id "org.jetbrains.kotlin.android" version "1.9.22"',
+                  text
+              )
               settings.write_text(text, encoding="utf-8")
 
-          build = Path("android/build.gradle")
-          if build.exists():
-              text = build.read_text(encoding="utf-8")
+          app_build = Path("android/app/build.gradle")
+          if app_build.exists():
+              text = app_build.read_text(encoding="utf-8")
 
-              if "ext.kotlin_version" in text:
-                  import re
-                  text = re.sub(
-                      r'ext\.kotlin_version\s*=\s*[\'"][^\'"]+[\'"]',
-                      'ext.kotlin_version = "1.9.22"',
-                      text
+              text = re.sub(
+                  r'minSdk\s*=\s*flutter\.minSdkVersion',
+                  'minSdk = 23',
+                  text
+              )
+
+              text = re.sub(
+                  r'minSdkVersion\s+flutter\.minSdkVersion',
+                  'minSdkVersion 23',
+                  text
+              )
+
+              text = re.sub(
+                  r'minSdkVersion\s+21',
+                  'minSdkVersion 23',
+                  text
+              )
+
+              app_build.write_text(text, encoding="utf-8")
+
+          manifest = Path("android/app/src/main/AndroidManifest.xml")
+          if manifest.exists():
+              text = manifest.read_text(encoding="utf-8")
+
+              if 'android.permission.INTERNET' not in text:
+                  text = text.replace(
+                      '<application',
+                      '<uses-permission android:name="android.permission.INTERNET"/>\n    <application'
                   )
 
-              build.write_text(text, encoding="utf-8")
+              text = text.replace(
+                  'android:label="short_radar_flutter"',
+                  'android:label="Short Radar Pro"'
+              )
+
+              manifest.write_text(text, encoding="utf-8")
           PY
 
       - name: Paketleri yukle
         run: flutter pub get
 
       - name: Android dosyalarini listele
-        run: find android -maxdepth 4 -type f
-
-      - name: Uygulama adini ve internet iznini ekle
         run: |
-          python3 - << 'PY'
-          from pathlib import Path
-
-          manifest = Path("android/app/src/main/AndroidManifest.xml")
-          text = manifest.read_text(encoding="utf-8")
-
-          if 'android.permission.INTERNET' not in text:
-              text = text.replace(
-                  '<application',
-                  '<uses-permission android:name="android.permission.INTERNET"/>\n    <application'
-              )
-
-          text = text.replace(
-              'android:label="short_radar_flutter"',
-              'android:label="Short Radar Pro"'
-          )
-
-          manifest.write_text(text, encoding="utf-8")
-          PY
+          echo "===== android/app/build.gradle ====="
+          cat android/app/build.gradle
+          echo "===== android/app/src/main/AndroidManifest.xml ====="
+          cat android/app/src/main/AndroidManifest.xml
 
       - name: Uygulama ikonunu olustur
         run: dart run flutter_launcher_icons
