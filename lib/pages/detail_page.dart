@@ -14,7 +14,64 @@ import '../services/detail_data_service.dart';
 import '../widgets/detail_page_content.dart';
 import '../final_trade_decision.dart';
 
+class EntryEngineState {
+  bool hadPump;
+  bool weaknessSeen;
+  bool breakStarted;
+  int breakdownConfirmations;
+  String phase;
+  List<String> reasons;
+  double score;
+
+  EntryEngineState({
+    this.hadPump = false,
+    this.weaknessSeen = false,
+    this.breakStarted = false,
+    this.breakdownConfirmations = 0,
+    this.phase = 'SEARCHING',
+    List<String>? reasons,
+    this.score = 0,
+  }) : reasons = reasons ?? <String>[];
+
+  void reset() {
+    hadPump = false;
+    weaknessSeen = false;
+    breakStarted = false;
+    breakdownConfirmations = 0;
+    phase = 'SEARCHING';
+    reasons = <String>[];
+    score = 0;
+  }
+}
+
+class EntryEngineSnapshot {
+  final bool hadPump;
+  final bool weaknessSeen;
+  final bool breakStarted;
+  final int breakdownConfirmations;
+  final String phase;
+  final double score;
+  final List<String> reasons;
+
+  const EntryEngineSnapshot({
+    required this.hadPump,
+    required this.weaknessSeen,
+    required this.breakStarted,
+    required this.breakdownConfirmations,
+    required this.phase,
+    required this.score,
+    required this.reasons,
+  });
+}
+
 class DetailPage extends StatefulWidget {
+  final CoinRadarData coinData;
+  final CoinRadarData? leaderData;
+  final String oiDirection;
+  final String priceDirection;
+  final String oiPriceSignal;
+  final String orderFlowDirection;
+
   const DetailPage({
     super.key,
     required this.coinData,
