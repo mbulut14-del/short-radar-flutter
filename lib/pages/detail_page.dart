@@ -634,7 +634,80 @@ class _DetailPageState extends State<DetailPage>
     };
   }
 
-  String _determineTradeBias({
+  bool _detectPumpNow(List<CandleData> candles) {
+    if (candles.length < 5) return false;
+
+    final CandleData last = candles[candles.length - 1];
+    final CandleData prev4 = candles[candles.length - 5];
+
+    if (prev4.close <= 0) return false;
+
+    final double risePct = ((last.high - prev4.close) / prev4.close) * 100;
+    final int greenCount = [
+      candles[candles.length - 5].close > candles[candles.length - 5].open,
+      candles[candles.length - 4].close > candles[candles.length - 4].open,
+      candles[candles.length - 3].close > candles[candles.length - 3].open,
+      candles[candles.length - 2].close > candles[candles.length - 2].open,
+    ].where((e) => e).length;
+
+    return risePct >= 4.0 && greenCount >= 3;
+  }
+
+  bool _detectWeaknessNow(List<CandleData> candles) {
+    if (candles.length < 3) return false;
+
+    final CandleData last = candles[candles.length - 1];
+    final CandleData prev = candles[candles.length - 2];
+
+    final bool prevReject =
+        _hasBigUpperWick(prev, minRatio: 0.35) &&
+        _hasWeakClose(prev, maxCloseRatio: 0.58);
+    final bool lastReject =
+        _hasBigUpperWick(last, minRatio: 0.35) &&
+        _hasWeakClose(last, maxCloseRatio: 0.58);
+    final bool lowerHigh = last.high < prev.high;
+    final bool redPressure = last.close < last.open;
+
+    return prevReject || (lastReject && lowerHigh) || (lowerHigh && redPressure);
+  }
+
+  bool _detectBreakdownNow(List<CandleData> candles) {
+    if (candles.length < 4) return false;
+
+    final CandleData last = candles[candles.length - 1];
+    final CandleData prev = candles[candles.length - 2];
+    final CandleData prev2 = candles[candles.length - 3];
+    final CandleData prev3 = candles[candles.length - 4];
+
+    final bool lowerHigh = last.high < prev.high;
+    final bool weakClose = _hasWeakClose(last, maxCloseRatio: 0.55);
+    final bool redBody = last.close < last.open;
+    final double support = prev2.low < prev3.low ? prev2.low : prev3.low;
+    final bool supportBreak = support > 0 && last.close < support;
+    final bool belowPrevMid = last.close < (prev.low + (_rangeSize(prev) * 0.5));
+
+    return (lowerHigh && redBody && weakClose) ||
+        (lowerHigh && belowPrevMid) ||
+        supportBreak;
+  }
+
+  bool _detectRecoveryInvalidation(List<CandleData> candles) {
+    if (candles.length < 3) return false;
+
+    final CandleData last = candles[candles.length - 1];
+    final CandleData prev = candles[candles.length - 2];
+
+    final bool strongGreenRecovery =
+        last.close > last.open &&
+        _bodySize(last) > 0 &&
+        _bodySize(last) >= _rangeSize(last) * 0.45;
+    final bool reclaimedPrevHigh = last.close > prev.high;
+    final bool strongCloseNearHigh = !_hasWeakClose(last, maxCloseRatio: 0.75);
+
+    return strongGreenRecovery && reclaimedPrevHigh && strongCloseNearHigh;
+  }
+
+    String _determineTradeBias({
     required String oiPriceSignal,
     required String oiDirection,
     required String priceDirection,
