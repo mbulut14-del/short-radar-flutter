@@ -52,39 +52,85 @@ jobs:
           from pathlib import Path
           import re
 
-          settings = Path("android/settings.gradle")
-          if settings.exists():
-              text = settings.read_text(encoding="utf-8")
-              text = re.sub(
-                  r'id "org\.jetbrains\.kotlin\.android" version "[^"]+"',
-                  'id "org.jetbrains.kotlin.android" version "1.9.22"',
-                  text
-              )
-              settings.write_text(text, encoding="utf-8")
+          def replace_if_exists(path_str, replacements):
+              path = Path(path_str)
+              if not path.exists():
+                  return False
 
-          app_build = Path("android/app/build.gradle")
-          if app_build.exists():
-              text = app_build.read_text(encoding="utf-8")
+              text = path.read_text(encoding="utf-8")
 
-              text = re.sub(
-                  r'minSdk\s*=\s*flutter\.minSdkVersion',
-                  'minSdk = 23',
-                  text
-              )
+              for pattern, repl in replacements:
+                  text = re.sub(pattern, repl, text, flags=re.MULTILINE)
 
-              text = re.sub(
-                  r'minSdkVersion\s+flutter\.minSdkVersion',
-                  'minSdkVersion 23',
-                  text
-              )
+              path.write_text(text, encoding="utf-8")
+              return True
 
-              text = re.sub(
-                  r'minSdkVersion\s+21',
-                  'minSdkVersion 23',
-                  text
-              )
+          # settings.gradle
+          replace_if_exists(
+              "android/settings.gradle",
+              [
+                  (
+                      r'id "org\.jetbrains\.kotlin\.android" version "[^"]+"',
+                      'id "org.jetbrains.kotlin.android" version "1.9.22"',
+                  ),
+              ],
+          )
 
-              app_build.write_text(text, encoding="utf-8")
+          # settings.gradle.kts
+          replace_if_exists(
+              "android/settings.gradle.kts",
+              [
+                  (
+                      r'id\("org\.jetbrains\.kotlin\.android"\) version "[^"]+"',
+                      'id("org.jetbrains.kotlin.android") version "1.9.22"',
+                  ),
+              ],
+          )
+
+          # build.gradle
+          replace_if_exists(
+              "android/build.gradle",
+              [
+                  (
+                      r'ext\.kotlin_version\s*=\s*[\'"][^\'"]+[\'"]',
+                      'ext.kotlin_version = "1.9.22"',
+                  ),
+              ],
+          )
+
+          # build.gradle.kts
+          replace_if_exists(
+              "android/build.gradle.kts",
+              [
+                  (
+                      r'kotlin\("android"\) version "[^"]+"',
+                      'kotlin("android") version "1.9.22"',
+                  ),
+              ],
+          )
+
+          # app/build.gradle
+          replace_if_exists(
+              "android/app/build.gradle",
+              [
+                  (r'minSdk\s*=\s*flutter\.minSdkVersion', 'minSdk = 23'),
+                  (r'minSdkVersion\s+flutter\.minSdkVersion', 'minSdkVersion 23'),
+                  (r'minSdkVersion\s+21', 'minSdkVersion 23'),
+                  (r'targetSdkVersion\s+flutter\.targetSdkVersion', 'targetSdkVersion 34'),
+                  (r'compileSdkVersion\s+flutter\.compileSdkVersion', 'compileSdkVersion 34'),
+              ],
+          )
+
+          # app/build.gradle.kts
+          replace_if_exists(
+              "android/app/build.gradle.kts",
+              [
+                  (r'minSdk\s*=\s*flutter\.minSdkVersion', 'minSdk = 23'),
+                  (r'minSdk\s*=\s*21', 'minSdk = 23'),
+                  (r'targetSdk\s*=\s*flutter\.targetSdkVersion', 'targetSdk = 34'),
+                  (r'compileSdk\s*=\s*flutter\.compileSdkVersion', 'compileSdk = 34'),
+              ],
+          )
 
           manifest = Path("android/app/src/main/AndroidManifest.xml")
           if manifest.exists():
@@ -109,8 +155,21 @@ jobs:
 
       - name: Android dosyalarini listele
         run: |
+          echo "===== android/settings.gradle ====="
+          [ -f android/settings.gradle ] && cat android/settings.gradle || true
+          echo "===== android/settings.gradle.kts ====="
+          [ -f android/settings.gradle.kts ] && cat android/settings.gradle.kts || true
+
+          echo "===== android/build.gradle ====="
+          [ -f android/build.gradle ] && cat android/build.gradle || true
+          echo "===== android/build.gradle.kts ====="
+          [ -f android/build.gradle.kts ] && cat android/build.gradle.kts || true
+
           echo "===== android/app/build.gradle ====="
-          cat android/app/build.gradle
+          [ -f android/app/build.gradle ] && cat android/app/build.gradle || true
+          echo "===== android/app/build.gradle.kts ====="
+          [ -f android/app/build.gradle.kts ] && cat android/app/build.gradle.kts || true
+
           echo "===== android/app/src/main/AndroidManifest.xml ====="
           cat android/app/src/main/AndroidManifest.xml
 
