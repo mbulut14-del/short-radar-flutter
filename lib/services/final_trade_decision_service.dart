@@ -117,6 +117,16 @@ class EntryEngineSnapshot {
 }
 
 class FinalTradeDecisionService {
+  static final Map<String, FinalTradeDecision> _cache = {};
+
+  static FinalTradeDecision? getFromCache(String symbol) {
+    return _cache[symbol];
+  }
+
+  static void setCache(String symbol, FinalTradeDecision decision) {
+    _cache[symbol] = decision;
+  }
+
   static String safeLower(dynamic value) {
     if (value is String) {
       return value.toLowerCase();
@@ -354,6 +364,7 @@ class FinalTradeDecisionService {
   // ---- MAIN ENTRY ----
 
   static FinalTradeDecision build({
+    required String symbol,
     required String oiPriceSignal,
     required String oiDirection,
     required String priceDirection,
@@ -363,6 +374,9 @@ class FinalTradeDecisionService {
     required ShortSetupResult? setupResult,
     required List<CandleData> candles,
   }) {
+    final FinalTradeDecision? cached = _cache[symbol];
+    if (cached != null) return cached;
+
     final double oiScore = componentOiScore(oiDirection);
     final double priceScore = componentPriceScore(priceDirection, oiPriceSignal);
     final double orderFlowScore = componentOrderFlowScore(orderFlowDirection);
