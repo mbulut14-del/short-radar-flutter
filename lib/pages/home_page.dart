@@ -11,6 +11,7 @@ import '../main.dart';
 import '../models/coin_radar_data.dart';
 import '../services/detail_data_service.dart';
 import '../services/final_trade_decision_service.dart';
+import '../services/unified_coin_analysis_service.dart';
 import 'detail_page.dart';
 
 class HomeSignalSnapshot {
@@ -584,25 +585,15 @@ class _HomePageState extends State<HomePage> {
     HomeSignalSnapshot snapshot,
   ) async {
     try {
-      final bundle = await DetailDataService.load(
-        contractName: coin.name,
-        selectedInterval: '1h',
-        fallbackCoin: coin,
+      final result = await UnifiedCoinAnalysisService.analyze(
+        coin: coin,
+        oiDirection: snapshot.oiDirection,
+        priceDirection: snapshot.priceDirection,
+        oiPriceSignal: snapshot.stableCombinedSignal,
+        orderFlowDirection: snapshot.orderFlowDirection,
       );
 
-      final FinalTradeDecision rawDecision = FinalTradeDecisionService.build(
-            symbol: coin.name,
-            oiPriceSignal: snapshot.stableCombinedSignal,
-            oiDirection: snapshot.oiDirection,
-            priceDirection: snapshot.priceDirection,
-            orderFlowDirection: snapshot.orderFlowDirection,
-            pumpAnalysis: bundle.pumpAnalysis,
-            entryTiming: bundle.entryTiming,
-            setupResult: bundle.setupResult,
-            candles: bundle.visibleCandles,
-          );
-
-      final FinalTradeDecision displayDecision = rawDecision;
+      final FinalTradeDecision displayDecision = result.displayDecision;
 
       _centralDecisionMap[coin.name] = displayDecision;
 
