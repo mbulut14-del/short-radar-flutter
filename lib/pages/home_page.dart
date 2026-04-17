@@ -47,6 +47,7 @@ class _HomePageState extends State<HomePage> {
   Timer? _refreshTimer;
 
   final Map<String, DateTime> _lastNotifyTimes = {};
+  final Map<String, FinalTradeDecision> _centralDecisionMap = {};
 
   final Map<String, List<double>> _oiHistory = {};
   final Map<String, List<double>> _priceHistory = {};
