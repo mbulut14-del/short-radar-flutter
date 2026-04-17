@@ -1977,7 +1977,7 @@ class _DetailPageState extends State<DetailPage>
         fallbackCoin: selectedCoin,
       );
 
-      final FinalTradeDecision rawDecision = _buildFinalTradeDecision(
+      final FinalTradeDecision rawDecision = FinalTradeDecisionService.build(
         oiPriceSignal: widget.oiPriceSignal,
         oiDirection: widget.oiDirection,
         priceDirection: widget.priceDirection,
@@ -1985,7 +1985,7 @@ class _DetailPageState extends State<DetailPage>
         pumpAnalysis: bundle.pumpAnalysis,
         entryTiming: bundle.entryTiming,
         setupResult: bundle.setupResult,
-        visibleCandles: bundle.visibleCandles,
+        candles: bundle.visibleCandles,
       );
 
       final FinalTradeDecision displayDecision =
