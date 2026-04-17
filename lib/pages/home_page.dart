@@ -9,6 +9,7 @@ import 'package:http/http.dart' as http;
 
 import '../main.dart';
 import '../models/coin_radar_data.dart';
+import '../services/detail_data_service.dart';
 import 'detail_page.dart';
 
 class HomeSignalSnapshot {
