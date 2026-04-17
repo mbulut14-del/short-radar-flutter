@@ -174,16 +174,6 @@ class _DetailPageState extends State<DetailPage>
     }
   }
 
-  double _extractDynamicScore(dynamic source) {
-    try {
-      final dynamic score = source.score;
-      if (score is num) {
-        return FinalTradeDecisionService.clampScore(score.toDouble());
-      }
-    } catch (_) {}
-    return 0;
-  }
-
   String _extractDynamicLabel(dynamic source) {
     try {
       final dynamic label = source.label;
@@ -277,7 +267,7 @@ class _DetailPageState extends State<DetailPage>
     final dynamic dynamicResult = result;
     double score = 46;
 
-    final double rawScore = _extractDynamicScore(dynamicResult);
+    final double rawScore = FinalTradeDecisionService.extractDynamicScore(dynamicResult);
     if (rawScore > 0) {
       score = 35 + (rawScore * 0.55);
     }
@@ -343,7 +333,7 @@ class _DetailPageState extends State<DetailPage>
 
     if (entryTiming != null) {
       final dynamic dynamicResult = entryTiming;
-      final double rawScore = _extractDynamicScore(dynamicResult);
+      final double rawScore = FinalTradeDecisionService.extractDynamicScore(dynamicResult);
       final String label = FinalTradeDecisionService.safeLower(_extractDynamicLabel(dynamicResult));
       final String summary = FinalTradeDecisionService.safeLower(_extractDynamicSummary(dynamicResult));
 
