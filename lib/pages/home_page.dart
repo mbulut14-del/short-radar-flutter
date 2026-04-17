@@ -336,6 +336,8 @@ class _HomePageState extends State<HomePage> {
         candles: bundle.visibleCandles,
       );
 
+      _centralDecisionMap[coin.name] = decision;
+
       return CoinRadarData(
         name: coin.name,
         changePercent: coin.changePercent,
@@ -351,7 +353,20 @@ class _HomePageState extends State<HomePage> {
         note: decision.summary,
       );
     } catch (_) {
-      return _withOiDirection(coin, snapshot.oiDirection);
+      return CoinRadarData(
+        name: coin.name,
+        changePercent: coin.changePercent,
+        fundingRate: coin.fundingRate,
+        lastPrice: coin.lastPrice,
+        markPrice: coin.markPrice,
+        indexPrice: coin.indexPrice,
+        volume24h: coin.volume24h,
+        openInterest: coin.openInterest,
+        oiDirection: snapshot.oiDirection,
+        score: 0,
+        biasLabel: 'ERROR',
+        note: 'Decision failed',
+      );
     }
   }
 
