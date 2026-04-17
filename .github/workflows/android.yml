@@ -65,6 +65,16 @@ jobs:
               path.write_text(text, encoding="utf-8")
               return True
 
+          def ensure_permission(text, permission):
+              line = f'<uses-permission android:name="{permission}"/>'
+              if permission not in text:
+                  text = text.replace(
+                      '<application',
+                      f'{line}\n    <application',
+                      1
+                  )
+              return text
+
           # settings.gradle
           replace_if_exists(
               "android/settings.gradle",
@@ -117,7 +127,9 @@ jobs:
                   (r'minSdkVersion\s+flutter\.minSdkVersion', 'minSdkVersion 23'),
                   (r'minSdkVersion\s+21', 'minSdkVersion 23'),
                   (r'targetSdkVersion\s+flutter\.targetSdkVersion', 'targetSdkVersion 34'),
+                  (r'targetSdkVersion\s+33', 'targetSdkVersion 34'),
                   (r'compileSdkVersion\s+flutter\.compileSdkVersion', 'compileSdkVersion 34'),
+                  (r'compileSdkVersion\s+33', 'compileSdkVersion 34'),
               ],
           )
 
@@ -128,7 +140,9 @@ jobs:
                   (r'minSdk\s*=\s*flutter\.minSdkVersion', 'minSdk = 23'),
                   (r'minSdk\s*=\s*21', 'minSdk = 23'),
                   (r'targetSdk\s*=\s*flutter\.targetSdkVersion', 'targetSdk = 34'),
+                  (r'targetSdk\s*=\s*33', 'targetSdk = 34'),
                   (r'compileSdk\s*=\s*flutter\.compileSdkVersion', 'compileSdk = 34'),
+                  (r'compileSdk\s*=\s*33', 'compileSdk = 34'),
               ],
           )
 
@@ -136,12 +150,14 @@ jobs:
           if manifest.exists():
               text = manifest.read_text(encoding="utf-8")
 
-              if 'android.permission.INTERNET' not in text:
-                  text = text.replace(
-                      '<application',
-                      '<uses-permission android:name="android.permission.INTERNET"/>\n    <application'
-                  )
+              # Gerekli izinler
+              text = ensure_permission(text, "android.permission.INTERNET")
+              text = ensure_permission(text, "android.permission.POST_NOTIFICATIONS")
+              text = ensure_permission(text, "android.permission.FOREGROUND_SERVICE")
+              text = ensure_permission(text, "android.permission.WAKE_LOCK")
+              text = ensure_permission(text, "android.permission.RECEIVE_BOOT_COMPLETED")
 
+              # Uygulama adi
               text = text.replace(
                   'android:label="short_radar_flutter"',
                   'android:label="Short Radar Pro"'
