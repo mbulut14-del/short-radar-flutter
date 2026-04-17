@@ -1,3 +1,5 @@
+import 'dart:isolate';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
@@ -24,8 +26,7 @@ Future<void> main() async {
   await notificationsPlugin.initialize(initSettings);
 
   await _requestNotificationPermission();
-
-  await _startForegroundService(); // 🔥 BURASI ÖNEMLİ
+  await _startForegroundService();
 
   runApp(const MyApp());
 }
@@ -40,22 +41,33 @@ Future<void> _requestNotificationPermission() async {
   }
 }
 
-// 🔥 FOREGROUND SERVICE BAŞLAT
 Future<void> _startForegroundService() async {
-  await FlutterForegroundTask.init(
+  FlutterForegroundTask.init(
     androidNotificationOptions: AndroidNotificationOptions(
       channelId: 'short_service',
       channelName: 'Short Radar Service',
       channelDescription: 'Piyasa izleniyor',
       channelImportance: NotificationChannelImportance.HIGH,
       priority: NotificationPriority.HIGH,
+      enableVibration: true,
+      playSound: false,
+      showWhen: true,
+    ),
+    iosNotificationOptions: const IOSNotificationOptions(
+      showNotification: true,
+      playSound: false,
     ),
     foregroundTaskOptions: const ForegroundTaskOptions(
       interval: 5000,
       isOnceEvent: false,
       autoRunOnBoot: true,
+      allowWakeLock: true,
+      allowWifiLock: true,
     ),
   );
+
+  final bool isRunning = await FlutterForegroundTask.isRunningService;
+  if (isRunning) return;
 
   await FlutterForegroundTask.startService(
     notificationTitle: 'Short Radar aktif',
@@ -68,33 +80,33 @@ void startCallback() {
   FlutterForegroundTask.setTaskHandler(ShortRadarTaskHandler());
 }
 
-// 🔥 TASK HANDLER
 class ShortRadarTaskHandler extends TaskHandler {
   @override
   Future<void> onStart(DateTime timestamp, SendPort? sendPort) async {}
 
   @override
   void onRepeatEvent(DateTime timestamp, SendPort? sendPort) {
-    // 🔥 TEST NOTIFICATION
     if (DateTime.now().second % 15 == 0) {
       _sendTestNotification();
     }
   }
 
   Future<void> _sendTestNotification() async {
-    const androidDetails = AndroidNotificationDetails(
+    const AndroidNotificationDetails androidDetails =
+        AndroidNotificationDetails(
       'short_alert_channel',
       'Short Alerts',
       importance: Importance.max,
       priority: Priority.high,
     );
 
-    const details = NotificationDetails(android: androidDetails);
+    const NotificationDetails details =
+        NotificationDetails(android: androidDetails);
 
     await notificationsPlugin.show(
       DateTime.now().millisecondsSinceEpoch ~/ 1000,
-      "SHORT RADAR",
-      "Arka planda çalışıyor 🚀",
+      'SHORT RADAR',
+      'Arka planda çalışıyor 🚀',
       details,
     );
   }
@@ -112,13 +124,10 @@ class MyApp extends StatelessWidget {
       title: 'Short Radar',
       debugShowCheckedModeBanner: false,
       theme: ThemeData.dark(),
-
       home: const SplashScreen(),
-
       routes: {
         '/home': (context) => const HomePage(),
       },
-
       onGenerateRoute: (settings) {
         if (settings.name == '/detail') {
           final coin = settings.arguments as CoinRadarData;
