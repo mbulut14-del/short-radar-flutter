@@ -11,6 +11,7 @@ import '../models/pump_analysis_result.dart';
 import '../models/short_setup_result.dart';
 import '../services/analysis_engine.dart';
 import '../services/detail_data_service.dart';
+import '../services/unified_coin_analysis_service.dart';
 import '../widgets/detail_page_content.dart';
 
 import '../services/final_trade_decision_service.dart';
@@ -1971,39 +1972,29 @@ class _DetailPageState extends State<DetailPage>
     }
 
     try {
-      final bundle = await DetailDataService.load(
-        contractName: contractName,
-        selectedInterval: selectedInterval,
-        fallbackCoin: selectedCoin,
-      );
-
-      final FinalTradeDecision rawDecision = FinalTradeDecisionService.build(
-        symbol: contractName,
-        oiPriceSignal: widget.oiPriceSignal,
+      final result = await UnifiedCoinAnalysisService.analyze(
+        coin: selectedCoin,
         oiDirection: widget.oiDirection,
         priceDirection: widget.priceDirection,
+        oiPriceSignal: widget.oiPriceSignal,
         orderFlowDirection: widget.orderFlowDirection,
-        pumpAnalysis: bundle.pumpAnalysis,
-        entryTiming: bundle.entryTiming,
-        setupResult: bundle.setupResult,
-        candles: bundle.visibleCandles,
+        selectedInterval: selectedInterval,
       );
 
-      final FinalTradeDecision displayDecision =
-          _resolveDecisionForDisplay(rawDecision);
+      final FinalTradeDecision displayDecision = result.displayDecision;
 
       if (!mounted) return;
       setState(() {
-        selectedCoin = bundle.selectedCoin;
-        candles = bundle.candles;
-        visibleCandles = bundle.visibleCandles;
-        setupResult = bundle.setupResult;
-        pumpAnalysis = bundle.pumpAnalysis;
-        entryTiming = bundle.entryTiming;
+        selectedCoin = result.coin;
+        candles = result.candles;
+        visibleCandles = result.candles;
+        setupResult = result.setupResult;
+        pumpAnalysis = result.pumpAnalysis;
+        entryTiming = result.entryTiming;
         finalTradeDecision = displayDecision;
         finalScoreResult = displayDecision.toLegacyScoreResult();
         _openInterestDisplay = _buildOpenInterestDisplay(
-          bundle.selectedCoin.openInterest,
+          result.coin.openInterest,
           widget.oiDirection,
         );
         detailLoading = false;
@@ -2012,7 +2003,6 @@ class _DetailPageState extends State<DetailPage>
 
       _cachedDisplayDecision = displayDecision;
       _cachedLegacyScore = displayDecision.toLegacyScoreResult();
-
 
       if (_shouldTriggerShortAlert(displayDecision)) {
         await _triggerShortAlert(displayDecision);
