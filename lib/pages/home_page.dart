@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 
 import '../models/coin_radar_data.dart';
 import '../services/detail_data_service.dart';
+import '../services/decision_engine.dart';
 import 'detail_page.dart';
 
 class HomePage extends StatefulWidget {
@@ -31,12 +32,10 @@ class HomeCoinView {
 
 class _HomePageState extends State<HomePage> {
   List<HomeCoinView> coins = [];
+  bool firstLoad = true;
+  Timer? _timer;
 
-  bool isLoading = true;
-  String errorText = '';
-  Timer? _refreshTimer;
-
-  static const String _url =
+  static const String url =
       'https://fx-api.gateio.ws/api/v4/futures/usdt/tickers';
 
   @override
@@ -44,42 +43,35 @@ class _HomePageState extends State<HomePage> {
     super.initState();
     fetchCoins();
 
-    _refreshTimer = Timer.periodic(const Duration(seconds: 8), (_) {
-      fetchCoins();
+    _timer = Timer.periodic(const Duration(seconds: 8), (_) {
+      fetchCoins(silent: true);
     });
   }
 
   @override
   void dispose() {
-    _refreshTimer?.cancel();
+    _timer?.cancel();
     super.dispose();
   }
 
-  Future<void> fetchCoins() async {
-    setState(() {
-      isLoading = true;
-      errorText = '';
-    });
+  Future<void> fetchCoins({bool silent = false}) async {
+    if (!silent) {
+      setState(() => firstLoad = true);
+    }
 
     try {
-      final response = await http.get(Uri.parse(_url));
+      final res = await http.get(Uri.parse(url));
+      final List data = json.decode(res.body);
 
-      if (response.statusCode != 200) {
-        throw Exception('API error');
-      }
-
-      final List<dynamic> parsed = json.decode(response.body);
-
-      final List<CoinRadarData> allCoins = parsed
+      final all = data
           .whereType<Map<String, dynamic>>()
           .map(CoinRadarData.fromJson)
           .toList();
 
-      allCoins.sort((a, b) => b.changePercent.compareTo(a.changePercent));
+      all.sort((a, b) => b.changePercent.compareTo(a.changePercent));
+      final top10 = all.take(10).toList();
 
-      final top10 = allCoins.take(10).toList();
-
-      final List<HomeCoinView> result = [];
+      final List<HomeCoinView> temp = [];
 
       for (final coin in top10) {
         try {
@@ -89,142 +81,100 @@ class _HomePageState extends State<HomePage> {
             fallbackCoin: coin,
           );
 
-          final decision = _buildDecision(bundle);
+          final decision = DecisionEngine().build(
+            oiPriceSignal: bundle.oiPriceSignal,
+            oiDirection: bundle.selectedCoin.oiDirection,
+            priceDirection: bundle.priceDirection,
+            orderFlowDirection: bundle.orderFlowDirection,
+            pumpAnalysis: bundle.pumpAnalysis,
+            entryTiming: bundle.entryTiming,
+            setupResult: bundle.setupResult,
+            visibleCandles: bundle.visibleCandles,
+          );
 
-          result.add(
+          temp.add(
             HomeCoinView(
               coin: coin,
-              score: decision['score'],
-              label: decision['label'],
-              action: decision['action'],
+              score: decision.finalScore,
+              label: decision.scoreClass,
+              action: decision.action,
             ),
           );
-        } catch (_) {
-          // coin skip
-        }
+        } catch (_) {}
       }
 
       setState(() {
-        coins = result;
-        isLoading = false;
+        coins = temp;
+        firstLoad = false;
       });
     } catch (_) {
-      setState(() {
-        isLoading = false;
-        errorText = 'Veri alınamadı';
-      });
+      setState(() => firstLoad = false);
     }
   }
 
-  /// 🔥 DETAIL MANTIĞININ MİNİ VERSİYONU
-  Map<String, dynamic> _buildDecision(DetailDataBundle bundle) {
-    final setup = bundle.setupResult;
-    final pump = bundle.pumpAnalysis;
-    final entry = bundle.entryTiming;
-
-    double score = 0;
-
-    if (setup != null) score += 40;
-    if (pump != null) score += 20;
-    if (entry != null) score += 20;
-
-    score = score.clamp(0, 100);
-
-    String label;
-    if (score >= 85) {
-      label = 'Güçlü fırsat';
-    } else if (score >= 70) {
-      label = 'Kurulum var';
-    } else if (score >= 40) {
-      label = 'İzlenmeli';
-    } else {
-      label = 'Zayıf';
-    }
-
-    String action = 'WATCH';
-    if (score >= 85) {
-      action = 'ENTER SHORT';
-    } else if (score >= 70) {
-      action = 'PREPARE SHORT';
-    }
-
-    return {
-      'score': score,
-      'label': label,
-      'action': action,
-    };
-  }
-
-  Widget _buildCard(int index, HomeCoinView item) {
+  Widget buildCard(int index, HomeCoinView item) {
     final coin = item.coin;
 
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: GestureDetector(
-        onTap: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (_) => DetailPage(
-                coinData: coin,
-                oiDirection: 'FLAT',
-              ),
+    return GestureDetector(
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => DetailPage(
+              coinData: coin,
+              oiDirection: 'FLAT',
             ),
-          );
-        },
-        child: Container(
-          height: 86,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(20),
-            color: Colors.black.withOpacity(0.6),
-            border: Border.all(color: Colors.blueAccent),
           ),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 14),
-            child: Row(
-              children: [
-                Text(
-                  '$index',
+        );
+      },
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 10),
+        height: 86,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: Colors.blueAccent),
+          color: Colors.black.withOpacity(0.6),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14),
+          child: Row(
+            children: [
+              Text('$index',
                   style: const TextStyle(
-                      color: Colors.white, fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(width: 12),
+                      color: Colors.white, fontWeight: FontWeight.bold)),
+              const SizedBox(width: 12),
 
-                /// COIN
-                Expanded(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        coin.name,
+              Expanded(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(coin.name,
                         style: const TextStyle(
-                            color: Colors.white, fontWeight: FontWeight.bold),
-                      ),
-                      Text(
-                        coin.lastPriceText,
-                        style: const TextStyle(color: Colors.white70),
-                      ),
-                      Text(
-                        'Short skoru: ${item.score.toStringAsFixed(0)} • ${item.label}',
-                        style: const TextStyle(
-                            color: Colors.white60, fontSize: 12),
-                      ),
-                    ],
-                  ),
-                ),
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold)),
 
-                /// CHANGE
-                Text(
-                  coin.changeText,
-                  style: TextStyle(
-                    color: coin.changePercent > 0
-                        ? Colors.green
-                        : Colors.red,
-                  ),
+                    Text(coin.lastPriceText,
+                        style: const TextStyle(color: Colors.white70)),
+
+                    Text(
+                      'Short skoru: ${item.score.toStringAsFixed(0)} • ${item.label}',
+                      style:
+                          const TextStyle(color: Colors.white60, fontSize: 12),
+                    ),
+                  ],
                 ),
-              ],
-            ),
+              ),
+
+              Text(
+                coin.changeText,
+                style: TextStyle(
+                  color: coin.changePercent > 0
+                      ? Colors.green
+                      : Colors.red,
+                ),
+              ),
+            ],
           ),
         ),
       ),
@@ -233,15 +183,9 @@ class _HomePageState extends State<HomePage> {
 
   @override
   Widget build(BuildContext context) {
-    if (isLoading) {
+    if (firstLoad) {
       return const Scaffold(
         body: Center(child: CircularProgressIndicator()),
-      );
-    }
-
-    if (errorText.isNotEmpty) {
-      return Scaffold(
-        body: Center(child: Text(errorText)),
       );
     }
 
@@ -251,7 +195,7 @@ class _HomePageState extends State<HomePage> {
         children: coins
             .asMap()
             .entries
-            .map((e) => _buildCard(e.key + 1, e.value))
+            .map((e) => buildCard(e.key + 1, e.value))
             .toList(),
       ),
     );
