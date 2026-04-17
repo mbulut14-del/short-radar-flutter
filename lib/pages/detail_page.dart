@@ -174,12 +174,6 @@ class _DetailPageState extends State<DetailPage>
     }
   }
 
-  double _clampScore(double value) {
-    if (value < 0) return 0;
-    if (value > 100) return 100;
-    return value;
-  }
-
   String _safeLower(dynamic value) {
     if (value is String) {
       return value.toLowerCase();
@@ -191,7 +185,7 @@ class _DetailPageState extends State<DetailPage>
     try {
       final dynamic score = source.score;
       if (score is num) {
-        return _clampScore(score.toDouble());
+        return FinalTradeDecisionService.clampScore(score.toDouble());
       }
     } catch (_) {}
     return 0;
@@ -270,7 +264,7 @@ class _DetailPageState extends State<DetailPage>
         break;
     }
 
-    return _clampScore(score);
+    return FinalTradeDecisionService.clampScore(score);
   }
 
   double _componentOrderFlowScore(String orderFlowDirection) {
@@ -310,7 +304,7 @@ class _DetailPageState extends State<DetailPage>
     if (summary.contains('hacim')) score += 4;
     if (summary.contains('zayıf')) score -= 4;
 
-    return _clampScore(score);
+    return FinalTradeDecisionService.clampScore(score);
   }
 
   double _componentLiquidationScore(
@@ -345,7 +339,7 @@ class _DetailPageState extends State<DetailPage>
       if (summary.contains('birikim')) score -= 8;
     }
 
-    return _clampScore(score);
+    return FinalTradeDecisionService.clampScore(score);
   }
 
   double _componentMomentumScore(
@@ -393,7 +387,7 @@ class _DetailPageState extends State<DetailPage>
       }
     }
 
-    return _clampScore(score);
+    return FinalTradeDecisionService.clampScore(score);
   }
 
   double _bodySize(CandleData candle) {
@@ -798,7 +792,7 @@ class _DetailPageState extends State<DetailPage>
     if (weaknessNow) score += 8;
     if (breakdownNow) score += 12;
 
-    score = _clampScore(score);
+    score = FinalTradeDecisionService.clampScore(score);
 
     if (reasons.isEmpty) {
       if (state.phase == 'PUMP_TRACKING') {
@@ -910,7 +904,7 @@ class _DetailPageState extends State<DetailPage>
         (liquidationScore * 0.10) +
         (momentumScore * 0.10);
 
-    return _clampScore(raw);
+    return FinalTradeDecisionService.clampScore(raw);
   }
 
   double _confidenceScore({
@@ -976,7 +970,7 @@ class _DetailPageState extends State<DetailPage>
       confidence -= 12;
     }
 
-    return _clampScore(confidence);
+    return FinalTradeDecisionService.clampScore(confidence);
   }
 
   String _scoreClassFromScore(double finalScore) {
@@ -1504,7 +1498,7 @@ class _DetailPageState extends State<DetailPage>
       tradeBias = 'NEUTRAL';
     }
 
-    finalScore = _clampScore(finalScore);
+    finalScore = FinalTradeDecisionService.clampScore(finalScore);
 
     double confidence = _confidenceScore(
       oiScore: oiScore,
@@ -1550,7 +1544,7 @@ class _DetailPageState extends State<DetailPage>
       confidence -= 12;
     }
 
-    confidence = _clampScore(confidence);
+    confidence = FinalTradeDecisionService.clampScore(confidence);
 
     final String scoreClass = _scoreClassFromScore(finalScore);
 
@@ -1702,7 +1696,7 @@ class _DetailPageState extends State<DetailPage>
     for (final item in decisions) {
       total += getter(item);
     }
-    return _clampScore(total / decisions.length);
+    return FinalTradeDecisionService.clampScore(total / decisions.length);
   }
 
   String _dominantText(
