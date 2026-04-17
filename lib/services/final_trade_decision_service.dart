@@ -124,6 +124,16 @@ class FinalTradeDecisionService {
     return '';
   }
 
+  static double extractDynamicScore(dynamic source) {
+    try {
+      final dynamic score = source.score;
+      if (score is num) {
+        return clampScore(score.toDouble());
+      }
+    } catch (_) {}
+    return 0;
+  }
+
   static double clampScore(double value) {
     if (value < 0) return 0;
     if (value > 100) return 100;
