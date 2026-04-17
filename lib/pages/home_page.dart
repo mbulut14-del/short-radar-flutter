@@ -1,13 +1,33 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:http/http.dart' as http;
 
+import '../main.dart';
 import '../models/coin_radar_data.dart';
-import '../services/detail_data_service.dart';
-import '../services/decision_engine.dart';
 import 'detail_page.dart';
+
+class HomeSignalSnapshot {
+  final String oiDirection;
+  final String priceDirection;
+  final String oiPriceSignal;
+  final String orderFlowDirection;
+  final String combinedSignal;
+  final String stableCombinedSignal;
+
+  const HomeSignalSnapshot({
+    required this.oiDirection,
+    required this.priceDirection,
+    required this.oiPriceSignal,
+    required this.orderFlowDirection,
+    required this.combinedSignal,
+    required this.stableCombinedSignal,
+  });
+}
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -16,166 +36,775 @@ class HomePage extends StatefulWidget {
   State<HomePage> createState() => _HomePageState();
 }
 
-class HomeCoinView {
-  final CoinRadarData coin;
-  final double score;
-  final String label;
-  final String action;
-
-  HomeCoinView({
-    required this.coin,
-    required this.score,
-    required this.label,
-    required this.action,
-  });
-}
-
 class _HomePageState extends State<HomePage> {
-  List<HomeCoinView> coins = [];
-  bool firstLoad = true;
-  Timer? _timer;
+  List<CoinRadarData> coins = [];
 
-  static const String url =
-      'https://fx-api.gateio.ws/api/v4/futures/usdt/tickers';
+  CoinRadarData? radarLeader;
+  bool isLoading = true;
+  String errorText = '';
+  Timer? _refreshTimer;
+
+  final Map<String, DateTime> _lastNotifyTimes = {};
+
+  final Map<String, List<double>> _oiHistory = {};
+  final Map<String, List<double>> _priceHistory = {};
+
+  final Map<String, String> _oiDirectionMap = {};
+  final Map<String, String> _priceDirectionMap = {};
+  final Map<String, String> _oiPriceSignalMap = {};
+
+  final Map<String, String> _orderFlowMap = {};
+  final Map<String, double> _bestBidPriceMap = {};
+  final Map<String, double> _bestAskPriceMap = {};
+  final Map<String, double> _bestBidSizeMap = {};
+  final Map<String, double> _bestAskSizeMap = {};
+
+  final Map<String, String> _combinedSignalMap = {};
+  final Map<String, String> _stableCombinedSignalMap = {};
+  final Map<String, int> _signalStreakMap = {};
+
+  WebSocket? _bookTickerSocket;
+  StreamSubscription<dynamic>? _bookTickerSubscription;
+  Timer? _bookTickerReconnectTimer;
+  bool _isConnectingBookTicker = false;
+  bool _manuallyClosedBookTicker = false;
+
+  final Set<String> _desiredBookTickerSymbols = <String>{};
+  final Set<String> _subscribedBookTickerSymbols = <String>{};
+
+  static const int _historyLimit = 360;
+  static const String _gateUsdtWsUrl = 'wss://fx-ws.gateio.ws/v4/ws/usdt';
+  static const int _alertScoreThreshold = 75;
+  static const Duration _alertCooldown = Duration(minutes: 15);
+  static const int _stableSignalRequiredRepeats = 2;
 
   @override
   void initState() {
     super.initState();
+    _connectBookTicker();
     fetchCoins();
 
-    _timer = Timer.periodic(const Duration(seconds: 8), (_) {
-      fetchCoins(silent: true);
+    _refreshTimer = Timer.periodic(const Duration(seconds: 5), (_) {
+      if (mounted) {
+        fetchCoins();
+      }
     });
   }
 
   @override
   void dispose() {
-    _timer?.cancel();
+    _refreshTimer?.cancel();
+
+    _bookTickerReconnectTimer?.cancel();
+    _bookTickerSubscription?.cancel();
+    _manuallyClosedBookTicker = true;
+    _bookTickerSocket?.close();
+
     super.dispose();
   }
 
-  Future<void> fetchCoins({bool silent = false}) async {
-    if (!silent) {
-      setState(() => firstLoad = true);
-    }
+  void _updateOiHistory(String symbol, double oi) {
+    final history = _oiHistory.putIfAbsent(symbol, () => <double>[]);
+    history.add(oi);
 
-    try {
-      final res = await http.get(Uri.parse(url));
-      final List data = json.decode(res.body);
-
-      final all = data
-          .whereType<Map<String, dynamic>>()
-          .map(CoinRadarData.fromJson)
-          .toList();
-
-      all.sort((a, b) => b.changePercent.compareTo(a.changePercent));
-      final top10 = all.take(10).toList();
-
-      final List<HomeCoinView> temp = [];
-
-      for (final coin in top10) {
-        try {
-          final bundle = await DetailDataService.load(
-            contractName: coin.name,
-            selectedInterval: '5m',
-            fallbackCoin: coin,
-          );
-
-          final decision = DecisionEngine().build(
-            oiPriceSignal: bundle.oiPriceSignal,
-            oiDirection: bundle.selectedCoin.oiDirection,
-            priceDirection: bundle.priceDirection,
-            orderFlowDirection: bundle.orderFlowDirection,
-            pumpAnalysis: bundle.pumpAnalysis,
-            entryTiming: bundle.entryTiming,
-            setupResult: bundle.setupResult,
-            visibleCandles: bundle.visibleCandles,
-          );
-
-          temp.add(
-            HomeCoinView(
-              coin: coin,
-              score: decision.finalScore,
-              label: decision.scoreClass,
-              action: decision.action,
-            ),
-          );
-        } catch (_) {}
-      }
-
-      setState(() {
-        coins = temp;
-        firstLoad = false;
-      });
-    } catch (_) {
-      setState(() => firstLoad = false);
+    if (history.length > _historyLimit) {
+      history.removeAt(0);
     }
   }
 
-  Widget buildCard(int index, HomeCoinView item) {
-    final coin = item.coin;
+  void _updatePriceHistory(String symbol, double price) {
+    final history = _priceHistory.putIfAbsent(symbol, () => <double>[]);
+    history.add(price);
 
-    return GestureDetector(
-      onTap: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (_) => DetailPage(
-              coinData: coin,
-              oiDirection: 'FLAT',
+    if (history.length > _historyLimit) {
+      history.removeAt(0);
+    }
+  }
+
+  String _calculateDirectionFromHistory(List<double>? history) {
+    if (history == null || history.length < 2) {
+      return 'FLAT';
+    }
+
+    final double first = history.first;
+    final double last = history.last;
+
+    if (first <= 0) return 'FLAT';
+
+    final double changePercent = ((last - first) / first) * 100;
+
+    if (changePercent > 1) return 'UP';
+    if (changePercent < -1) return 'DOWN';
+    return 'FLAT';
+  }
+
+  String _calculateOiDirection(String symbol) {
+    return _calculateDirectionFromHistory(_oiHistory[symbol]);
+  }
+
+  String _calculatePriceDirection(String symbol) {
+    return _calculateDirectionFromHistory(_priceHistory[symbol]);
+  }
+
+  String _calculateOiPriceSignal({
+    required String oiDirection,
+    required String priceDirection,
+  }) {
+    if (oiDirection == 'UP' && priceDirection == 'DOWN') {
+      return 'STRONG_SHORT';
+    }
+    if (oiDirection == 'UP' && priceDirection == 'UP') {
+      return 'PUMP_RISK';
+    }
+    if (oiDirection == 'DOWN' && priceDirection == 'UP') {
+      return 'SHORT_SQUEEZE';
+    }
+    if (oiDirection == 'DOWN' && priceDirection == 'DOWN') {
+      return 'WEAK_DROP';
+    }
+    return 'NEUTRAL';
+  }
+
+  String _calculateOrderFlow(double bid, double ask) {
+    if (bid > ask * 1.2) return 'BUY_PRESSURE';
+    if (ask > bid * 1.2) return 'SELL_PRESSURE';
+    return 'NEUTRAL';
+  }
+
+  void _updateOrderFlowForSymbol(String symbol) {
+    final double bidSize = _bestBidSizeMap[symbol] ?? 0;
+    final double askSize = _bestAskSizeMap[symbol] ?? 0;
+
+    if (bidSize <= 0 && askSize <= 0) {
+      _orderFlowMap[symbol] = 'NEUTRAL';
+      return;
+    }
+
+    _orderFlowMap[symbol] = _calculateOrderFlow(bidSize, askSize);
+  }
+
+  String _calculateCombinedSignal({
+    required String oiDirection,
+    required String priceDirection,
+    required String oiPriceSignal,
+    required String orderFlowDirection,
+  }) {
+    if (oiDirection == 'UP' &&
+        priceDirection == 'DOWN' &&
+        orderFlowDirection == 'SELL_PRESSURE') {
+      return 'STRONG_SHORT';
+    }
+
+    if (oiDirection == 'UP' &&
+        priceDirection == 'UP' &&
+        orderFlowDirection == 'SELL_PRESSURE') {
+      return 'FAKE_PUMP';
+    }
+
+    if (oiDirection == 'DOWN' &&
+        priceDirection == 'UP' &&
+        orderFlowDirection == 'BUY_PRESSURE') {
+      return 'SHORT_SQUEEZE';
+    }
+
+    if (oiDirection == 'DOWN' &&
+        priceDirection == 'DOWN' &&
+        orderFlowDirection == 'SELL_PRESSURE') {
+      return 'WEAK_DROP';
+    }
+
+    if (oiDirection == 'FLAT' &&
+        priceDirection == 'FLAT' &&
+        orderFlowDirection == 'BUY_PRESSURE') {
+      return 'EARLY_ACCUMULATION';
+    }
+
+    if (oiDirection == 'FLAT' &&
+        priceDirection == 'FLAT' &&
+        orderFlowDirection == 'SELL_PRESSURE') {
+      return 'EARLY_DISTRIBUTION';
+    }
+
+    if (oiPriceSignal != 'NEUTRAL' && orderFlowDirection == 'SELL_PRESSURE') {
+      return oiPriceSignal;
+    }
+
+    return 'NEUTRAL';
+  }
+
+  String _stabilizeCombinedSignal(String symbol, String newSignal) {
+    final String previousSignal = _combinedSignalMap[symbol] ?? 'NEUTRAL';
+
+    if (previousSignal == newSignal) {
+      _signalStreakMap[symbol] = (_signalStreakMap[symbol] ?? 0) + 1;
+    } else {
+      _signalStreakMap[symbol] = 1;
+    }
+
+    _combinedSignalMap[symbol] = newSignal;
+
+    final int streak = _signalStreakMap[symbol] ?? 1;
+    final String previousStable = _stableCombinedSignalMap[symbol] ?? 'NEUTRAL';
+
+    if (streak >= _stableSignalRequiredRepeats) {
+      _stableCombinedSignalMap[symbol] = newSignal;
+      return newSignal;
+    }
+
+    return previousStable;
+  }
+
+  HomeSignalSnapshot _buildSignalSnapshot(String symbol) {
+    final String oiDirection = _calculateOiDirection(symbol);
+    final String priceDirection = _calculatePriceDirection(symbol);
+    final String oiPriceSignal = _calculateOiPriceSignal(
+      oiDirection: oiDirection,
+      priceDirection: priceDirection,
+    );
+    final String orderFlowDirection = _orderFlowMap[symbol] ?? 'NEUTRAL';
+
+    final String combinedSignal = _calculateCombinedSignal(
+      oiDirection: oiDirection,
+      priceDirection: priceDirection,
+      oiPriceSignal: oiPriceSignal,
+      orderFlowDirection: orderFlowDirection,
+    );
+
+    final String stableCombinedSignal =
+        _stabilizeCombinedSignal(symbol, combinedSignal);
+
+    _oiDirectionMap[symbol] = oiDirection;
+    _priceDirectionMap[symbol] = priceDirection;
+    _oiPriceSignalMap[symbol] = oiPriceSignal;
+
+    return HomeSignalSnapshot(
+      oiDirection: oiDirection,
+      priceDirection: priceDirection,
+      oiPriceSignal: oiPriceSignal,
+      orderFlowDirection: orderFlowDirection,
+      combinedSignal: combinedSignal,
+      stableCombinedSignal: stableCombinedSignal,
+    );
+  }
+
+  double _parseToDouble(dynamic value) {
+    if (value == null) return 0;
+    if (value is num) return value.toDouble();
+    return double.tryParse(value.toString()) ?? 0;
+  }
+
+  CoinRadarData _withOiDirection(CoinRadarData coin, String direction) {
+    return CoinRadarData(
+      name: coin.name,
+      changePercent: coin.changePercent,
+      fundingRate: coin.fundingRate,
+      lastPrice: coin.lastPrice,
+      markPrice: coin.markPrice,
+      indexPrice: coin.indexPrice,
+      volume24h: coin.volume24h,
+      openInterest: coin.openInterest,
+      oiDirection: direction,
+      score: coin.score,
+      biasLabel: coin.biasLabel,
+      note: coin.note,
+    );
+  }
+
+  Future<void> _connectBookTicker() async {
+    if (_isConnectingBookTicker) return;
+    if (_bookTickerSocket != null) return;
+
+    _isConnectingBookTicker = true;
+
+    try {
+      final socket = await WebSocket.connect(
+        _gateUsdtWsUrl,
+        headers: const {
+          'X-Gate-Channel-Id': 'short-radar-book-ticker',
+        },
+      );
+
+      socket.pingInterval = const Duration(seconds: 10);
+
+      _bookTickerSocket = socket;
+      _subscribedBookTickerSymbols.clear();
+
+      _bookTickerSubscription = socket.listen(
+        _handleBookTickerMessage,
+        onDone: _handleBookTickerClosed,
+        onError: (_) => _handleBookTickerClosed(),
+        cancelOnError: true,
+      );
+
+      _syncBookTickerSubscriptions();
+    } catch (_) {
+      _scheduleBookTickerReconnect();
+    } finally {
+      _isConnectingBookTicker = false;
+    }
+  }
+
+  void _handleBookTickerClosed() {
+    _bookTickerSubscription?.cancel();
+    _bookTickerSubscription = null;
+    _bookTickerSocket = null;
+    _subscribedBookTickerSymbols.clear();
+
+    if (!_manuallyClosedBookTicker) {
+      _scheduleBookTickerReconnect();
+    }
+  }
+
+  void _scheduleBookTickerReconnect() {
+    _bookTickerReconnectTimer?.cancel();
+    _bookTickerReconnectTimer = Timer(const Duration(seconds: 3), () {
+      if (mounted) {
+        _connectBookTicker();
+      }
+    });
+  }
+
+  void _sendBookTickerMessage({
+    required String event,
+    required String symbol,
+  }) {
+    final socket = _bookTickerSocket;
+    if (socket == null) return;
+
+    final Map<String, dynamic> message = {
+      'time': DateTime.now().millisecondsSinceEpoch ~/ 1000,
+      'channel': 'futures.book_ticker',
+      'event': event,
+      'payload': [symbol],
+    };
+
+    socket.add(jsonEncode(message));
+  }
+
+  void _syncBookTickerSubscriptions() {
+    final socket = _bookTickerSocket;
+    if (socket == null) return;
+
+    final Set<String> toSubscribe =
+        _desiredBookTickerSymbols.difference(_subscribedBookTickerSymbols);
+    final Set<String> toUnsubscribe =
+        _subscribedBookTickerSymbols.difference(_desiredBookTickerSymbols);
+
+    for (final symbol in toSubscribe) {
+      _sendBookTickerMessage(event: 'subscribe', symbol: symbol);
+      _subscribedBookTickerSymbols.add(symbol);
+    }
+
+    for (final symbol in toUnsubscribe) {
+      _sendBookTickerMessage(event: 'unsubscribe', symbol: symbol);
+      _subscribedBookTickerSymbols.remove(symbol);
+    }
+  }
+
+  void _handleBookTickerMessage(dynamic rawMessage) {
+    try {
+      final String messageText;
+      if (rawMessage is String) {
+        messageText = rawMessage;
+      } else if (rawMessage is List<int>) {
+        messageText = utf8.decode(rawMessage);
+      } else {
+        return;
+      }
+
+      final dynamic decoded = jsonDecode(messageText);
+      if (decoded is! Map<String, dynamic>) return;
+
+      if (decoded['channel'] != 'futures.book_ticker') return;
+      if (decoded['event'] != 'update') return;
+
+      final dynamic result = decoded['result'];
+      if (result is! Map<String, dynamic>) return;
+
+      final String symbol = (result['s'] ?? '').toString();
+      if (symbol.isEmpty) return;
+
+      _bestBidPriceMap[symbol] = _parseToDouble(result['b']);
+      _bestAskPriceMap[symbol] = _parseToDouble(result['a']);
+      _bestBidSizeMap[symbol] = _parseToDouble(result['B']);
+      _bestAskSizeMap[symbol] = _parseToDouble(result['A']);
+
+      _updateOrderFlowForSymbol(symbol);
+
+      if (_oiHistory.containsKey(symbol) || _priceHistory.containsKey(symbol)) {
+        _buildSignalSnapshot(symbol);
+      }
+
+      if (mounted) {
+        setState(() {});
+      }
+    } catch (_) {}
+  }
+
+  bool _shouldAlertCoin(CoinRadarData coin) {
+    final String stableCombinedSignal =
+        _stableCombinedSignalMap[coin.name] ?? 'NEUTRAL';
+    final String orderFlowDirection = _orderFlowMap[coin.name] ?? 'NEUTRAL';
+    final DateTime now = DateTime.now();
+    final DateTime? lastTime = _lastNotifyTimes[coin.name];
+
+    if (coin.score < _alertScoreThreshold) return false;
+    if (coin.fundingRate <= 0) return false;
+    if (orderFlowDirection == 'BUY_PRESSURE') return false;
+    if (stableCombinedSignal == 'SHORT_SQUEEZE') return false;
+    if (stableCombinedSignal == 'NEUTRAL') return false;
+
+    if (lastTime != null && now.difference(lastTime) < _alertCooldown) {
+      return false;
+    }
+
+    return true;
+  }
+
+  Future<void> _notifyForCoin(CoinRadarData coin) async {
+    final String stableCombinedSignal =
+        _stableCombinedSignalMap[coin.name] ?? 'NEUTRAL';
+    final String orderFlowDirection = _orderFlowMap[coin.name] ?? 'NEUTRAL';
+
+    _lastNotifyTimes[coin.name] = DateTime.now();
+
+    try {
+      await HapticFeedback.heavyImpact();
+      await HapticFeedback.vibrate();
+    } catch (_) {}
+
+    const AndroidNotificationDetails androidDetails =
+        AndroidNotificationDetails(
+      'short_channel',
+      'Short Alerts',
+      channelDescription: 'Short radar fırsat bildirimleri',
+      importance: Importance.max,
+      priority: Priority.high,
+      enableVibration: true,
+      playSound: true,
+      ticker: 'short-alert',
+    );
+
+    const NotificationDetails details =
+        NotificationDetails(android: androidDetails);
+
+    final String body =
+        '${coin.name} • skor ${coin.score} • $stableCombinedSignal • $orderFlowDirection';
+
+    await notificationsPlugin.show(
+      coin.name.hashCode,
+      'Short setup hazır olabilir 🚨',
+      body,
+      details,
+    );
+  }
+
+  Future<void> _checkAndSendAlerts(List<CoinRadarData> candidates) async {
+    for (final coin in candidates) {
+      if (_shouldAlertCoin(coin)) {
+        await _notifyForCoin(coin);
+      }
+    }
+  }
+
+  Future<void> fetchCoins() async {
+    setState(() {
+      isLoading = true;
+      errorText = '';
+    });
+
+    try {
+      final response = await http.get(
+        Uri.parse('https://fx-api.gateio.ws/api/v4/futures/usdt/tickers'),
+        headers: {'Accept': 'application/json'},
+      );
+
+      if (response.statusCode != 200) {
+        setState(() {
+          isLoading = false;
+          errorText = 'Canlı veri alınamadı';
+        });
+        return;
+      }
+
+      final List<dynamic> parsed = json.decode(response.body);
+
+      final List<CoinRadarData> rawCoins = parsed
+          .whereType<Map<String, dynamic>>()
+          .where((e) => (e['contract'] ?? '').toString().isNotEmpty)
+          .map(CoinRadarData.fromJson)
+          .toList();
+
+      if (rawCoins.isEmpty) {
+        setState(() {
+          isLoading = false;
+          errorText = 'Canlı veri boş döndü';
+        });
+        return;
+      }
+
+      final List<CoinRadarData> allCoins = rawCoins.map((coin) {
+        _updateOiHistory(coin.name, coin.openInterest);
+        _updatePriceHistory(coin.name, coin.lastPrice);
+
+        _updateOrderFlowForSymbol(coin.name);
+        final HomeSignalSnapshot snapshot = _buildSignalSnapshot(coin.name);
+
+        return _withOiDirection(coin, snapshot.oiDirection);
+      }).toList();
+
+      final List<CoinRadarData> sortedByChange = [...allCoins]
+        ..sort((a, b) => b.changePercent.compareTo(a.changePercent));
+
+      final List<CoinRadarData> sortedByScore = [...allCoins]
+        ..sort((a, b) {
+          final int scoreCompare = b.score.compareTo(a.score);
+          if (scoreCompare != 0) return scoreCompare;
+          return b.changePercent.compareTo(a.changePercent);
+        });
+
+      final CoinRadarData leader = sortedByScore.first;
+      final List<CoinRadarData> topCoins = sortedByChange.take(10).toList();
+      final List<CoinRadarData> alertCandidates = sortedByScore.take(10).toList();
+
+      _desiredBookTickerSymbols
+        ..clear()
+        ..addAll(topCoins.map((e) => e.name));
+
+      _syncBookTickerSubscriptions();
+
+      setState(() {
+        coins = topCoins;
+        radarLeader = leader;
+        isLoading = false;
+        errorText = '';
+      });
+
+      await _checkAndSendAlerts(alertCandidates);
+    } catch (_) {
+      setState(() {
+        isLoading = false;
+        errorText = 'Canlı veri alınamadı';
+      });
+    }
+  }
+
+  Widget _miniInfo(String title, String value) {
+    return RichText(
+      text: TextSpan(
+        children: [
+          TextSpan(
+            text: '$title: ',
+            style: const TextStyle(
+              color: Colors.white60,
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
             ),
           ),
-        );
-      },
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 10),
-        height: 86,
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: Colors.blueAccent),
-          color: Colors.black.withOpacity(0.6),
+          TextSpan(
+            text: value,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 11,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildErrorCard() {
+    if (errorText.isEmpty) return const SizedBox.shrink();
+
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: Colors.red.withOpacity(0.18),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: Colors.redAccent.withOpacity(0.5),
         ),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 14),
-          child: Row(
-            children: [
-              Text('$index',
-                  style: const TextStyle(
-                      color: Colors.white, fontWeight: FontWeight.bold)),
-              const SizedBox(width: 12),
+      ),
+      child: Text(
+        errorText,
+        textAlign: TextAlign.center,
+        style: const TextStyle(
+          color: Colors.white,
+          fontSize: 13,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+    );
+  }
 
-              Expanded(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(coin.name,
-                        style: const TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold)),
+  Widget _buildCoinCard(int index, CoinRadarData coin) {
+    final String oiDirection = _oiDirectionMap[coin.name] ?? coin.oiDirection;
+    final String priceDirection = _priceDirectionMap[coin.name] ?? 'FLAT';
+    final String stableCombinedSignal =
+        _stableCombinedSignalMap[coin.name] ?? 'NEUTRAL';
+    final String orderFlowDirection = _orderFlowMap[coin.name] ?? 'NEUTRAL';
 
-                    Text(coin.lastPriceText,
-                        style: const TextStyle(color: Colors.white70)),
-
-                    Text(
-                      'Short skoru: ${item.score.toStringAsFixed(0)} • ${item.label}',
-                      style:
-                          const TextStyle(color: Colors.white60, fontSize: 12),
-                    ),
-                  ],
-                ),
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: GestureDetector(
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => DetailPage(
+                coinData: coin,
+                oiDirection: oiDirection,
+                priceDirection: priceDirection,
+                oiPriceSignal: stableCombinedSignal,
+                orderFlowDirection: orderFlowDirection,
               ),
-
-              Text(
-                coin.changeText,
-                style: TextStyle(
-                  color: coin.changePercent > 0
-                      ? Colors.green
-                      : Colors.red,
-                ),
+            ),
+          );
+        },
+        child: Container(
+          height: 86,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(22),
+            gradient: const LinearGradient(
+              begin: Alignment.centerLeft,
+              end: Alignment.centerRight,
+              colors: [
+                Color(0xFF07122A),
+                Color(0xFF091933),
+                Color(0xFF07122A),
+              ],
+            ),
+            border: Border.all(
+              color: const Color(0xFF3EA6FF),
+              width: 1.4,
+            ),
+            boxShadow: const [
+              BoxShadow(
+                color: Color(0x663EA6FF),
+                blurRadius: 10,
+                spreadRadius: 1,
+              ),
+              BoxShadow(
+                color: Color(0x3300FFFF),
+                blurRadius: 18,
+                spreadRadius: 1,
               ),
             ],
           ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14),
+            child: Row(
+              children: [
+                Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: const Color(0xFF123D9B),
+                    border: Border.all(
+                      color: const Color(0xFF5AA8FF),
+                      width: 1.6,
+                    ),
+                    boxShadow: const [
+                      BoxShadow(
+                        color: Color(0x663EA6FF),
+                        blurRadius: 8,
+                        spreadRadius: 1,
+                      ),
+                    ],
+                  ),
+                  alignment: Alignment.center,
+                  child: Text(
+                    '$index',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 19,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        coin.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 17,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        coin.lastPriceText,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: Colors.white.withOpacity(0.82),
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Short skoru: ${coin.score} • ${coin.biasLabel}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: Colors.white.withOpacity(0.72),
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Text(
+                  coin.changeText,
+                  style: TextStyle(
+                    color: coin.changePercent < 0
+                        ? Colors.redAccent
+                        : const Color(0xFF3CFFB2),
+                    fontSize: 16,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildInitialLoadingState() {
+    return SizedBox(
+      height: 260,
+      child: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: const [
+            CircularProgressIndicator(
+              strokeWidth: 2.2,
+              valueColor: AlwaysStoppedAnimation<Color>(Colors.orangeAccent),
+            ),
+            SizedBox(height: 14),
+            Text(
+              'Short fırsatları analiz ediliyor...',
+              style: TextStyle(
+                color: Colors.white70,
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -183,20 +812,41 @@ class _HomePageState extends State<HomePage> {
 
   @override
   Widget build(BuildContext context) {
-    if (firstLoad) {
-      return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
-      );
-    }
+    final bool showInitialLoader = coins.isEmpty && isLoading;
 
     return Scaffold(
-      body: ListView(
-        padding: const EdgeInsets.all(12),
-        children: coins
-            .asMap()
-            .entries
-            .map((e) => buildCard(e.key + 1, e.value))
-            .toList(),
+      body: Stack(
+        children: [
+          Positioned.fill(
+            child: Image.asset(
+              'assets/bg.png',
+              fit: BoxFit.cover,
+            ),
+          ),
+          SafeArea(
+            child: RefreshIndicator(
+              onRefresh: fetchCoins,
+              child: ListView(
+                padding: const EdgeInsets.all(12),
+                children: [
+                  if (errorText.isNotEmpty) ...[
+                    const SizedBox(height: 10),
+                    _buildErrorCard(),
+                  ],
+                  const SizedBox(height: 12),
+                  if (showInitialLoader)
+                    _buildInitialLoadingState()
+                  else
+                    ...coins.asMap().entries.map((entry) {
+                      final int index = entry.key + 1;
+                      final CoinRadarData coin = entry.value;
+                      return _buildCoinCard(index, coin);
+                    }),
+                ],
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
