@@ -134,6 +134,30 @@ class FinalTradeDecisionService {
     return 0;
   }
 
+  static String extractDynamicLabel(dynamic source) {
+    try {
+      final dynamic label = source.label;
+      if (label is String) return label;
+    } catch (_) {}
+    return '';
+  }
+
+  static String extractDynamicSignal(dynamic source) {
+    try {
+      final dynamic signal = source.signal;
+      if (signal is String) return signal;
+    } catch (_) {}
+    return '';
+  }
+
+  static String extractDynamicSummary(dynamic source) {
+    try {
+      final dynamic summary = source.summary;
+      if (summary is String) return summary;
+    } catch (_) {}
+    return '';
+  }
+
   static double clampScore(double value) {
     if (value < 0) return 0;
     if (value > 100) return 100;
