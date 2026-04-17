@@ -602,10 +602,7 @@ class _HomePageState extends State<HomePage> {
             candles: bundle.visibleCandles,
           );
 
-      final FinalTradeDecision displayDecision = _resolveDecisionForDisplay(
-        coin.name,
-        rawDecision,
-      );
+      final FinalTradeDecision displayDecision = rawDecision;
 
       _centralDecisionMap[coin.name] = displayDecision;
 
