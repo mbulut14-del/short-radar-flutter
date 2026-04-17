@@ -1978,6 +1978,7 @@ class _DetailPageState extends State<DetailPage>
       );
 
       final FinalTradeDecision rawDecision = FinalTradeDecisionService.build(
+        symbol: contractName,
         oiPriceSignal: widget.oiPriceSignal,
         oiDirection: widget.oiDirection,
         priceDirection: widget.priceDirection,
