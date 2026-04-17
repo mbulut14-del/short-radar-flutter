@@ -117,6 +117,13 @@ class EntryEngineSnapshot {
 }
 
 class FinalTradeDecisionService {
+  static String safeLower(dynamic value) {
+    if (value is String) {
+      return value.toLowerCase();
+    }
+    return '';
+  }
+
   static double clampScore(double value) {
     if (value < 0) return 0;
     if (value > 100) return 100;
