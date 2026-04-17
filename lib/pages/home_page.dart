@@ -325,13 +325,16 @@ class _HomePageState extends State<HomePage> {
         fallbackCoin: coin,
       );
 
-      final bundle2 = await DetailDataService.load(
-        contractName: coin.name,
-        selectedInterval: '1h',
-        fallbackCoin: coin,
+      final FinalTradeDecision decision = FinalTradeDecisionService.build(
+        oiPriceSignal: snapshot.stableCombinedSignal,
+        oiDirection: snapshot.oiDirection,
+        priceDirection: snapshot.priceDirection,
+        orderFlowDirection: snapshot.orderFlowDirection,
+        pumpAnalysis: bundle.pumpAnalysis,
+        entryTiming: bundle.entryTiming,
+        setupResult: bundle.setupResult,
+        candles: bundle.visibleCandles,
       );
-
-      final decision = bundle2.finalDecision;
 
       _centralDecisionMap[coin.name] = decision;
 
