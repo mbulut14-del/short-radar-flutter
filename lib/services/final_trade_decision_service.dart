@@ -1,3 +1,9 @@
+import '../models/candle_data.dart';
+import '../models/entry_timing_result.dart';
+import '../models/pump_analysis_result.dart';
+import '../models/short_setup_result.dart';
+import '../services/analysis_engine.dart';
+
 class FinalScoreResult {
   final double score;
   final String label;
@@ -108,4 +114,8 @@ class EntryEngineSnapshot {
     required this.score,
     required this.reasons,
   });
+}
+
+
+class FinalTradeDecisionService {
 }
