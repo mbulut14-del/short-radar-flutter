@@ -325,16 +325,21 @@ class _HomePageState extends State<HomePage> {
         fallbackCoin: coin,
       );
 
-      final FinalTradeDecision decision = FinalTradeDecisionService.build(
-        oiPriceSignal: snapshot.stableCombinedSignal,
-        oiDirection: snapshot.oiDirection,
-        priceDirection: snapshot.priceDirection,
-        orderFlowDirection: snapshot.orderFlowDirection,
-        pumpAnalysis: bundle.pumpAnalysis,
-        entryTiming: bundle.entryTiming,
-        setupResult: bundle.setupResult,
-        candles: bundle.visibleCandles,
-      );
+      final FinalTradeDecision? cachedDecision =
+          FinalTradeDecisionService.getFromCache(coin.name);
+
+      final FinalTradeDecision decision = cachedDecision ??
+          FinalTradeDecisionService.build(
+            symbol: coin.name,
+            oiPriceSignal: snapshot.stableCombinedSignal,
+            oiDirection: snapshot.oiDirection,
+            priceDirection: snapshot.priceDirection,
+            orderFlowDirection: snapshot.orderFlowDirection,
+            pumpAnalysis: bundle.pumpAnalysis,
+            entryTiming: bundle.entryTiming,
+            setupResult: bundle.setupResult,
+            candles: bundle.visibleCandles,
+          );
 
       _centralDecisionMap[coin.name] = decision;
 
