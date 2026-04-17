@@ -6,13 +6,12 @@ import 'pages/home_page.dart';
 import 'pages/detail_page.dart';
 import 'models/coin_radar_data.dart';
 
-// 🔥 GLOBAL TANIM (late final)
+// 🔥 GLOBAL TANIM
 late final FlutterLocalNotificationsPlugin notificationsPlugin;
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // 🔥 INIT
   notificationsPlugin = FlutterLocalNotificationsPlugin();
 
   const AndroidInitializationSettings androidSettings =
@@ -23,7 +22,19 @@ Future<void> main() async {
 
   await notificationsPlugin.initialize(initSettings);
 
+  await _requestNotificationPermission();
+
   runApp(const MyApp());
+}
+
+Future<void> _requestNotificationPermission() async {
+  final androidImplementation =
+      notificationsPlugin.resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin>();
+
+  if (androidImplementation != null) {
+    await androidImplementation.requestNotificationsPermission();
+  }
 }
 
 class MyApp extends StatelessWidget {
