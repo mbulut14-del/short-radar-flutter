@@ -7,7 +7,10 @@ import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'pages/splash_screen.dart';
 import 'pages/home_page.dart';
 import 'pages/detail_page.dart';
+import 'models/candle_data.dart';
 import 'models/coin_radar_data.dart';
+import 'models/final_trade_decision.dart';
+import 'services/decision_engine.dart';
 
 // 🔥 GLOBAL
 late final FlutterLocalNotificationsPlugin notificationsPlugin;
@@ -81,17 +84,43 @@ void startCallback() {
 }
 
 class ShortRadarTaskHandler extends TaskHandler {
+  int _lastNotifiedMinute = -1;
+
   @override
   Future<void> onStart(DateTime timestamp, SendPort? sendPort) async {}
 
   @override
   void onRepeatEvent(DateTime timestamp, SendPort? sendPort) {
-    if (DateTime.now().second % 15 == 0) {
-      _sendTestNotification();
+    _checkDecisionAndNotify();
+  }
+
+  Future<void> _checkDecisionAndNotify() async {
+    // Şimdilik service tarafında gerçek API bağlı değil.
+    // Bu yüzden engine'i sabit test datası ile çalıştırıyoruz.
+    // Test bildirimi yerine artık gerçek short formatında bildirim üretir.
+
+    final FinalTradeDecision decision = const DecisionEngine().build(
+      oiPriceSignal: 'STRONG_SHORT',
+      oiDirection: 'UP',
+      priceDirection: 'DOWN',
+      orderFlowDirection: 'SELL_PRESSURE',
+      pumpAnalysis: null,
+      entryTiming: null,
+      setupResult: null,
+      visibleCandles: <CandleData>[],
+    );
+
+    final int nowMinute = DateTime.now().minute;
+
+    if (decision.action == 'ENTER SHORT' &&
+        decision.finalScore >= 85 &&
+        _lastNotifiedMinute != nowMinute) {
+      _lastNotifiedMinute = nowMinute;
+      await _sendRealNotification(decision);
     }
   }
 
-  Future<void> _sendTestNotification() async {
+  Future<void> _sendRealNotification(FinalTradeDecision decision) async {
     const AndroidNotificationDetails androidDetails =
         AndroidNotificationDetails(
       'short_alert_channel',
@@ -105,8 +134,8 @@ class ShortRadarTaskHandler extends TaskHandler {
 
     await notificationsPlugin.show(
       DateTime.now().millisecondsSinceEpoch ~/ 1000,
-      'SHORT RADAR',
-      'Arka planda çalışıyor 🚀',
+      '🔥 SHORT FIRSAT',
+      '${decision.scoreClass} • Score ${decision.finalScore.toStringAsFixed(0)} • ${decision.action}',
       details,
     );
   }
