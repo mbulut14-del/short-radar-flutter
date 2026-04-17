@@ -82,6 +82,23 @@ void startCallback() {
 class ShortRadarTaskHandler extends TaskHandler {
   int _lastNotifiedMinute = -1;
 
+  CoinRadarData _fallbackCoin() {
+    return const CoinRadarData(
+      name: 'BTC_USDT',
+      changePercent: 0,
+      fundingRate: 0,
+      lastPrice: 0,
+      markPrice: 0,
+      indexPrice: 0,
+      volume24h: 0,
+      openInterest: 0,
+      oiDirection: 'FLAT',
+      score: 0,
+      biasLabel: '-',
+      note: '',
+    );
+  }
+
   @override
   Future<void> onStart(DateTime timestamp, SendPort? sendPort) async {}
 
@@ -93,23 +110,23 @@ class ShortRadarTaskHandler extends TaskHandler {
   Future<void> _checkMarket() async {
     try {
       final bundle = await DetailDataService.load(
-        contractName: "BTC_USDT",
-        selectedInterval: "5m",
-        fallbackCoin: CoinRadarData.empty(),
+        contractName: 'BTC_USDT',
+        selectedInterval: '5m',
+        fallbackCoin: _fallbackCoin(),
       );
 
       final decision = DecisionEngine().build(
-        oiPriceSignal: bundle.selectedCoin.oiPriceSignal,
+        oiPriceSignal: 'NEUTRAL',
         oiDirection: bundle.selectedCoin.oiDirection,
-        priceDirection: bundle.selectedCoin.priceDirection,
-        orderFlowDirection: bundle.selectedCoin.orderFlowDirection,
+        priceDirection: 'FLAT',
+        orderFlowDirection: 'NEUTRAL',
         pumpAnalysis: bundle.pumpAnalysis,
         entryTiming: bundle.entryTiming,
         setupResult: bundle.setupResult,
         visibleCandles: bundle.visibleCandles,
       );
 
-      final nowMinute = DateTime.now().minute;
+      final int nowMinute = DateTime.now().minute;
 
       if (decision.action == 'ENTER SHORT' &&
           decision.finalScore >= 85 &&
@@ -121,14 +138,16 @@ class ShortRadarTaskHandler extends TaskHandler {
   }
 
   Future<void> _sendNotification(dynamic decision) async {
-    const androidDetails = AndroidNotificationDetails(
+    const AndroidNotificationDetails androidDetails =
+        AndroidNotificationDetails(
       'short_alert_channel',
       'Short Alerts',
       importance: Importance.max,
       priority: Priority.high,
     );
 
-    const details = NotificationDetails(android: androidDetails);
+    const NotificationDetails details =
+        NotificationDetails(android: androidDetails);
 
     await notificationsPlugin.show(
       DateTime.now().millisecondsSinceEpoch ~/ 1000,
