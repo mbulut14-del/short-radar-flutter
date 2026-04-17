@@ -9,7 +9,6 @@ import 'pages/home_page.dart';
 import 'pages/detail_page.dart';
 import 'models/candle_data.dart';
 import 'models/coin_radar_data.dart';
-import 'models/final_trade_decision.dart';
 import 'services/decision_engine.dart';
 
 // 🔥 GLOBAL
@@ -95,11 +94,7 @@ class ShortRadarTaskHandler extends TaskHandler {
   }
 
   Future<void> _checkDecisionAndNotify() async {
-    // Şimdilik service tarafında gerçek API bağlı değil.
-    // Bu yüzden engine'i sabit test datası ile çalıştırıyoruz.
-    // Test bildirimi yerine artık gerçek short formatında bildirim üretir.
-
-    final FinalTradeDecision decision = const DecisionEngine().build(
+    final decision = const DecisionEngine().build(
       oiPriceSignal: 'STRONG_SHORT',
       oiDirection: 'UP',
       priceDirection: 'DOWN',
@@ -120,7 +115,7 @@ class ShortRadarTaskHandler extends TaskHandler {
     }
   }
 
-  Future<void> _sendRealNotification(FinalTradeDecision decision) async {
+  Future<void> _sendRealNotification(dynamic decision) async {
     const AndroidNotificationDetails androidDetails =
         AndroidNotificationDetails(
       'short_alert_channel',
