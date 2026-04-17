@@ -7,9 +7,11 @@ import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'pages/splash_screen.dart';
 import 'pages/home_page.dart';
 import 'pages/detail_page.dart';
-import 'models/candle_data.dart';
+
 import 'models/coin_radar_data.dart';
+
 import 'services/decision_engine.dart';
+import 'services/detail_data_service.dart';
 
 // 🔥 GLOBAL
 late final FlutterLocalNotificationsPlugin notificationsPlugin;
@@ -51,20 +53,15 @@ Future<void> _startForegroundService() async {
       channelDescription: 'Piyasa izleniyor',
       channelImportance: NotificationChannelImportance.HIGH,
       priority: NotificationPriority.HIGH,
-      enableVibration: true,
-      playSound: false,
-      showWhen: true,
     ),
     iosNotificationOptions: const IOSNotificationOptions(
       showNotification: true,
       playSound: false,
     ),
     foregroundTaskOptions: const ForegroundTaskOptions(
-      interval: 5000,
+      interval: 15000,
       isOnceEvent: false,
       autoRunOnBoot: true,
-      allowWakeLock: true,
-      allowWifiLock: true,
     ),
   );
 
@@ -73,7 +70,7 @@ Future<void> _startForegroundService() async {
 
   await FlutterForegroundTask.startService(
     notificationTitle: 'Short Radar aktif',
-    notificationText: 'Arka planda çalışıyor...',
+    notificationText: 'Piyasa taranıyor...',
     callback: startCallback,
   );
 }
@@ -89,48 +86,54 @@ class ShortRadarTaskHandler extends TaskHandler {
   Future<void> onStart(DateTime timestamp, SendPort? sendPort) async {}
 
   @override
-  void onRepeatEvent(DateTime timestamp, SendPort? sendPort) {
-    _checkDecisionAndNotify();
+  void onRepeatEvent(DateTime timestamp, SendPort? sendPort) async {
+    await _checkMarket();
   }
 
-  Future<void> _checkDecisionAndNotify() async {
-    final decision = const DecisionEngine().build(
-      oiPriceSignal: 'STRONG_SHORT',
-      oiDirection: 'UP',
-      priceDirection: 'DOWN',
-      orderFlowDirection: 'SELL_PRESSURE',
-      pumpAnalysis: null,
-      entryTiming: null,
-      setupResult: null,
-      visibleCandles: <CandleData>[],
-    );
+  Future<void> _checkMarket() async {
+    try {
+      final bundle = await DetailDataService.load(
+        contractName: "BTC_USDT",
+        selectedInterval: "5m",
+        fallbackCoin: CoinRadarData.empty(),
+      );
 
-    final int nowMinute = DateTime.now().minute;
+      final decision = DecisionEngine().build(
+        oiPriceSignal: bundle.selectedCoin.oiPriceSignal,
+        oiDirection: bundle.selectedCoin.oiDirection,
+        priceDirection: bundle.selectedCoin.priceDirection,
+        orderFlowDirection: bundle.selectedCoin.orderFlowDirection,
+        pumpAnalysis: bundle.pumpAnalysis,
+        entryTiming: bundle.entryTiming,
+        setupResult: bundle.setupResult,
+        visibleCandles: bundle.visibleCandles,
+      );
 
-    if (decision.action == 'ENTER SHORT' &&
-        decision.finalScore >= 85 &&
-        _lastNotifiedMinute != nowMinute) {
-      _lastNotifiedMinute = nowMinute;
-      await _sendRealNotification(decision);
-    }
+      final nowMinute = DateTime.now().minute;
+
+      if (decision.action == 'ENTER SHORT' &&
+          decision.finalScore >= 85 &&
+          _lastNotifiedMinute != nowMinute) {
+        _lastNotifiedMinute = nowMinute;
+        await _sendNotification(decision);
+      }
+    } catch (_) {}
   }
 
-  Future<void> _sendRealNotification(dynamic decision) async {
-    const AndroidNotificationDetails androidDetails =
-        AndroidNotificationDetails(
+  Future<void> _sendNotification(dynamic decision) async {
+    const androidDetails = AndroidNotificationDetails(
       'short_alert_channel',
       'Short Alerts',
       importance: Importance.max,
       priority: Priority.high,
     );
 
-    const NotificationDetails details =
-        NotificationDetails(android: androidDetails);
+    const details = NotificationDetails(android: androidDetails);
 
     await notificationsPlugin.show(
       DateTime.now().millisecondsSinceEpoch ~/ 1000,
       '🔥 SHORT FIRSAT',
-      '${decision.scoreClass} • Score ${decision.finalScore.toStringAsFixed(0)} • ${decision.action}',
+      '${decision.scoreClass} • ${decision.finalScore.toStringAsFixed(0)}',
       details,
     );
   }
