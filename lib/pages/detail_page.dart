@@ -2146,7 +2146,6 @@ class _DetailPageState extends State<DetailPage>
       _cachedDisplayDecision = displayDecision;
       _cachedLegacyScore = displayDecision.toLegacyScoreResult();
 
-      await _triggerTestNotification();
 
       if (_shouldTriggerShortAlert(displayDecision)) {
         await _triggerShortAlert(displayDecision);
