@@ -169,6 +169,12 @@ jobs:
       - name: Paketleri yukle
         run: flutter pub get
 
+      - name: Clean build cache
+        run: |
+          rm -rf build
+          rm -rf .dart_tool
+          flutter clean
+
       - name: Android dosyalarini listele
         run: |
           echo "===== android/settings.gradle ====="
@@ -188,6 +194,9 @@ jobs:
 
           echo "===== android/app/src/main/AndroidManifest.xml ====="
           cat android/app/src/main/AndroidManifest.xml
+
+      - name: Paketleri yeniden yukle
+        run: flutter pub get
 
       - name: Uygulama ikonunu olustur
         run: dart run flutter_launcher_icons
