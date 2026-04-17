@@ -11,6 +11,24 @@ import '../main.dart';
 import '../models/coin_radar_data.dart';
 import 'detail_page.dart';
 
+class HomeSignalSnapshot {
+  final String oiDirection;
+  final String priceDirection;
+  final String oiPriceSignal;
+  final String orderFlowDirection;
+  final String combinedSignal;
+  final String stableCombinedSignal;
+
+  const HomeSignalSnapshot({
+    required this.oiDirection,
+    required this.priceDirection,
+    required this.oiPriceSignal,
+    required this.orderFlowDirection,
+    required this.combinedSignal,
+    required this.stableCombinedSignal,
+  });
+}
+
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
 
@@ -41,6 +59,10 @@ class _HomePageState extends State<HomePage> {
   final Map<String, double> _bestBidSizeMap = {};
   final Map<String, double> _bestAskSizeMap = {};
 
+  final Map<String, String> _combinedSignalMap = {};
+  final Map<String, String> _stableCombinedSignalMap = {};
+  final Map<String, int> _signalStreakMap = {};
+
   WebSocket? _bookTickerSocket;
   StreamSubscription<dynamic>? _bookTickerSubscription;
   Timer? _bookTickerReconnectTimer;
@@ -54,6 +76,7 @@ class _HomePageState extends State<HomePage> {
   static const String _gateUsdtWsUrl = 'wss://fx-ws.gateio.ws/v4/ws/usdt';
   static const int _alertScoreThreshold = 75;
   static const Duration _alertCooldown = Duration(minutes: 15);
+  static const int _stableSignalRequiredRepeats = 2;
 
   @override
   void initState() {
@@ -158,6 +181,110 @@ class _HomePageState extends State<HomePage> {
     }
 
     _orderFlowMap[symbol] = _calculateOrderFlow(bidSize, askSize);
+  }
+
+  String _calculateCombinedSignal({
+    required String oiDirection,
+    required String priceDirection,
+    required String oiPriceSignal,
+    required String orderFlowDirection,
+  }) {
+    if (oiDirection == 'UP' &&
+        priceDirection == 'DOWN' &&
+        orderFlowDirection == 'SELL_PRESSURE') {
+      return 'STRONG_SHORT';
+    }
+
+    if (oiDirection == 'UP' &&
+        priceDirection == 'UP' &&
+        orderFlowDirection == 'SELL_PRESSURE') {
+      return 'FAKE_PUMP';
+    }
+
+    if (oiDirection == 'DOWN' &&
+        priceDirection == 'UP' &&
+        orderFlowDirection == 'BUY_PRESSURE') {
+      return 'SHORT_SQUEEZE';
+    }
+
+    if (oiDirection == 'DOWN' &&
+        priceDirection == 'DOWN' &&
+        orderFlowDirection == 'SELL_PRESSURE') {
+      return 'WEAK_DROP';
+    }
+
+    if (oiDirection == 'FLAT' &&
+        priceDirection == 'FLAT' &&
+        orderFlowDirection == 'BUY_PRESSURE') {
+      return 'EARLY_ACCUMULATION';
+    }
+
+    if (oiDirection == 'FLAT' &&
+        priceDirection == 'FLAT' &&
+        orderFlowDirection == 'SELL_PRESSURE') {
+      return 'EARLY_DISTRIBUTION';
+    }
+
+    if (oiPriceSignal != 'NEUTRAL' && orderFlowDirection == 'SELL_PRESSURE') {
+      return oiPriceSignal;
+    }
+
+    return 'NEUTRAL';
+  }
+
+  String _stabilizeCombinedSignal(String symbol, String newSignal) {
+    final String previousSignal = _combinedSignalMap[symbol] ?? 'NEUTRAL';
+
+    if (previousSignal == newSignal) {
+      _signalStreakMap[symbol] = (_signalStreakMap[symbol] ?? 0) + 1;
+    } else {
+      _signalStreakMap[symbol] = 1;
+    }
+
+    _combinedSignalMap[symbol] = newSignal;
+
+    final int streak = _signalStreakMap[symbol] ?? 1;
+    final String previousStable = _stableCombinedSignalMap[symbol] ?? 'NEUTRAL';
+
+    if (streak >= _stableSignalRequiredRepeats) {
+      _stableCombinedSignalMap[symbol] = newSignal;
+      return newSignal;
+    }
+
+    return previousStable;
+  }
+
+  HomeSignalSnapshot _buildSignalSnapshot(String symbol) {
+    final String oiDirection = _calculateOiDirection(symbol);
+    final String priceDirection = _calculatePriceDirection(symbol);
+    final String oiPriceSignal = _calculateOiPriceSignal(
+      oiDirection: oiDirection,
+      priceDirection: priceDirection,
+    );
+    final String orderFlowDirection = _orderFlowMap[symbol] ?? 'NEUTRAL';
+
+    final String combinedSignal = _calculateCombinedSignal(
+      oiDirection: oiDirection,
+      priceDirection: priceDirection,
+      oiPriceSignal: oiPriceSignal,
+      orderFlowDirection: orderFlowDirection,
+    );
+
+    final String stableCombinedSignal =
+        _stabilizeCombinedSignal(symbol, combinedSignal);
+
+    _oiDirectionMap[symbol] = oiDirection;
+    _priceDirectionMap[symbol] = priceDirection;
+    _oiPriceSignalMap[symbol] = oiPriceSignal;
+
+    return HomeSignalSnapshot(
+      oiDirection: oiDirection,
+      priceDirection: priceDirection,
+      oiPriceSignal: oiPriceSignal,
+      orderFlowDirection: orderFlowDirection,
+      combinedSignal: combinedSignal,
+      stableCombinedSignal: stableCombinedSignal,
+    );
   }
 
   double _parseToDouble(dynamic value) {
@@ -304,6 +431,10 @@ class _HomePageState extends State<HomePage> {
 
       _updateOrderFlowForSymbol(symbol);
 
+      if (_oiHistory.containsKey(symbol) || _priceHistory.containsKey(symbol)) {
+        _buildSignalSnapshot(symbol);
+      }
+
       if (mounted) {
         setState(() {});
       }
@@ -311,7 +442,8 @@ class _HomePageState extends State<HomePage> {
   }
 
   bool _shouldAlertCoin(CoinRadarData coin) {
-    final String oiPriceSignal = _oiPriceSignalMap[coin.name] ?? 'NEUTRAL';
+    final String stableCombinedSignal =
+        _stableCombinedSignalMap[coin.name] ?? 'NEUTRAL';
     final String orderFlowDirection = _orderFlowMap[coin.name] ?? 'NEUTRAL';
     final DateTime now = DateTime.now();
     final DateTime? lastTime = _lastNotifyTimes[coin.name];
@@ -319,7 +451,9 @@ class _HomePageState extends State<HomePage> {
     if (coin.score < _alertScoreThreshold) return false;
     if (coin.fundingRate <= 0) return false;
     if (orderFlowDirection == 'BUY_PRESSURE') return false;
-    if (oiPriceSignal == 'SHORT_SQUEEZE') return false;
+    if (stableCombinedSignal == 'SHORT_SQUEEZE') return false;
+    if (stableCombinedSignal == 'NEUTRAL') return false;
+
     if (lastTime != null && now.difference(lastTime) < _alertCooldown) {
       return false;
     }
@@ -328,7 +462,8 @@ class _HomePageState extends State<HomePage> {
   }
 
   Future<void> _notifyForCoin(CoinRadarData coin) async {
-    final String oiPriceSignal = _oiPriceSignalMap[coin.name] ?? 'NEUTRAL';
+    final String stableCombinedSignal =
+        _stableCombinedSignalMap[coin.name] ?? 'NEUTRAL';
     final String orderFlowDirection = _orderFlowMap[coin.name] ?? 'NEUTRAL';
 
     _lastNotifyTimes[coin.name] = DateTime.now();
@@ -353,14 +488,8 @@ class _HomePageState extends State<HomePage> {
     const NotificationDetails details =
         NotificationDetails(android: androidDetails);
 
-    final String signalText = oiPriceSignal == 'STRONG_SHORT'
-        ? 'STRONG_SHORT'
-        : oiPriceSignal == 'WEAK_DROP'
-            ? 'WEAK_DROP'
-            : oiPriceSignal;
-
     final String body =
-        '${coin.name} • skor ${coin.score} • $signalText • $orderFlowDirection';
+        '${coin.name} • skor ${coin.score} • $stableCombinedSignal • $orderFlowDirection';
 
     await notificationsPlugin.show(
       coin.name.hashCode,
@@ -418,20 +547,10 @@ class _HomePageState extends State<HomePage> {
         _updateOiHistory(coin.name, coin.openInterest);
         _updatePriceHistory(coin.name, coin.lastPrice);
 
-        final String oiDirection = _calculateOiDirection(coin.name);
-        final String priceDirection = _calculatePriceDirection(coin.name);
-        final String oiPriceSignal = _calculateOiPriceSignal(
-          oiDirection: oiDirection,
-          priceDirection: priceDirection,
-        );
-
-        _oiDirectionMap[coin.name] = oiDirection;
-        _priceDirectionMap[coin.name] = priceDirection;
-        _oiPriceSignalMap[coin.name] = oiPriceSignal;
-
         _updateOrderFlowForSymbol(coin.name);
+        final HomeSignalSnapshot snapshot = _buildSignalSnapshot(coin.name);
 
-        return _withOiDirection(coin, oiDirection);
+        return _withOiDirection(coin, snapshot.oiDirection);
       }).toList();
 
       final List<CoinRadarData> sortedByChange = [...allCoins]
@@ -522,7 +641,8 @@ class _HomePageState extends State<HomePage> {
   Widget _buildCoinCard(int index, CoinRadarData coin) {
     final String oiDirection = _oiDirectionMap[coin.name] ?? coin.oiDirection;
     final String priceDirection = _priceDirectionMap[coin.name] ?? 'FLAT';
-    final String oiPriceSignal = _oiPriceSignalMap[coin.name] ?? 'NEUTRAL';
+    final String stableCombinedSignal =
+        _stableCombinedSignalMap[coin.name] ?? 'NEUTRAL';
     final String orderFlowDirection = _orderFlowMap[coin.name] ?? 'NEUTRAL';
 
     return Padding(
@@ -536,7 +656,7 @@ class _HomePageState extends State<HomePage> {
                 coinData: coin,
                 oiDirection: oiDirection,
                 priceDirection: priceDirection,
-                oiPriceSignal: oiPriceSignal,
+                oiPriceSignal: stableCombinedSignal,
                 orderFlowDirection: orderFlowDirection,
               ),
             ),
