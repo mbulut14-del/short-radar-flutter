@@ -10,6 +10,7 @@ import 'package:http/http.dart' as http;
 import '../main.dart';
 import '../models/coin_radar_data.dart';
 import '../services/detail_data_service.dart';
+import '../services/final_trade_decision_service.dart';
 import 'detail_page.dart';
 
 class HomeSignalSnapshot {
@@ -311,6 +312,48 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
+
+  Future<CoinRadarData> _enrichCoinWithCentralDecision(
+    CoinRadarData coin,
+    HomeSignalSnapshot snapshot,
+  ) async {
+    try {
+      final bundle = await DetailDataService.load(
+        contractName: coin.name,
+        selectedInterval: '1h',
+        fallbackCoin: coin,
+      );
+
+      final FinalTradeDecision decision = FinalTradeDecisionService.build(
+        oiPriceSignal: snapshot.stableCombinedSignal,
+        oiDirection: snapshot.oiDirection,
+        priceDirection: snapshot.priceDirection,
+        orderFlowDirection: snapshot.orderFlowDirection,
+        pumpAnalysis: bundle.pumpAnalysis,
+        entryTiming: bundle.entryTiming,
+        setupResult: bundle.setupResult,
+        candles: bundle.visibleCandles,
+      );
+
+      return CoinRadarData(
+        name: coin.name,
+        changePercent: coin.changePercent,
+        fundingRate: coin.fundingRate,
+        lastPrice: coin.lastPrice,
+        markPrice: coin.markPrice,
+        indexPrice: coin.indexPrice,
+        volume24h: coin.volume24h,
+        openInterest: coin.openInterest,
+        oiDirection: snapshot.oiDirection,
+        score: decision.finalScore.round(),
+        biasLabel: decision.scoreClass,
+        note: decision.summary,
+      );
+    } catch (_) {
+      return _withOiDirection(coin, snapshot.oiDirection);
+    }
+  }
+
   Future<void> _connectBookTicker() async {
     if (_isConnectingBookTicker) return;
     if (_bookTickerSocket != null) return;
@@ -544,20 +587,34 @@ class _HomePageState extends State<HomePage> {
         return;
       }
 
-      final List<CoinRadarData> allCoins = rawCoins.map((coin) {
+      final Map<String, HomeSignalSnapshot> snapshots = {};
+      final List<CoinRadarData> preparedCoins = rawCoins.map((coin) {
         _updateOiHistory(coin.name, coin.openInterest);
         _updatePriceHistory(coin.name, coin.lastPrice);
 
         _updateOrderFlowForSymbol(coin.name);
         final HomeSignalSnapshot snapshot = _buildSignalSnapshot(coin.name);
+        snapshots[coin.name] = snapshot;
 
         return _withOiDirection(coin, snapshot.oiDirection);
       }).toList();
 
-      final List<CoinRadarData> sortedByChange = [...allCoins]
+      final List<CoinRadarData> sortedByChange = [...preparedCoins]
         ..sort((a, b) => b.changePercent.compareTo(a.changePercent));
 
-      final List<CoinRadarData> sortedByScore = [...allCoins]
+      final List<CoinRadarData> preliminaryTopCoins =
+          sortedByChange.take(10).toList();
+
+      final List<CoinRadarData> topCoins = await Future.wait(
+        preliminaryTopCoins.map(
+          (coin) => _enrichCoinWithCentralDecision(
+            coin,
+            snapshots[coin.name]!,
+          ),
+        ),
+      );
+
+      final List<CoinRadarData> sortedByScore = [...topCoins]
         ..sort((a, b) {
           final int scoreCompare = b.score.compareTo(a.score);
           if (scoreCompare != 0) return scoreCompare;
@@ -565,7 +622,6 @@ class _HomePageState extends State<HomePage> {
         });
 
       final CoinRadarData leader = sortedByScore.first;
-      final List<CoinRadarData> topCoins = sortedByChange.take(10).toList();
       final List<CoinRadarData> alertCandidates = sortedByScore.take(10).toList();
 
       _desiredBookTickerSymbols
