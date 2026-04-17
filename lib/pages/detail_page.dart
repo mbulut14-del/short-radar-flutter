@@ -174,13 +174,6 @@ class _DetailPageState extends State<DetailPage>
     }
   }
 
-  String _safeLower(dynamic value) {
-    if (value is String) {
-      return value.toLowerCase();
-    }
-    return '';
-  }
-
   double _extractDynamicScore(dynamic source) {
     try {
       final dynamic score = source.score;
@@ -289,9 +282,9 @@ class _DetailPageState extends State<DetailPage>
       score = 35 + (rawScore * 0.55);
     }
 
-    final String label = _safeLower(_extractDynamicLabel(dynamicResult));
-    final String signal = _safeLower(_extractDynamicSignal(dynamicResult));
-    final String summary = _safeLower(_extractDynamicSummary(dynamicResult));
+    final String label = FinalTradeDecisionService.safeLower(_extractDynamicLabel(dynamicResult));
+    final String signal = FinalTradeDecisionService.safeLower(_extractDynamicSignal(dynamicResult));
+    final String summary = FinalTradeDecisionService.safeLower(_extractDynamicSummary(dynamicResult));
 
     if (label.contains('güçlü')) score += 8;
     if (label.contains('uygun')) score += 6;
@@ -320,8 +313,8 @@ class _DetailPageState extends State<DetailPage>
     if (oiPriceSignal == 'EARLY_ACCUMULATION') score -= 10;
 
     if (pumpAnalysis != null) {
-      final String summary = _safeLower(_extractDynamicSummary(pumpAnalysis));
-      final String signal = _safeLower(_extractDynamicSignal(pumpAnalysis));
+      final String summary = FinalTradeDecisionService.safeLower(_extractDynamicSummary(pumpAnalysis));
+      final String signal = FinalTradeDecisionService.safeLower(_extractDynamicSignal(pumpAnalysis));
 
       if (summary.contains('liq')) score += 8;
       if (summary.contains('short')) score += 4;
@@ -331,7 +324,7 @@ class _DetailPageState extends State<DetailPage>
     }
 
     if (setupResult != null) {
-      final String summary = _safeLower(_extractDynamicSummary(setupResult));
+      final String summary = FinalTradeDecisionService.safeLower(_extractDynamicSummary(setupResult));
       if (summary.contains('squeeze')) score -= 10;
       if (summary.contains('risk')) score -= 6;
       if (summary.contains('uygun')) score += 4;
@@ -351,8 +344,8 @@ class _DetailPageState extends State<DetailPage>
     if (entryTiming != null) {
       final dynamic dynamicResult = entryTiming;
       final double rawScore = _extractDynamicScore(dynamicResult);
-      final String label = _safeLower(_extractDynamicLabel(dynamicResult));
-      final String summary = _safeLower(_extractDynamicSummary(dynamicResult));
+      final String label = FinalTradeDecisionService.safeLower(_extractDynamicLabel(dynamicResult));
+      final String summary = FinalTradeDecisionService.safeLower(_extractDynamicSummary(dynamicResult));
 
       if (rawScore > 0) {
         score = 35 + (rawScore * 0.55);
@@ -1315,7 +1308,7 @@ class _DetailPageState extends State<DetailPage>
     }
 
     if (entryTiming != null) {
-      final String label = _safeLower(_extractDynamicLabel(entryTiming));
+      final String label = FinalTradeDecisionService.safeLower(_extractDynamicLabel(entryTiming));
       if (label.contains('geç')) {
         notes.add('Giriş geç kalmış olabilir; FOMO ile işlem açma.');
       } else if (label.contains('erken')) {
