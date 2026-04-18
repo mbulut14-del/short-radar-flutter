@@ -157,6 +157,21 @@ jobs:
               text = ensure_permission(text, "android.permission.WAKE_LOCK")
               text = ensure_permission(text, "android.permission.RECEIVE_BOOT_COMPLETED")
 
+              # Foreground service tanimi
+              if 'com.pravera.flutter_foreground_task.service.ForegroundService' not in text:
+                  service_block = """
+                  <service
+                      android:name="com.pravera.flutter_foreground_task.service.ForegroundService"
+                      android:foregroundServiceType="dataSync|connectedDevice"
+                      android:exported="false" />
+                  """
+
+                  text = text.replace(
+                      '<application',
+                      f'{service_block}\n    <application',
+                      1
+                  )
+
               # Uygulama adi
               text = text.replace(
                   'android:label="short_radar_flutter"',
