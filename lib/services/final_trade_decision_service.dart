@@ -224,7 +224,8 @@ class FinalTradeDecisionService {
 
     final CandleData last = candles.last;
     final double body = _candleBody(last);
-    final double upperWick = last.high - (last.open > last.close ? last.open : last.close);
+    final double upperWick =
+        last.high - (last.open > last.close ? last.open : last.close);
 
     if (body <= 0) {
       return upperWick > 0;
@@ -302,8 +303,10 @@ class FinalTradeDecisionService {
       final CandleData c = candles[candles.length - 1];
 
       if (_isBullish(a) && _isBullish(b)) {
-        final double rise1 = a.open != 0 ? ((a.close - a.open) / a.open) * 100 : 0;
-        final double rise2 = b.open != 0 ? ((b.close - b.open) / b.open) * 100 : 0;
+        final double rise1 =
+            a.open != 0 ? ((a.close - a.open) / a.open) * 100 : 0;
+        final double rise2 =
+            b.open != 0 ? ((b.close - b.open) / b.open) * 100 : 0;
         final double totalRise = rise1 + rise2;
         if (totalRise >= 2.5 && c.high >= b.high) {
           hadPump = true;
@@ -332,15 +335,24 @@ class FinalTradeDecisionService {
     final bool bodyShrinking = _lastBodyShrinking(candles);
     final bool upperWickWeak = _upperWickWeakness(candles);
     final bool lowerHigh = _lowerHighFormed(candles);
-    final bool bearishLastCandle = candles.isNotEmpty ? _isBearish(candles.last) : false;
+    final bool bearishLastCandle =
+        candles.isNotEmpty ? _isBearish(candles.last) : false;
     final bool breakStarted = _microBreakdownStarted(candles);
     final bool failedBreakout = _failedBreakout(candles);
-    final bool closeNearLow = candles.isNotEmpty ? _closeNearLow(candles.last) : false;
+    final bool closeNearLow =
+        candles.isNotEmpty ? _closeNearLow(candles.last) : false;
 
-    final String entryLabel = safeLower(entryTiming != null ? extractDynamicLabel(entryTiming) : '');
-    final String entrySummary = safeLower(entryTiming != null ? extractDynamicSummary(entryTiming) : '');
-    final String setupSummary = safeLower(setupResult != null ? extractDynamicSummary(setupResult) : '');
-    final double entryScore = entryTiming != null ? extractDynamicScore(entryTiming) : 0;
+    final String entryLabel = safeLower(
+      entryTiming != null ? extractDynamicLabel(entryTiming) : '',
+    );
+    final String entrySummary = safeLower(
+      entryTiming != null ? extractDynamicSummary(entryTiming) : '',
+    );
+    final String setupSummary = safeLower(
+      setupResult != null ? extractDynamicSummary(setupResult) : '',
+    );
+    final double entryScore =
+        entryTiming != null ? extractDynamicScore(entryTiming) : 0;
 
     bool weaknessSeen = false;
     double weaknessScore = 0;
@@ -487,32 +499,36 @@ class FinalTradeDecisionService {
       return 'WATCH';
     }
 
-    if (entrySnapshot.hadPump &&
-        entrySnapshot.fakePumpDetected &&
-        entrySnapshot.weaknessScore >= 75 &&
-        finalScore >= 70) {
-      return 'ENTER_SHORT';
-    }
+    if (!entrySnapshot.breakStarted) {
+      if (entrySnapshot.hadPump &&
+          entrySnapshot.fakePumpDetected &&
+          entrySnapshot.weaknessScore >= 75 &&
+          finalScore >= 70) {
+        return 'PREPARE_SHORT';
+      }
 
-    if (entrySnapshot.hadPump &&
-        entrySnapshot.fakePumpDetected &&
-        entrySnapshot.weaknessScore >= 55 &&
-        finalScore >= 60) {
-      return 'PREPARE_SHORT';
-    }
+      if (entrySnapshot.hadPump &&
+          entrySnapshot.weaknessScore >= 55 &&
+          finalScore >= 60) {
+        return 'PREPARE_SHORT';
+      }
 
-    if (entrySnapshot.hadPump && entrySnapshot.weaknessSeen) {
-      if (finalScore >= 60) return 'PREPARE_SHORT';
       return 'WATCH';
     }
 
-    if (oiPriceSignal == 'STRONG_SHORT' && finalScore >= 70) {
-      return 'PREPARE_SHORT';
-    }
+    if (entrySnapshot.breakStarted) {
+      if (entrySnapshot.hadPump &&
+          entrySnapshot.fakePumpDetected &&
+          entrySnapshot.weaknessScore >= 70 &&
+          finalScore >= 70) {
+        return 'ENTER_SHORT';
+      }
 
-    if (finalScore >= 85 &&
-        (oiPriceSignal == 'FAKE_PUMP' || oiPriceSignal == 'EARLY_DISTRIBUTION')) {
-      return 'PREPARE_SHORT';
+      if (finalScore >= 60) {
+        return 'PREPARE_SHORT';
+      }
+
+      return 'WATCH';
     }
 
     return 'WATCH';
@@ -552,7 +568,9 @@ class FinalTradeDecisionService {
     bullets.add('Fiyat: $priceDirection');
     bullets.add('Order Flow: $orderFlowDirection');
     bullets.add('Ana sinyal: $oiPriceSignal');
-    bullets.add('Zayıflama skoru: ${entrySnapshot.weaknessScore.toStringAsFixed(1)}');
+    bullets.add(
+      'Zayıflama skoru: ${entrySnapshot.weaknessScore.toStringAsFixed(1)}',
+    );
 
     if (entrySnapshot.hadPump) {
       bullets.add('Piyasada önce pump izi var');
@@ -580,11 +598,15 @@ class FinalTradeDecisionService {
     final List<String> notes = <String>[];
 
     if (action == 'PREPARE_SHORT') {
-      notes.add('Henüz kör giriş değil; zayıflama takip edilip küçük tetik aranmalı');
+      notes.add(
+        'Henüz kör giriş değil; zayıflama takip edilip küçük tetik aranmalı',
+      );
     }
 
     if (action == 'ENTER_SHORT') {
-      notes.add('Fake pump sonrası zayıflama yeterli; erken short girişi aktif');
+      notes.add(
+        'Fake pump sonrası zayıflama yeterli; erken short girişi aktif',
+      );
     }
 
     if (action == 'WATCH') {
@@ -632,7 +654,9 @@ class FinalTradeDecisionService {
 
     if (candles.length >= 2) {
       final CandleData prev = candles[candles.length - 2];
-      triggers.add('Önceki mum dibi (${prev.low.toStringAsFixed(6)}) altı kapanış');
+      triggers.add(
+        'Önceki mum dibi (${prev.low.toStringAsFixed(6)}) altı kapanış',
+      );
     }
 
     if (entrySnapshot.fakePumpDetected) {
@@ -650,8 +674,6 @@ class FinalTradeDecisionService {
     return triggers;
   }
 
-  // ---- COMPONENTS ----
-
   static double componentOiScore(String oiDirection) {
     switch (oiDirection) {
       case 'UP':
@@ -663,7 +685,10 @@ class FinalTradeDecisionService {
     }
   }
 
-  static double componentPriceScore(String priceDirection, String oiPriceSignal) {
+  static double componentPriceScore(
+    String priceDirection,
+    String oiPriceSignal,
+  ) {
     double score;
     switch (priceDirection) {
       case 'DOWN':
@@ -837,8 +862,6 @@ class FinalTradeDecisionService {
     return 'Zayıf';
   }
 
-  // ---- MAIN ENTRY ----
-
   static FinalTradeDecision build({
     required String symbol,
     required String oiPriceSignal,
@@ -922,7 +945,8 @@ class FinalTradeDecisionService {
       candles: candles,
     );
 
-    final String summary = '$scoreClass • ${finalScore.toStringAsFixed(1)} • $action';
+    final String summary =
+        '$scoreClass • ${finalScore.toStringAsFixed(1)} • $action';
 
     final FinalTradeDecision decision = FinalTradeDecision(
       finalScore: finalScore,
