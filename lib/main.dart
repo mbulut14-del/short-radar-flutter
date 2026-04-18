@@ -13,7 +13,6 @@ import 'models/coin_radar_data.dart';
 import 'services/decision_engine.dart';
 import 'services/detail_data_service.dart';
 
-// 🔥 GLOBAL
 late final FlutterLocalNotificationsPlugin notificationsPlugin;
 
 Future<void> main() async {
@@ -21,10 +20,11 @@ Future<void> main() async {
 
   notificationsPlugin = FlutterLocalNotificationsPlugin();
 
-  const androidSettings =
+  const AndroidInitializationSettings androidSettings =
       AndroidInitializationSettings('@mipmap/ic_launcher');
 
-  const initSettings = InitializationSettings(android: androidSettings);
+  const InitializationSettings initSettings =
+      InitializationSettings(android: androidSettings);
 
   await notificationsPlugin.initialize(initSettings);
 
@@ -53,6 +53,10 @@ Future<void> _startForegroundService() async {
       channelImportance: NotificationChannelImportance.HIGH,
       priority: NotificationPriority.HIGH,
     ),
+    iosNotificationOptions: const IOSNotificationOptions(
+      showNotification: true,
+      playSound: false,
+    ),
     foregroundTaskOptions: const ForegroundTaskOptions(
       interval: 15000,
       isOnceEvent: false,
@@ -78,24 +82,6 @@ class ShortRadarTaskHandler extends TaskHandler {
   int _lastNotifiedMinute = -1;
   late FlutterLocalNotificationsPlugin _localNotifications;
 
-  @override
-  Future<void> onStart(DateTime timestamp, SendPort? sendPort) async {
-    // 🔥 CRITICAL: Background isolate için notification init
-    _localNotifications = FlutterLocalNotificationsPlugin();
-
-    const androidSettings =
-        AndroidInitializationSettings('@mipmap/ic_launcher');
-
-    const initSettings = InitializationSettings(android: androidSettings);
-
-    await _localNotifications.initialize(initSettings);
-  }
-
-  @override
-  void onRepeatEvent(DateTime timestamp, SendPort? sendPort) async {
-    await _checkMarket();
-  }
-
   CoinRadarData _fallbackCoin() {
     return const CoinRadarData(
       name: 'BTC_USDT',
@@ -111,6 +97,24 @@ class ShortRadarTaskHandler extends TaskHandler {
       biasLabel: '-',
       note: '',
     );
+  }
+
+  @override
+  Future<void> onStart(DateTime timestamp, SendPort? sendPort) async {
+    _localNotifications = FlutterLocalNotificationsPlugin();
+
+    const AndroidInitializationSettings androidSettings =
+        AndroidInitializationSettings('@mipmap/ic_launcher');
+
+    const InitializationSettings initSettings =
+        InitializationSettings(android: androidSettings);
+
+    await _localNotifications.initialize(initSettings);
+  }
+
+  @override
+  void onRepeatEvent(DateTime timestamp, SendPort? sendPort) async {
+    await _checkMarket();
   }
 
   Future<void> _checkMarket() async {
@@ -138,25 +142,25 @@ class ShortRadarTaskHandler extends TaskHandler {
           decision.finalScore >= 85 &&
           _lastNotifiedMinute != nowMinute) {
         _lastNotifiedMinute = nowMinute;
-
         await _sendNotification(decision);
       }
     } catch (e) {
-      // ❗ Artık sessiz yutmuyoruz
-      print("BACKGROUND ERROR: $e");
+      debugPrint('BACKGROUND ERROR: $e');
     }
   }
 
   Future<void> _sendNotification(dynamic decision) async {
     try {
-      const androidDetails = AndroidNotificationDetails(
+      const AndroidNotificationDetails androidDetails =
+          AndroidNotificationDetails(
         'short_alert_channel',
         'Short Alerts',
         importance: Importance.max,
         priority: Priority.high,
       );
 
-      const details = NotificationDetails(android: androidDetails);
+      const NotificationDetails details =
+          NotificationDetails(android: androidDetails);
 
       await _localNotifications.show(
         DateTime.now().millisecondsSinceEpoch ~/ 1000,
@@ -165,7 +169,7 @@ class ShortRadarTaskHandler extends TaskHandler {
         details,
       );
     } catch (e) {
-      print("NOTIFICATION ERROR: $e");
+      debugPrint('NOTIFICATION ERROR: $e');
     }
   }
 
