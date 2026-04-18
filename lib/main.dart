@@ -13,9 +13,6 @@ import 'pages/detail_page.dart';
 
 import 'models/coin_radar_data.dart';
 
-import 'services/decision_engine.dart';
-import 'services/detail_data_service.dart';
-
 late final FlutterLocalNotificationsPlugin notificationsPlugin;
 
 Future<void> main() async {
@@ -69,11 +66,13 @@ Future<void> _startForegroundService() async {
   final isRunning = await FlutterForegroundTask.isRunningService;
   if (isRunning) return;
 
-  await FlutterForegroundTask.startService(
+  final result = await FlutterForegroundTask.startService(
     notificationTitle: 'Short Radar aktif',
     notificationText: 'Piyasa taranıyor...',
     callback: startCallback,
   );
+
+  debugPrint("SERVICE START: $result");
 }
 
 void startCallback() {
@@ -111,51 +110,31 @@ class ShortRadarTaskHandler extends TaskHandler {
 
       final List<dynamic> parsed = json.decode(response.body);
 
-      final List<CoinRadarData> rawCoins = parsed
+      final List<CoinRadarData> coins = parsed
           .whereType<Map<String, dynamic>>()
           .where((e) => (e['contract'] ?? '').toString().isNotEmpty)
           .map(CoinRadarData.fromJson)
           .toList();
 
-      if (rawCoins.isEmpty) return;
+      if (coins.isEmpty) return;
 
-      // 🔥 HOME PAGE LOGIC
-      final List<CoinRadarData> sorted = [...rawCoins]
+      // 🔥 EN BASİT TEST
+      final sorted = [...coins]
         ..sort((a, b) => b.changePercent.compareTo(a.changePercent));
 
-      final List<CoinRadarData> top10 = sorted.take(10).toList();
+      final top10 = sorted.take(10);
 
       for (final coin in top10) {
-        try {
-          final bundle = await DetailDataService.load(
-            contractName: coin.name,
-            selectedInterval: '5m',
-            fallbackCoin: coin,
-          );
-
-          final decision = DecisionEngine().build(
-            oiPriceSignal: 'NEUTRAL',
-            oiDirection: bundle.selectedCoin.oiDirection,
-            priceDirection: 'FLAT',
-            orderFlowDirection: 'NEUTRAL',
-            pumpAnalysis: bundle.pumpAnalysis,
-            entryTiming: bundle.entryTiming,
-            setupResult: bundle.setupResult,
-            visibleCandles: bundle.visibleCandles,
-          );
-
-          // 🎯 TEK KURAL
-          if (decision.finalScore >= 85) {
-            await _sendNotification(coin.name, decision.finalScore);
-          }
-        } catch (_) {}
+        if (coin.changePercent > 20) {
+          await _sendNotification(coin.name, coin.changePercent);
+        }
       }
     } catch (e) {
       debugPrint("BACKGROUND ERROR: $e");
     }
   }
 
-  Future<void> _sendNotification(String coin, double score) async {
+  Future<void> _sendNotification(String coin, double value) async {
     try {
       const androidDetails = AndroidNotificationDetails(
         'short_alert_channel',
@@ -168,8 +147,8 @@ class ShortRadarTaskHandler extends TaskHandler {
 
       await _localNotifications.show(
         DateTime.now().millisecondsSinceEpoch ~/ 1000,
-        '🔥 SHORT FIRSAT',
-        '$coin • Score ${score.toStringAsFixed(0)}',
+        '🔥 TEST ALERT',
+        '$coin • %${value.toStringAsFixed(1)}',
         details,
       );
     } catch (e) {
