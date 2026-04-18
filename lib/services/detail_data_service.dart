@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
 import '../models/candle_data.dart';
@@ -30,7 +31,7 @@ class DetailDataBundle {
 }
 
 class DetailDataService {
-  static DetailDataBundle? _lastValidData; // 🔥 CACHE
+  static DetailDataBundle? _lastValidData;
 
   static String apiInterval(String value) {
     switch (value) {
@@ -79,8 +80,8 @@ class DetailDataService {
     final CandleData prev = candles[candles.length - 2];
     final CandleData prev2 = candles[candles.length - 3];
 
-    final double recentHigh = [prev.high, prev2.high]
-        .reduce((a, b) => a > b ? a : b);
+    final double recentHigh =
+        [prev.high, prev2.high].reduce((a, b) => a > b ? a : b);
 
     final bool madeNewHigh = last.high > recentHigh;
     final bool weakClose = last.close < last.high;
@@ -159,11 +160,11 @@ class DetailDataService {
         prev2.close > 0 &&
         currentPrice > prev2.close * 1.08;
 
-    final bool bodyShrinking = _bodySize(prev) > 0 &&
-        _bodySize(last) < _bodySize(prev) * 0.85;
+    final bool bodyShrinking =
+        _bodySize(prev) > 0 && _bodySize(last) < _bodySize(prev) * 0.85;
 
-    final bool weakContinuation = last.close <= prev.close &&
-        last.high >= prev.high;
+    final bool weakContinuation =
+        last.close <= prev.close && last.high >= prev.high;
 
     final bool markIndexGapWide = markPrice > 0 &&
         indexPrice > 0 &&
@@ -219,6 +220,76 @@ class DetailDataService {
     return candles.sublist(candles.length - analysisWindow);
   }
 
+  static List<CandleData> _buildFallbackCandles(CoinRadarData coin) {
+    final int now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    final double basePrice = coin.lastPrice > 0 ? coin.lastPrice : 1.0;
+    final double high = coin.markPrice > 0 ? coin.markPrice : basePrice;
+    final double low = coin.indexPrice > 0
+        ? coin.indexPrice < basePrice
+            ? coin.indexPrice
+            : basePrice * 0.995
+        : basePrice * 0.995;
+
+    return <CandleData>[
+      CandleData(
+        timestamp: now - 900,
+        open: basePrice,
+        high: high,
+        low: low,
+        close: basePrice,
+        volume: coin.volume24h > 0 ? coin.volume24h : 0,
+      ),
+      CandleData(
+        timestamp: now - 600,
+        open: basePrice,
+        high: high,
+        low: low,
+        close: basePrice,
+        volume: coin.volume24h > 0 ? coin.volume24h : 0,
+      ),
+      CandleData(
+        timestamp: now - 300,
+        open: basePrice,
+        high: high,
+        low: low,
+        close: basePrice,
+        volume: coin.volume24h > 0 ? coin.volume24h : 0,
+      ),
+      CandleData(
+        timestamp: now,
+        open: basePrice,
+        high: high,
+        low: low,
+        close: basePrice,
+        volume: coin.volume24h > 0 ? coin.volume24h : 0,
+      ),
+    ];
+  }
+
+  static DetailDataBundle _buildSafeFallbackBundle(CoinRadarData fallbackCoin) {
+    final List<CandleData> fallbackCandles = _buildFallbackCandles(fallbackCoin);
+
+    final ShortSetupResult fallbackSetup = ShortSetupLogic.build(
+      candles: fallbackCandles,
+      coin: fallbackCoin,
+    );
+
+    final PumpAnalysisResult fallbackPump =
+        PumpAnalysis.analyze(fallbackCandles);
+
+    final EntryTimingResult fallbackEntry =
+        EntryTiming.analyze(fallbackCandles);
+
+    return DetailDataBundle(
+      selectedCoin: fallbackCoin,
+      candles: fallbackCandles,
+      visibleCandles: fallbackCandles,
+      setupResult: fallbackSetup,
+      pumpAnalysis: fallbackPump,
+      entryTiming: fallbackEntry,
+    );
+  }
+
   static Future<DetailDataBundle> load({
     required String contractName,
     required String selectedInterval,
@@ -237,28 +308,37 @@ class DetailDataService {
       );
 
       final responses = await Future.wait([
-        http.get(tickerUri).timeout(const Duration(seconds: 10)),
-        http.get(candlesUri).timeout(const Duration(seconds: 10)),
+        http.get(
+          tickerUri,
+          headers: {'Accept': 'application/json'},
+        ).timeout(const Duration(seconds: 10)),
+        http.get(
+          candlesUri,
+          headers: {'Accept': 'application/json'},
+        ).timeout(const Duration(seconds: 10)),
       ]);
 
       final tickerResponse = responses[0];
       final candleResponse = responses[1];
 
-      if (tickerResponse.statusCode != 200 ||
-          candleResponse.statusCode != 200) {
-        throw Exception('API error');
+      if (tickerResponse.statusCode != 200 || candleResponse.statusCode != 200) {
+        throw Exception('Detay verisi alınamadı');
       }
 
-      final parsedTicker = json.decode(tickerResponse.body);
-      final parsedCandles = json.decode(candleResponse.body);
+      final dynamic parsedTicker = json.decode(tickerResponse.body);
+      final dynamic parsedCandles = json.decode(candleResponse.body);
+
+      if (parsedTicker is! List || parsedCandles is! List) {
+        throw Exception('API veri formatı beklenen gibi değil');
+      }
 
       final List<CoinRadarData> allCoins = parsedTicker
           .whereType<Map<String, dynamic>>()
+          .where((e) => (e['contract'] ?? '').toString().isNotEmpty)
           .map(CoinRadarData.fromJson)
           .toList();
 
-      CoinRadarData detailItem = fallbackCoin;
-
+      CoinRadarData? detailItem;
       for (final coin in allCoins) {
         if (coin.name == contractName) {
           detailItem = coin;
@@ -266,39 +346,40 @@ class DetailDataService {
         }
       }
 
-      final List<CandleData> newCandles = [];
+      detailItem ??= fallbackCoin;
 
+      final List<CandleData> newCandles = [];
       for (final raw in parsedCandles) {
         try {
           newCandles.add(CandleData.fromApi(raw));
         } catch (_) {}
       }
 
-      if (newCandles.isEmpty) {
-        throw Exception('Empty candle');
-      }
-
       newCandles.sort((a, b) => a.timestamp.compareTo(b.timestamp));
 
-      final zoomCandles = newCandles.length > 40
+      if (newCandles.isEmpty) {
+        throw Exception('Grafik verisi bulunamadı');
+      }
+
+      final List<CandleData> zoomCandles = newCandles.length > 40
           ? newCandles.sublist(newCandles.length - 40)
           : newCandles;
 
-      final analysisCandles =
+      final List<CandleData> analysisCandles =
           _selectAnalysisCandles(newCandles, detailItem);
 
-      final newSetup = ShortSetupLogic.build(
+      final ShortSetupResult newSetup = ShortSetupLogic.build(
         candles: analysisCandles,
         coin: detailItem,
       );
 
-      final newPumpAnalysis =
+      final PumpAnalysisResult newPumpAnalysis =
           PumpAnalysis.analyze(analysisCandles);
 
-      final newEntryTiming =
+      final EntryTimingResult newEntryTiming =
           EntryTiming.analyze(analysisCandles);
 
-      final bundle = DetailDataBundle(
+      final DetailDataBundle bundle = DetailDataBundle(
         selectedCoin: detailItem,
         candles: newCandles,
         visibleCandles: zoomCandles,
@@ -307,24 +388,16 @@ class DetailDataService {
         entryTiming: newEntryTiming,
       );
 
-      _lastValidData = bundle; // 🔥 CACHE SAVE
-
+      _lastValidData = bundle;
       return bundle;
     } catch (e) {
-      print("DETAIL DATA ERROR: $e");
+      debugPrint('DETAIL DATA ERROR: $e');
 
       if (_lastValidData != null) {
         return _lastValidData!;
       }
 
-      return DetailDataBundle(
-        selectedCoin: fallbackCoin,
-        candles: const [],
-        visibleCandles: const [],
-        setupResult: ShortSetupResult.empty(),
-        pumpAnalysis: PumpAnalysisResult.empty(),
-        entryTiming: EntryTimingResult.empty(),
-      );
+      return _buildSafeFallbackBundle(fallbackCoin);
     }
   }
 }
