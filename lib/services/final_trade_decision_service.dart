@@ -206,15 +206,17 @@ class FinalTradeDecisionService {
   }
 
   static bool _lastBodyShrinking(List<CandleData> candles) {
-    if (candles.length < 2) return false;
+    if (candles.length < 3) return false;
 
     final CandleData last = candles[candles.length - 1];
     final CandleData prev = candles[candles.length - 2];
+    final CandleData prev2 = candles[candles.length - 3];
 
     final double lastBody = _candleBody(last);
     final double prevBody = _candleBody(prev);
+    final double prev2Body = _candleBody(prev2);
 
-    return lastBody < prevBody;
+    return lastBody < prevBody && prevBody <= prev2Body;
   }
 
   static bool _upperWickWeakness(List<CandleData> candles) {
@@ -222,8 +224,7 @@ class FinalTradeDecisionService {
 
     final CandleData last = candles.last;
     final double body = _candleBody(last);
-    final double upperWick =
-        last.high - (last.open > last.close ? last.open : last.close);
+    final double upperWick = last.high - (last.open > last.close ? last.open : last.close);
 
     if (body <= 0) {
       return upperWick > 0;
@@ -240,6 +241,24 @@ class FinalTradeDecisionService {
     return closePosition <= 0.35;
   }
 
+  static bool _microBreakdownStarted(List<CandleData> candles) {
+    if (candles.length < 2) return false;
+
+    final CandleData last = candles.last;
+    final CandleData prev = candles[candles.length - 2];
+
+    return last.close < prev.low;
+  }
+
+  static bool _lowerHighFormed(List<CandleData> candles) {
+    if (candles.length < 3) return false;
+
+    final CandleData last = candles[candles.length - 1];
+    final CandleData prev = candles[candles.length - 2];
+
+    return last.high < prev.high;
+  }
+
   static bool _failedBreakout(List<CandleData> candles) {
     if (candles.length < 2) return false;
 
@@ -251,24 +270,6 @@ class FinalTradeDecisionService {
     final bool upperWickWeak = _upperWickWeakness(candles);
 
     return madeNewHigh && (weakClose || upperWickWeak);
-  }
-
-  static bool _microBreakdownStarted(List<CandleData> candles) {
-    if (candles.length < 2) return false;
-
-    final CandleData last = candles.last;
-    final CandleData prev = candles[candles.length - 2];
-
-    return last.close < prev.low;
-  }
-
-  static bool _lowerHighFormed(List<CandleData> candles) {
-    if (candles.length < 2) return false;
-
-    final CandleData last = candles[candles.length - 1];
-    final CandleData prev = candles[candles.length - 2];
-
-    return last.high < prev.high;
   }
 
   static bool _pumpDetected(
@@ -301,10 +302,8 @@ class FinalTradeDecisionService {
       final CandleData c = candles[candles.length - 1];
 
       if (_isBullish(a) && _isBullish(b)) {
-        final double rise1 =
-            a.open != 0 ? ((a.close - a.open) / a.open) * 100 : 0;
-        final double rise2 =
-            b.open != 0 ? ((b.close - b.open) / b.open) * 100 : 0;
+        final double rise1 = a.open != 0 ? ((a.close - a.open) / a.open) * 100 : 0;
+        final double rise2 = b.open != 0 ? ((b.close - b.open) / b.open) * 100 : 0;
         final double totalRise = rise1 + rise2;
         if (totalRise >= 2.5 && c.high >= b.high) {
           hadPump = true;
@@ -333,23 +332,15 @@ class FinalTradeDecisionService {
     final bool bodyShrinking = _lastBodyShrinking(candles);
     final bool upperWickWeak = _upperWickWeakness(candles);
     final bool lowerHigh = _lowerHighFormed(candles);
-    final bool bearishLastCandle =
-        candles.isNotEmpty ? _isBearish(candles.last) : false;
+    final bool bearishLastCandle = candles.isNotEmpty ? _isBearish(candles.last) : false;
     final bool breakStarted = _microBreakdownStarted(candles);
     final bool failedBreakout = _failedBreakout(candles);
-    final bool closeNearLow =
-        candles.isNotEmpty ? _closeNearLow(candles.last) : false;
+    final bool closeNearLow = candles.isNotEmpty ? _closeNearLow(candles.last) : false;
 
-    final String entryLabel =
-        safeLower(entryTiming != null ? extractDynamicLabel(entryTiming) : '');
-    final String entrySummary = safeLower(
-      entryTiming != null ? extractDynamicSummary(entryTiming) : '',
-    );
-    final String setupSummary = safeLower(
-      setupResult != null ? extractDynamicSummary(setupResult) : '',
-    );
-    final double entryScore =
-        entryTiming != null ? extractDynamicScore(entryTiming) : 0;
+    final String entryLabel = safeLower(entryTiming != null ? extractDynamicLabel(entryTiming) : '');
+    final String entrySummary = safeLower(entryTiming != null ? extractDynamicSummary(entryTiming) : '');
+    final String setupSummary = safeLower(setupResult != null ? extractDynamicSummary(setupResult) : '');
+    final double entryScore = entryTiming != null ? extractDynamicScore(entryTiming) : 0;
 
     bool weaknessSeen = false;
     double weaknessScore = 0;
@@ -361,7 +352,7 @@ class FinalTradeDecisionService {
     if (bodyShrinking) {
       weaknessSeen = true;
       weaknessScore += 20;
-      reasons.add('Son mum gövdesi küçülüyor');
+      reasons.add('Son mum gövdeleri küçülüyor');
     }
 
     if (upperWickWeak) {
@@ -378,7 +369,7 @@ class FinalTradeDecisionService {
 
     if (closeNearLow) {
       weaknessSeen = true;
-      weaknessScore += 15;
+      weaknessScore += 12;
       reasons.add('Kapanış mumun alt kısmına yakın');
     }
 
@@ -428,8 +419,8 @@ class FinalTradeDecisionService {
     }
 
     if (breakStarted) {
-      weaknessScore += 12;
-      reasons.add('İlk micro breakdown başladı');
+      weaknessScore += 10;
+      reasons.add('İlk breakdown başladı');
     }
 
     weaknessScore = clampScore(weaknessScore);
@@ -448,10 +439,11 @@ class FinalTradeDecisionService {
     }
 
     double score = 0;
-    if (hadPump) score += 30;
-    score += weaknessScore * 0.45;
+    if (hadPump) score += 35;
+    if (weaknessSeen) score += 15;
+    score += weaknessScore * 0.35;
     if (breakStarted) score += 10;
-    if (fakePumpDetected) score += 8;
+    if (fakePumpDetected) score += 5;
 
     state.score = clampScore(score);
 
@@ -509,10 +501,9 @@ class FinalTradeDecisionService {
       return 'PREPARE_SHORT';
     }
 
-    if (entrySnapshot.hadPump &&
-        entrySnapshot.weaknessSeen &&
-        finalScore >= 60) {
-      return 'PREPARE_SHORT';
+    if (entrySnapshot.hadPump && entrySnapshot.weaknessSeen) {
+      if (finalScore >= 60) return 'PREPARE_SHORT';
+      return 'WATCH';
     }
 
     if (oiPriceSignal == 'STRONG_SHORT' && finalScore >= 70) {
@@ -520,8 +511,7 @@ class FinalTradeDecisionService {
     }
 
     if (finalScore >= 85 &&
-        (oiPriceSignal == 'FAKE_PUMP' ||
-            oiPriceSignal == 'EARLY_DISTRIBUTION')) {
+        (oiPriceSignal == 'FAKE_PUMP' || oiPriceSignal == 'EARLY_DISTRIBUTION')) {
       return 'PREPARE_SHORT';
     }
 
@@ -536,13 +526,14 @@ class FinalTradeDecisionService {
     double confidence = 45;
 
     confidence += (finalScore - 50) * 0.35;
-    confidence += entrySnapshot.weaknessScore * 0.20;
+    confidence += entrySnapshot.weaknessScore * 0.15;
 
-    if (entrySnapshot.hadPump) confidence += 6;
-    if (entrySnapshot.fakePumpDetected) confidence += 8;
+    if (entrySnapshot.hadPump) confidence += 8;
+    if (entrySnapshot.weaknessSeen) confidence += 10;
+    if (entrySnapshot.fakePumpDetected) confidence += 6;
     if (entrySnapshot.breakStarted) confidence += 6;
-    if (oiPriceSignal == 'STRONG_SHORT') confidence += 4;
-    if (oiPriceSignal == 'FAKE_PUMP') confidence += 5;
+    if (oiPriceSignal == 'STRONG_SHORT') confidence += 5;
+    if (oiPriceSignal == 'FAKE_PUMP') confidence += 6;
     if (oiPriceSignal == 'SHORT_SQUEEZE') confidence -= 8;
 
     return clampScore(confidence);
@@ -561,9 +552,7 @@ class FinalTradeDecisionService {
     bullets.add('Fiyat: $priceDirection');
     bullets.add('Order Flow: $orderFlowDirection');
     bullets.add('Ana sinyal: $oiPriceSignal');
-    bullets.add(
-      'Zayıflama skoru: ${entrySnapshot.weaknessScore.toStringAsFixed(1)}',
-    );
+    bullets.add('Zayıflama skoru: ${entrySnapshot.weaknessScore.toStringAsFixed(1)}');
 
     if (entrySnapshot.hadPump) {
       bullets.add('Piyasada önce pump izi var');
@@ -591,7 +580,7 @@ class FinalTradeDecisionService {
     final List<String> notes = <String>[];
 
     if (action == 'PREPARE_SHORT') {
-      notes.add('Short kurulumu oluşuyor; tam yüklenmeden izlemeyi sürdür');
+      notes.add('Henüz kör giriş değil; zayıflama takip edilip küçük tetik aranmalı');
     }
 
     if (action == 'ENTER_SHORT') {
@@ -621,11 +610,11 @@ class FinalTradeDecisionService {
     if (entrySnapshot.hadPump &&
         !entrySnapshot.fakePumpDetected &&
         !entrySnapshot.breakStarted) {
-      warnings.add('Pump hâlâ canlı olabilir, çok erken short riskli');
+      warnings.add('Pump tamamen bitmeden erken short açmak riskli');
     }
 
     if (entrySnapshot.fakePumpDetected && !entrySnapshot.breakStarted) {
-      warnings.add('Giriş erken sayılır; pozisyon boyutunu kontrollü tut');
+      warnings.add('İlk kırılma motoru henüz tam tetik vermedi');
     }
 
     if (finalScore < 60) {
@@ -643,9 +632,7 @@ class FinalTradeDecisionService {
 
     if (candles.length >= 2) {
       final CandleData prev = candles[candles.length - 2];
-      triggers.add(
-        'Önceki mum dibi (${prev.low.toStringAsFixed(6)}) altı kapanış',
-      );
+      triggers.add('Önceki mum dibi (${prev.low.toStringAsFixed(6)}) altı kapanış');
     }
 
     if (entrySnapshot.fakePumpDetected) {
@@ -657,7 +644,7 @@ class FinalTradeDecisionService {
     }
 
     if (!entrySnapshot.breakStarted) {
-      triggers.add('Micro breakdown başlarsa giriş daha da güçlenir');
+      triggers.add('Micro breakdown gelirse giriş teyidi güçlenir');
     }
 
     return triggers;
@@ -676,10 +663,7 @@ class FinalTradeDecisionService {
     }
   }
 
-  static double componentPriceScore(
-    String priceDirection,
-    String oiPriceSignal,
-  ) {
+  static double componentPriceScore(String priceDirection, String oiPriceSignal) {
     double score;
     switch (priceDirection) {
       case 'DOWN':
@@ -741,4 +725,226 @@ class FinalTradeDecisionService {
 
     final String label = safeLower(extractDynamicLabel(d));
     final String signal = safeLower(extractDynamicSignal(d));
-    final String summary = saf
+    final String summary = safeLower(extractDynamicSummary(d));
+
+    if (label.contains('güçlü')) score += 8;
+    if (label.contains('uygun')) score += 6;
+    if (label.contains('zayıf')) score -= 10;
+    if (label.contains('bekle')) score -= 5;
+
+    if (signal.contains('short')) score += 5;
+    if (signal.contains('pump')) score += 4;
+
+    if (summary.contains('hacim')) score += 4;
+    if (summary.contains('zayıf')) score -= 4;
+
+    return clampScore(score);
+  }
+
+  static double componentLiquidationScore(
+    PumpAnalysisResult? pumpAnalysis,
+    ShortSetupResult? setupResult,
+    String oiPriceSignal,
+  ) {
+    double score = 50;
+
+    if (oiPriceSignal == 'STRONG_SHORT') score += 12;
+    if (oiPriceSignal == 'FAKE_PUMP') score += 8;
+    if (oiPriceSignal == 'SHORT_SQUEEZE') score -= 18;
+    if (oiPriceSignal == 'EARLY_ACCUMULATION') score -= 10;
+
+    if (pumpAnalysis != null) {
+      final String summary = safeLower(extractDynamicSummary(pumpAnalysis));
+      final String signal = safeLower(extractDynamicSignal(pumpAnalysis));
+
+      if (summary.contains('liq')) score += 8;
+      if (summary.contains('short')) score += 4;
+      if (signal.contains('pump')) score += 4;
+      if (summary.contains('alıcı')) score -= 8;
+      if (summary.contains('toplanma')) score -= 6;
+    }
+
+    if (setupResult != null) {
+      final String summary = safeLower(extractDynamicSummary(setupResult));
+      if (summary.contains('squeeze')) score -= 10;
+      if (summary.contains('risk')) score -= 6;
+      if (summary.contains('uygun')) score += 4;
+      if (summary.contains('alıcı')) score -= 8;
+      if (summary.contains('birikim')) score -= 8;
+    }
+
+    return clampScore(score);
+  }
+
+  static double componentMomentumScore(
+    EntryTimingResult? entryTiming,
+    List<CandleData> candles,
+  ) {
+    double score = 50;
+
+    if (entryTiming != null) {
+      final dynamic d = entryTiming;
+      final double rawScore = extractDynamicScore(d);
+      final String label = safeLower(extractDynamicLabel(d));
+      final String summary = safeLower(extractDynamicSummary(d));
+
+      if (rawScore > 0) {
+        score = 35 + (rawScore * 0.55);
+      }
+
+      if (label.contains('hazır')) score += 10;
+      if (label.contains('uygun')) score += 6;
+      if (label.contains('erken')) score += 4;
+      if (label.contains('geç')) score -= 12;
+      if (label.contains('bekle')) score -= 6;
+
+      if (summary.contains('yakın')) score += 4;
+      if (summary.contains('geç')) score -= 8;
+      if (summary.contains('bekle')) score -= 4;
+    }
+
+    if (candles.length >= 2) {
+      final last = candles.last;
+      if (last.close < last.open) score += 6;
+    }
+
+    return clampScore(score);
+  }
+
+  static double weightedFinalScore({
+    required double oiScore,
+    required double priceScore,
+    required double orderFlowScore,
+    required double volumeScore,
+    required double liquidationScore,
+    required double momentumScore,
+  }) {
+    final double raw =
+        (oiScore * 0.20) +
+        (priceScore * 0.20) +
+        (orderFlowScore * 0.25) +
+        (volumeScore * 0.15) +
+        (liquidationScore * 0.10) +
+        (momentumScore * 0.10);
+
+    return clampScore(raw);
+  }
+
+  static String scoreClassFromScore(double finalScore) {
+    if (finalScore >= 85) return 'Güçlü fırsat';
+    if (finalScore >= 70) return 'Kurulum var';
+    if (finalScore >= 40) return 'İzlenmeli';
+    return 'Zayıf';
+  }
+
+  // ---- MAIN ENTRY ----
+
+  static FinalTradeDecision build({
+    required String symbol,
+    required String oiPriceSignal,
+    required String oiDirection,
+    required String priceDirection,
+    required String orderFlowDirection,
+    required PumpAnalysisResult? pumpAnalysis,
+    required EntryTimingResult? entryTiming,
+    required ShortSetupResult? setupResult,
+    required List<CandleData> candles,
+  }) {
+    final double oiScore = componentOiScore(oiDirection);
+    final double priceScore = componentPriceScore(priceDirection, oiPriceSignal);
+    final double orderFlowScore = componentOrderFlowScore(orderFlowDirection);
+    final double volumeScore = componentVolumeScore(pumpAnalysis);
+    final double liquidationScore = componentLiquidationScore(
+      pumpAnalysis,
+      setupResult,
+      oiPriceSignal,
+    );
+    final double momentumScore = componentMomentumScore(entryTiming, candles);
+
+    double finalScore = weightedFinalScore(
+      oiScore: oiScore,
+      priceScore: priceScore,
+      orderFlowScore: orderFlowScore,
+      volumeScore: volumeScore,
+      liquidationScore: liquidationScore,
+      momentumScore: momentumScore,
+    );
+
+    finalScore = clampScore(finalScore);
+
+    final String scoreClass = scoreClassFromScore(finalScore);
+
+    final EntryEngineSnapshot entrySnapshot = evaluateEntryEngine(
+      symbol: symbol,
+      oiPriceSignal: oiPriceSignal,
+      priceDirection: priceDirection,
+      orderFlowDirection: orderFlowDirection,
+      pumpAnalysis: pumpAnalysis,
+      entryTiming: entryTiming,
+      setupResult: setupResult,
+      candles: candles,
+      finalScore: finalScore,
+    );
+
+    final String action = decideAction(
+      finalScore: finalScore,
+      oiPriceSignal: oiPriceSignal,
+      entrySnapshot: entrySnapshot,
+    );
+
+    final double confidence = calculateConfidence(
+      finalScore: finalScore,
+      entrySnapshot: entrySnapshot,
+      oiPriceSignal: oiPriceSignal,
+    );
+
+    final List<String> marketReadBullets = buildMarketReadBullets(
+      oiDirection: oiDirection,
+      priceDirection: priceDirection,
+      orderFlowDirection: orderFlowDirection,
+      oiPriceSignal: oiPriceSignal,
+      entrySnapshot: entrySnapshot,
+    );
+
+    final List<String> entryNotes = buildEntryNotes(
+      entrySnapshot: entrySnapshot,
+      action: action,
+    );
+
+    final List<String> warnings = buildWarnings(
+      oiPriceSignal: oiPriceSignal,
+      entrySnapshot: entrySnapshot,
+      finalScore: finalScore,
+    );
+
+    final List<String> triggerConditions = buildTriggerConditions(
+      entrySnapshot: entrySnapshot,
+      candles: candles,
+    );
+
+    final String summary = '$scoreClass • ${finalScore.toStringAsFixed(1)} • $action';
+
+    final FinalTradeDecision decision = FinalTradeDecision(
+      finalScore: finalScore,
+      scoreClass: scoreClass,
+      confidence: confidence,
+      primarySignal: oiPriceSignal,
+      tradeBias: 'SHORT',
+      action: action,
+      summary: summary,
+      oiScore: oiScore,
+      priceScore: priceScore,
+      orderFlowScore: orderFlowScore,
+      volumeScore: volumeScore,
+      liquidationScore: liquidationScore,
+      momentumScore: momentumScore,
+      marketReadBullets: marketReadBullets,
+      entryNotes: entryNotes,
+      warnings: warnings,
+      triggerConditions: triggerConditions,
+    );
+
+    _cache[symbol] = decision;
+    return decision;
+  }
+}
