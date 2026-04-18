@@ -117,11 +117,11 @@ class EntryEngineSnapshot {
     required this.hadPump,
     required this.weaknessSeen,
     required this.breakStarted,
-    required this.fakePumpDetected,
+    this.fakePumpDetected = false,
     required this.breakdownConfirmations,
     required this.phase,
     required this.score,
-    required this.weaknessScore,
+    this.weaknessScore = 0,
     required this.reasons,
   });
 }
