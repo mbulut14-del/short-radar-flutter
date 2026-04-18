@@ -1,4 +1,3 @@
-
 import '../models/candle_data.dart';
 import '../models/entry_timing_result.dart';
 import '../models/final_trade_decision.dart';
@@ -310,20 +309,47 @@ class DecisionEngine {
     return 'NEUTRAL';
   }
 
+  bool _isBreakdownConfirmed(List<CandleData> candleList) {
+    if (candleList.length < 2) return false;
+
+    final CandleData last = candleList.last;
+    final CandleData prev = candleList[candleList.length - 2];
+
+    final bool closeBelowPreviousLow = last.close < prev.low;
+    final bool bearishClose = last.close < last.open;
+
+    final double candleRange = (last.high - last.low).abs();
+    final double candleBody = (last.open - last.close).abs();
+    final double bodyRatio = candleRange > 0 ? candleBody / candleRange : 0;
+
+    final bool meaningfulBearBody = bodyRatio >= 0.35;
+
+    return closeBelowPreviousLow && bearishClose && meaningfulBearBody;
+  }
+
   String _actionFromDecision({
     required double finalScore,
     required double confidence,
     required String tradeBias,
     required String oiPriceSignal,
+    required List<CandleData> visibleCandles,
   }) {
     if (finalScore < 40) return 'WATCH';
     if (tradeBias != 'SHORT') return 'WATCH';
-    if (finalScore >= 85 && confidence >= 68) return 'ENTER SHORT';
-    if (finalScore >= 70) return 'PREPARE SHORT';
+
     if (oiPriceSignal == 'SHORT_SQUEEZE' ||
         oiPriceSignal == 'EARLY_ACCUMULATION') {
       return 'WATCH';
     }
+
+    final bool breakdownConfirmed = _isBreakdownConfirmed(visibleCandles);
+
+    if (finalScore >= 85 && confidence >= 68) {
+      return breakdownConfirmed ? 'ENTER SHORT' : 'PREPARE SHORT';
+    }
+
+    if (finalScore >= 70) return 'PREPARE SHORT';
+
     return 'WATCH';
   }
 
@@ -393,12 +419,15 @@ class DecisionEngine {
       oiPriceSignal: oiPriceSignal,
     );
 
+    final bool breakdownConfirmed = _isBreakdownConfirmed(visibleCandles);
+
     final String scoreClass = _scoreClassFromScore(finalScore);
     final String action = _actionFromDecision(
       finalScore: finalScore,
       confidence: confidence,
       tradeBias: tradeBias,
       oiPriceSignal: oiPriceSignal,
+      visibleCandles: visibleCandles,
     );
 
     final List<String> marketReadBullets = <String>[
@@ -420,6 +449,10 @@ class DecisionEngine {
         'Order flow alıcı baskısını gösteriyor; short için ters rüzgar var.'
       else
         'Order flow tarafında belirgin üstünlük yok.',
+      if (tradeBias == 'SHORT' && breakdownConfirmed)
+        'Yapı kırılımı teyidi alındı; son kapanış önceki mumun dip bölgesinin altına sarktı.'
+      else if (tradeBias == 'SHORT')
+        'Kurulum kısa pozisyon lehine olsa da yapı kırılımı henüz teyit vermedi.',
     ];
 
     final List<String> warnings = <String>[
@@ -429,11 +462,18 @@ class DecisionEngine {
       if (confidence < 60) 'Sinyal uyumu düşük.',
       if (volumeScore < 45) 'Hacim teyidi zayıf.',
       if (momentumScore < 45) 'Momentum zayıf.',
+      if (tradeBias == 'SHORT' && !breakdownConfirmed)
+        'Yapı kırılımı gelmeden agresif short tarafına geçilmedi.',
     ];
 
     final List<String> entryNotes = <String>[
       if (action == 'ENTER SHORT')
-        'Kurulum güçlü; agresif short giriş düşünülebilir.'
+        'Kurulum güçlü; yapı kırılımı da geldiği için aktif short fırsatı gösteriliyor.'
+      else if (action == 'PREPARE SHORT' &&
+          finalScore >= 85 &&
+          confidence >= 68 &&
+          !breakdownConfirmed)
+        'Kurulum güçlü ama yapı kırılımı teyidi gelmeden aktif girişe geçilmedi.'
       else if (action == 'PREPARE SHORT')
         'Short hazırlığı var; tetik için ek fiyat teyidi beklenmeli.'
       else
@@ -441,9 +481,13 @@ class DecisionEngine {
     ];
 
     final List<String> triggerConditions = <String>[
-      if (tradeBias == 'SHORT') ...<String>[
-        'Zayıf kapanış veya breakdown teyidi',
+      if (tradeBias == 'SHORT' && !breakdownConfirmed) ...<String>[
+        'Son kapanışın bir önceki mumun low seviyesinin altına inmesi',
+        'Ayı yönlü mum gövdesinin anlamlı kalması',
         'Satış baskısının devam etmesi',
+      ] else if (tradeBias == 'SHORT') ...<String>[
+        'Satış baskısının devam etmesi',
+        'Breakdown sonrası zayıf toparlanma görülmesi',
       ] else ...<String>[
         'Net short yön teyidi',
         'Alıcı baskısının zayıflaması',
