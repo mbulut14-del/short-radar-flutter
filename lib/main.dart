@@ -21,11 +21,10 @@ Future<void> main() async {
 
   notificationsPlugin = FlutterLocalNotificationsPlugin();
 
-  const AndroidInitializationSettings androidSettings =
+  const androidSettings =
       AndroidInitializationSettings('@mipmap/ic_launcher');
 
-  const InitializationSettings initSettings =
-      InitializationSettings(android: androidSettings);
+  const initSettings = InitializationSettings(android: androidSettings);
 
   await notificationsPlugin.initialize(initSettings);
 
@@ -54,10 +53,6 @@ Future<void> _startForegroundService() async {
       channelImportance: NotificationChannelImportance.HIGH,
       priority: NotificationPriority.HIGH,
     ),
-    iosNotificationOptions: const IOSNotificationOptions(
-      showNotification: true,
-      playSound: false,
-    ),
     foregroundTaskOptions: const ForegroundTaskOptions(
       interval: 15000,
       isOnceEvent: false,
@@ -81,6 +76,25 @@ void startCallback() {
 
 class ShortRadarTaskHandler extends TaskHandler {
   int _lastNotifiedMinute = -1;
+  late FlutterLocalNotificationsPlugin _localNotifications;
+
+  @override
+  Future<void> onStart(DateTime timestamp, SendPort? sendPort) async {
+    // 🔥 CRITICAL: Background isolate için notification init
+    _localNotifications = FlutterLocalNotificationsPlugin();
+
+    const androidSettings =
+        AndroidInitializationSettings('@mipmap/ic_launcher');
+
+    const initSettings = InitializationSettings(android: androidSettings);
+
+    await _localNotifications.initialize(initSettings);
+  }
+
+  @override
+  void onRepeatEvent(DateTime timestamp, SendPort? sendPort) async {
+    await _checkMarket();
+  }
 
   CoinRadarData _fallbackCoin() {
     return const CoinRadarData(
@@ -97,14 +111,6 @@ class ShortRadarTaskHandler extends TaskHandler {
       biasLabel: '-',
       note: '',
     );
-  }
-
-  @override
-  Future<void> onStart(DateTime timestamp, SendPort? sendPort) async {}
-
-  @override
-  void onRepeatEvent(DateTime timestamp, SendPort? sendPort) async {
-    await _checkMarket();
   }
 
   Future<void> _checkMarket() async {
@@ -132,29 +138,35 @@ class ShortRadarTaskHandler extends TaskHandler {
           decision.finalScore >= 85 &&
           _lastNotifiedMinute != nowMinute) {
         _lastNotifiedMinute = nowMinute;
+
         await _sendNotification(decision);
       }
-    } catch (_) {}
+    } catch (e) {
+      // ❗ Artık sessiz yutmuyoruz
+      print("BACKGROUND ERROR: $e");
+    }
   }
 
   Future<void> _sendNotification(dynamic decision) async {
-    const AndroidNotificationDetails androidDetails =
-        AndroidNotificationDetails(
-      'short_alert_channel',
-      'Short Alerts',
-      importance: Importance.max,
-      priority: Priority.high,
-    );
+    try {
+      const androidDetails = AndroidNotificationDetails(
+        'short_alert_channel',
+        'Short Alerts',
+        importance: Importance.max,
+        priority: Priority.high,
+      );
 
-    const NotificationDetails details =
-        NotificationDetails(android: androidDetails);
+      const details = NotificationDetails(android: androidDetails);
 
-    await notificationsPlugin.show(
-      DateTime.now().millisecondsSinceEpoch ~/ 1000,
-      '🔥 SHORT FIRSAT',
-      '${decision.scoreClass} • ${decision.finalScore.toStringAsFixed(0)}',
-      details,
-    );
+      await _localNotifications.show(
+        DateTime.now().millisecondsSinceEpoch ~/ 1000,
+        '🔥 SHORT FIRSAT',
+        '${decision.scoreClass} • ${decision.finalScore.toStringAsFixed(0)}',
+        details,
+      );
+    } catch (e) {
+      print("NOTIFICATION ERROR: $e");
+    }
   }
 
   @override
