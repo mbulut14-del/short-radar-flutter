@@ -31,7 +31,7 @@ class DetailDataBundle {
 }
 
 class DetailDataService {
-  static DetailDataBundle? _lastValidData;
+  static final Map<String, DetailDataBundle> _lastValidDataMap = {};
 
   static String apiInterval(String value) {
     switch (value) {
@@ -40,6 +40,13 @@ class DetailDataService {
       default:
         return value;
     }
+  }
+
+  static String _cacheKey({
+    required String contractName,
+    required String selectedInterval,
+  }) {
+    return '$contractName|$selectedInterval';
   }
 
   static double _bodySize(CandleData candle) {
@@ -295,6 +302,11 @@ class DetailDataService {
     required String selectedInterval,
     required CoinRadarData fallbackCoin,
   }) async {
+    final String cacheKey = _cacheKey(
+      contractName: contractName,
+      selectedInterval: selectedInterval,
+    );
+
     try {
       final tickerUri = Uri.parse(
         'https://fx-api.gateio.ws/api/v4/futures/usdt/tickers',
@@ -388,13 +400,14 @@ class DetailDataService {
         entryTiming: newEntryTiming,
       );
 
-      _lastValidData = bundle;
+      _lastValidDataMap[cacheKey] = bundle;
       return bundle;
     } catch (e) {
-      debugPrint('DETAIL DATA ERROR: $e');
+      debugPrint('DETAIL DATA ERROR [$contractName][$selectedInterval]: $e');
 
-      if (_lastValidData != null) {
-        return _lastValidData!;
+      final DetailDataBundle? cachedBundle = _lastValidDataMap[cacheKey];
+      if (cachedBundle != null) {
+        return cachedBundle;
       }
 
       return _buildSafeFallbackBundle(fallbackCoin);
