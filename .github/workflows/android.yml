@@ -75,27 +75,6 @@ jobs:
                   )
               return text
 
-          def ensure_foreground_service_inside_application(text):
-              service_name = 'com.pravera.flutter_foreground_task.service.ForegroundService'
-              if service_name in text:
-                  return text
-
-              service_block = '''
-                  <service
-                      android:name="com.pravera.flutter_foreground_task.service.ForegroundService"
-                      android:exported="false"
-                      android:foregroundServiceType="dataSync" />
-              '''.strip()
-
-              application_tag_pattern = r'(<application\b[^>]*>)'
-              match = re.search(application_tag_pattern, text, flags=re.MULTILINE)
-              if not match:
-                  return text
-
-              insert_pos = match.end()
-              text = text[:insert_pos] + '\n        ' + service_block + text[insert_pos:]
-              return text
-
           # settings.gradle
           replace_if_exists(
               "android/settings.gradle",
@@ -177,9 +156,6 @@ jobs:
               text = ensure_permission(text, "android.permission.FOREGROUND_SERVICE")
               text = ensure_permission(text, "android.permission.WAKE_LOCK")
               text = ensure_permission(text, "android.permission.RECEIVE_BOOT_COMPLETED")
-
-              # Foreground service tanimi (application icine)
-              text = ensure_foreground_service_inside_application(text)
 
               # Uygulama adi
               text = text.replace(
