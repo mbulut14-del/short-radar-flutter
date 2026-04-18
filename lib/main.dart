@@ -1,8 +1,11 @@
+import 'dart:async';
+import 'dart:convert';
 import 'dart:isolate';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
+import 'package:http/http.dart' as http;
 
 import 'pages/splash_screen.dart';
 import 'pages/home_page.dart';
@@ -20,11 +23,10 @@ Future<void> main() async {
 
   notificationsPlugin = FlutterLocalNotificationsPlugin();
 
-  const AndroidInitializationSettings androidSettings =
+  const androidSettings =
       AndroidInitializationSettings('@mipmap/ic_launcher');
 
-  const InitializationSettings initSettings =
-      InitializationSettings(android: androidSettings);
+  const initSettings = InitializationSettings(android: androidSettings);
 
   await notificationsPlugin.initialize(initSettings);
 
@@ -64,7 +66,7 @@ Future<void> _startForegroundService() async {
     ),
   );
 
-  final bool isRunning = await FlutterForegroundTask.isRunningService;
+  final isRunning = await FlutterForegroundTask.isRunningService;
   if (isRunning) return;
 
   await FlutterForegroundTask.startService(
@@ -79,35 +81,16 @@ void startCallback() {
 }
 
 class ShortRadarTaskHandler extends TaskHandler {
-  int _lastNotifiedMinute = -1;
   late FlutterLocalNotificationsPlugin _localNotifications;
-
-  CoinRadarData _fallbackCoin() {
-    return const CoinRadarData(
-      name: 'BTC_USDT',
-      changePercent: 0,
-      fundingRate: 0,
-      lastPrice: 0,
-      markPrice: 0,
-      indexPrice: 0,
-      volume24h: 0,
-      openInterest: 0,
-      oiDirection: 'FLAT',
-      score: 0,
-      biasLabel: '-',
-      note: '',
-    );
-  }
 
   @override
   Future<void> onStart(DateTime timestamp, SendPort? sendPort) async {
     _localNotifications = FlutterLocalNotificationsPlugin();
 
-    const AndroidInitializationSettings androidSettings =
+    const androidSettings =
         AndroidInitializationSettings('@mipmap/ic_launcher');
 
-    const InitializationSettings initSettings =
-        InitializationSettings(android: androidSettings);
+    const initSettings = InitializationSettings(android: androidSettings);
 
     await _localNotifications.initialize(initSettings);
   }
@@ -119,57 +102,78 @@ class ShortRadarTaskHandler extends TaskHandler {
 
   Future<void> _checkMarket() async {
     try {
-      final bundle = await DetailDataService.load(
-        contractName: 'BTC_USDT',
-        selectedInterval: '5m',
-        fallbackCoin: _fallbackCoin(),
+      final response = await http.get(
+        Uri.parse('https://fx-api.gateio.ws/api/v4/futures/usdt/tickers'),
+        headers: {'Accept': 'application/json'},
       );
 
-      final decision = DecisionEngine().build(
-        oiPriceSignal: 'NEUTRAL',
-        oiDirection: bundle.selectedCoin.oiDirection,
-        priceDirection: 'FLAT',
-        orderFlowDirection: 'NEUTRAL',
-        pumpAnalysis: bundle.pumpAnalysis,
-        entryTiming: bundle.entryTiming,
-        setupResult: bundle.setupResult,
-        visibleCandles: bundle.visibleCandles,
-      );
+      if (response.statusCode != 200) return;
 
-      final int nowMinute = DateTime.now().minute;
+      final List<dynamic> parsed = json.decode(response.body);
 
-      if (decision.action == 'ENTER SHORT' &&
-          decision.finalScore >= 85 &&
-          _lastNotifiedMinute != nowMinute) {
-        _lastNotifiedMinute = nowMinute;
-        await _sendNotification(decision);
+      final List<CoinRadarData> rawCoins = parsed
+          .whereType<Map<String, dynamic>>()
+          .where((e) => (e['contract'] ?? '').toString().isNotEmpty)
+          .map(CoinRadarData.fromJson)
+          .toList();
+
+      if (rawCoins.isEmpty) return;
+
+      // 🔥 HOME PAGE LOGIC
+      final List<CoinRadarData> sorted = [...rawCoins]
+        ..sort((a, b) => b.changePercent.compareTo(a.changePercent));
+
+      final List<CoinRadarData> top10 = sorted.take(10).toList();
+
+      for (final coin in top10) {
+        try {
+          final bundle = await DetailDataService.load(
+            contractName: coin.name,
+            selectedInterval: '5m',
+            fallbackCoin: coin,
+          );
+
+          final decision = DecisionEngine().build(
+            oiPriceSignal: 'NEUTRAL',
+            oiDirection: bundle.selectedCoin.oiDirection,
+            priceDirection: 'FLAT',
+            orderFlowDirection: 'NEUTRAL',
+            pumpAnalysis: bundle.pumpAnalysis,
+            entryTiming: bundle.entryTiming,
+            setupResult: bundle.setupResult,
+            visibleCandles: bundle.visibleCandles,
+          );
+
+          // 🎯 TEK KURAL
+          if (decision.finalScore >= 85) {
+            await _sendNotification(coin.name, decision.finalScore);
+          }
+        } catch (_) {}
       }
     } catch (e) {
-      debugPrint('BACKGROUND ERROR: $e');
+      debugPrint("BACKGROUND ERROR: $e");
     }
   }
 
-  Future<void> _sendNotification(dynamic decision) async {
+  Future<void> _sendNotification(String coin, double score) async {
     try {
-      const AndroidNotificationDetails androidDetails =
-          AndroidNotificationDetails(
+      const androidDetails = AndroidNotificationDetails(
         'short_alert_channel',
         'Short Alerts',
         importance: Importance.max,
         priority: Priority.high,
       );
 
-      const NotificationDetails details =
-          NotificationDetails(android: androidDetails);
+      const details = NotificationDetails(android: androidDetails);
 
       await _localNotifications.show(
         DateTime.now().millisecondsSinceEpoch ~/ 1000,
         '🔥 SHORT FIRSAT',
-        '${decision.scoreClass} • ${decision.finalScore.toStringAsFixed(0)}',
+        '$coin • Score ${score.toStringAsFixed(0)}',
         details,
       );
     } catch (e) {
-      debugPrint('NOTIFICATION ERROR: $e');
+      debugPrint("NOTIFICATION ERROR: $e");
     }
   }
 
