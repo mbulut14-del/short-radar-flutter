@@ -13,8 +13,8 @@ import 'pages/home_page.dart';
 import 'pages/detail_page.dart';
 
 import 'models/coin_radar_data.dart';
-import 'models/final_trade_decision.dart';
 
+import 'services/final_trade_decision_service.dart';
 import 'services/unified_coin_analysis_service.dart';
 
 late final FlutterLocalNotificationsPlugin notificationsPlugin;
@@ -555,8 +555,9 @@ class ShortRadarTaskHandler extends TaskHandler {
           'Son iki ölçüm tam güçte hizalanmadı.',
         ...latest.warnings,
       ],
-      secondaryItems:
-          decisions.length > 2 ? decisions[decisions.length - 2].warnings : const [],
+      secondaryItems: decisions.length > 2
+          ? decisions[decisions.length - 2].warnings
+          : const [],
       maxItems: 6,
     );
 
@@ -565,8 +566,9 @@ class ShortRadarTaskHandler extends TaskHandler {
         'Karar her 5 saniyede değil, 3 dakikalık ortalama akışla güncellenir.',
         ...latest.entryNotes,
       ],
-      secondaryItems:
-          decisions.length > 2 ? decisions[decisions.length - 2].entryNotes : const [],
+      secondaryItems: decisions.length > 2
+          ? decisions[decisions.length - 2].entryNotes
+          : const [],
       maxItems: 6,
     );
 
@@ -809,7 +811,8 @@ class ShortRadarTaskHandler extends TaskHandler {
           return b.changePercent.compareTo(a.changePercent);
         });
 
-      final List<CoinRadarData> alertCandidates = sortedByScore.take(10).toList();
+      final List<CoinRadarData> alertCandidates =
+          sortedByScore.take(10).toList();
 
       _desiredBookTickerSymbols
         ..clear()
