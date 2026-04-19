@@ -201,6 +201,32 @@ class DecisionEngine {
       if (last.close < last.open) score += 6;
       if (prev.close < prev.open) score += 4;
       if (prev2.close < prev2.open) score += 3;
+
+      final bool lastRed = last.close < last.open;
+      final bool prevRed = prev.close < prev.open;
+      final bool prevGreen = prev.close > prev.open;
+
+      final bool lowerHigh = last.high < prev.high;
+      final bool lowerClose = last.close < prev.close;
+
+      if (lowerHigh && lastRed) {
+        score += 8;
+      }
+
+      if (prevGreen && lastRed) {
+        score += 6;
+      }
+
+      if (prevRed && lastRed && lowerClose) {
+        score += 6;
+      }
+
+      final double prevBody = (prev.close - prev.open).abs();
+      final double lastBody = (last.close - last.open).abs();
+
+      if (lastRed && prevGreen && lastBody > prevBody * 0.8) {
+        score += 4;
+      }
     }
 
     return _clampScore(score);
@@ -344,6 +370,10 @@ class DecisionEngine {
 
     final bool breakdownConfirmed = _isBreakdownConfirmed(visibleCandles);
 
+    if (!breakdownConfirmed && finalScore >= 80) {
+      return 'PREPARE SHORT';
+    }
+
     if (finalScore >= 85 && confidence >= 68) {
       return breakdownConfirmed ? 'ENTER SHORT' : 'PREPARE SHORT';
     }
@@ -396,7 +426,7 @@ class DecisionEngine {
       orderFlowDirection: orderFlowDirection,
     );
 
-    final double finalScore = _weightedFinalScore(
+    final double rawFinalScore = _weightedFinalScore(
       oiScore: oiScore,
       priceScore: priceScore,
       orderFlowScore: orderFlowScore,
@@ -421,9 +451,17 @@ class DecisionEngine {
 
     final bool breakdownConfirmed = _isBreakdownConfirmed(visibleCandles);
 
-    final String scoreClass = _scoreClassFromScore(finalScore);
+    double adjustedScore = rawFinalScore;
+
+    if (tradeBias == 'SHORT' && !breakdownConfirmed) {
+      adjustedScore = adjustedScore > 75 ? 75 : adjustedScore;
+    }
+
+    adjustedScore = _clampScore(adjustedScore);
+
+    final String scoreClass = _scoreClassFromScore(adjustedScore);
     final String action = _actionFromDecision(
-      finalScore: finalScore,
+      finalScore: adjustedScore,
       confidence: confidence,
       tradeBias: tradeBias,
       oiPriceSignal: oiPriceSignal,
@@ -470,7 +508,7 @@ class DecisionEngine {
       if (action == 'ENTER SHORT')
         'Kurulum güçlü; yapı kırılımı da geldiği için aktif short fırsatı gösteriliyor.'
       else if (action == 'PREPARE SHORT' &&
-          finalScore >= 85 &&
+          adjustedScore >= 85 &&
           confidence >= 68 &&
           !breakdownConfirmed)
         'Kurulum güçlü ama yapı kırılımı teyidi gelmeden aktif girişe geçilmedi.'
@@ -495,7 +533,7 @@ class DecisionEngine {
     ];
 
     final String summary = _buildDecisionSummary(
-      finalScore: finalScore,
+      finalScore: adjustedScore,
       scoreClass: scoreClass,
       confidence: confidence,
       primarySignal: oiPriceSignal,
@@ -504,7 +542,7 @@ class DecisionEngine {
     );
 
     return FinalTradeDecision(
-      finalScore: finalScore,
+      finalScore: adjustedScore,
       scoreClass: scoreClass,
       confidence: confidence,
       primarySignal: oiPriceSignal,
