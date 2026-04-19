@@ -943,6 +943,8 @@ class UnifiedCoinAnalysisService {
     required double confidence,
     required String tradeBias,
     required String oiPriceSignal,
+    required String priceDirection,
+    required String orderFlowDirection,
     required bool structureDetected,
     required double structureScore,
     required bool firstBreakDetected,
@@ -953,10 +955,30 @@ class UnifiedCoinAnalysisService {
       return 'WATCH';
     }
 
+    if (priceDirection == 'UP' && orderFlowDirection == 'BUY_PRESSURE') {
+      return 'WATCH';
+    }
+
+    if (oiPriceSignal == 'SHORT_SQUEEZE' ||
+        oiPriceSignal == 'EARLY_ACCUMULATION') {
+      return 'WATCH';
+    }
+
+    if (oiPriceSignal == 'NEUTRAL' &&
+        entryEngine.phase != 'BREAK_READY' &&
+        !firstBreakDetected) {
+      return 'WATCH';
+    }
+
     if (entryEngine.phase == 'BREAK_READY' &&
         entryEngine.breakdownConfirmations >= 2 &&
         tradeBias == 'SHORT' &&
         confidence >= 60) {
+      if (priceDirection == 'UP' ||
+          orderFlowDirection == 'BUY_PRESSURE' ||
+          oiPriceSignal == 'NEUTRAL') {
+        return 'PREPARE SHORT';
+      }
       return 'ENTER SHORT';
     }
 
@@ -965,6 +987,11 @@ class UnifiedCoinAnalysisService {
     }
 
     if (firstBreakScore >= 80 && tradeBias == 'SHORT') {
+      if (priceDirection == 'UP' ||
+          orderFlowDirection == 'BUY_PRESSURE' ||
+          oiPriceSignal == 'NEUTRAL') {
+        return 'PREPARE SHORT';
+      }
       return 'ENTER SHORT';
     }
 
@@ -1004,8 +1031,11 @@ class UnifiedCoinAnalysisService {
     }
 
     if (oiPriceSignal == 'SHORT_SQUEEZE' ||
-        oiPriceSignal == 'EARLY_ACCUMULATION') {
-      return 'WATCH';
+        oiPriceSignal == 'EARLY_ACCUMULATION' ||
+        oiPriceSignal == 'NEUTRAL' ||
+        priceDirection == 'UP' ||
+        orderFlowDirection == 'BUY_PRESSURE') {
+      return 'PREPARE SHORT';
     }
 
     return 'ENTER SHORT';
@@ -1527,6 +1557,8 @@ class UnifiedCoinAnalysisService {
       confidence: confidence,
       tradeBias: tradeBias,
       oiPriceSignal: oiPriceSignal,
+      priceDirection: priceDirection,
+      orderFlowDirection: orderFlowDirection,
       structureDetected: structureDetected,
       structureScore: structureScore,
       firstBreakDetected: firstBreakDetected,
@@ -1552,6 +1584,28 @@ class UnifiedCoinAnalysisService {
         entryEngine.phase != 'INVALIDATED' &&
         entryEngine.phase != 'WEAKNESS_TRACKING') {
       action = 'PREPARE SHORT';
+    }
+
+    final bool invalidAggressiveShort =
+        oiPriceSignal == 'NEUTRAL' ||
+        oiPriceSignal == 'SHORT_SQUEEZE' ||
+        oiPriceSignal == 'EARLY_ACCUMULATION' ||
+        priceDirection == 'UP' ||
+        orderFlowDirection == 'BUY_PRESSURE';
+
+    if (invalidAggressiveShort && action == 'ENTER SHORT') {
+      action = 'PREPARE SHORT';
+    }
+
+    if (invalidAggressiveShort &&
+        action == 'PREPARE SHORT' &&
+        entryEngine.phase != 'BREAK_READY' &&
+        !firstBreakDetected) {
+      action = 'WATCH';
+    }
+
+    if (tradeBias != 'SHORT' && action == 'ENTER SHORT') {
+      action = 'WATCH';
     }
 
     final List<String> marketReadBullets = _buildMarketReadBullets(
@@ -1758,6 +1812,25 @@ class UnifiedCoinAnalysisService {
     );
   }
 
+  static bool _shouldResetOnReversal(FinalTradeDecision rawDecision) {
+    if (rawDecision.tradeBias != 'SHORT') return true;
+    if (rawDecision.action == 'WATCH' || rawDecision.action == 'NO TRADE') {
+      return true;
+    }
+    if (rawDecision.primarySignal == 'NEUTRAL' ||
+        rawDecision.primarySignal == 'SHORT_SQUEEZE' ||
+        rawDecision.primarySignal == 'EARLY_ACCUMULATION') {
+      return true;
+    }
+    final String warningsText = rawDecision.warnings.join(' ').toLowerCase();
+    if (warningsText.contains('short squeeze') ||
+        warningsText.contains('yukarı toparlama') ||
+        warningsText.contains('order flow çelişiyor')) {
+      return true;
+    }
+    return false;
+  }
+
   static FinalTradeDecision _resolveDecisionForDisplay(
     String symbol,
     FinalTradeDecision rawDecision,
@@ -1768,6 +1841,13 @@ class UnifiedCoinAnalysisService {
     final FinalTradeDecision? cachedDecision =
         _cachedDisplayDecisionFor(symbol);
     final DateTime? lastDecisionAt = _lastDecisionAtFor(symbol);
+
+    if (_shouldResetOnReversal(rawDecision)) {
+      _decisionBufferFor(symbol).clear();
+      _setLastDecisionAtFor(symbol, now);
+      _setCachedDisplayDecisionFor(symbol, rawDecision);
+      return rawDecision;
+    }
 
     if (cachedDecision == null || lastDecisionAt == null) {
       _setLastDecisionAtFor(symbol, now);
@@ -1798,7 +1878,7 @@ class UnifiedCoinAnalysisService {
     required String priceDirection,
     required String oiPriceSignal,
     required String orderFlowDirection,
-    String selectedInterval = '1h',
+    String selectedInterval = '3m',
     String? combinedSignal,
     String? stableCombinedSignal,
   }) async {
