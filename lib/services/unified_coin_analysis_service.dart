@@ -959,8 +959,7 @@ class UnifiedCoinAnalysisService {
       return 'WATCH';
     }
 
-    if (oiPriceSignal == 'SHORT_SQUEEZE' ||
-        oiPriceSignal == 'EARLY_ACCUMULATION') {
+    if (oiPriceSignal == 'SHORT_SQUEEZE' || oiPriceSignal == 'EARLY_ACCUMULATION') {
       return 'WATCH';
     }
 
@@ -974,9 +973,10 @@ class UnifiedCoinAnalysisService {
         entryEngine.breakdownConfirmations >= 2 &&
         tradeBias == 'SHORT' &&
         confidence >= 60) {
-      if (priceDirection == 'UP' ||
-          orderFlowDirection == 'BUY_PRESSURE' ||
-          oiPriceSignal == 'NEUTRAL') {
+      if (priceDirection == 'UP' || orderFlowDirection == 'BUY_PRESSURE') {
+        return 'PREPARE SHORT';
+      }
+      if (oiPriceSignal == 'NEUTRAL') {
         return 'PREPARE SHORT';
       }
       return 'ENTER SHORT';
@@ -987,11 +987,6 @@ class UnifiedCoinAnalysisService {
     }
 
     if (firstBreakScore >= 80 && tradeBias == 'SHORT') {
-      if (priceDirection == 'UP' ||
-          orderFlowDirection == 'BUY_PRESSURE' ||
-          oiPriceSignal == 'NEUTRAL') {
-        return 'PREPARE SHORT';
-      }
       return 'ENTER SHORT';
     }
 
@@ -1031,11 +1026,8 @@ class UnifiedCoinAnalysisService {
     }
 
     if (oiPriceSignal == 'SHORT_SQUEEZE' ||
-        oiPriceSignal == 'EARLY_ACCUMULATION' ||
-        oiPriceSignal == 'NEUTRAL' ||
-        priceDirection == 'UP' ||
-        orderFlowDirection == 'BUY_PRESSURE') {
-      return 'PREPARE SHORT';
+        oiPriceSignal == 'EARLY_ACCUMULATION') {
+      return 'WATCH';
     }
 
     return 'ENTER SHORT';
@@ -1586,28 +1578,6 @@ class UnifiedCoinAnalysisService {
       action = 'PREPARE SHORT';
     }
 
-    final bool invalidAggressiveShort =
-        oiPriceSignal == 'NEUTRAL' ||
-        oiPriceSignal == 'SHORT_SQUEEZE' ||
-        oiPriceSignal == 'EARLY_ACCUMULATION' ||
-        priceDirection == 'UP' ||
-        orderFlowDirection == 'BUY_PRESSURE';
-
-    if (invalidAggressiveShort && action == 'ENTER SHORT') {
-      action = 'PREPARE SHORT';
-    }
-
-    if (invalidAggressiveShort &&
-        action == 'PREPARE SHORT' &&
-        entryEngine.phase != 'BREAK_READY' &&
-        !firstBreakDetected) {
-      action = 'WATCH';
-    }
-
-    if (tradeBias != 'SHORT' && action == 'ENTER SHORT') {
-      action = 'WATCH';
-    }
-
     final List<String> marketReadBullets = _buildMarketReadBullets(
       oiDirection: oiDirection,
       priceDirection: priceDirection,
@@ -1872,6 +1842,130 @@ class UnifiedCoinAnalysisService {
     return filteredDecision;
   }
 
+
+  static double _candleBody(CandleData candle) {
+    return (candle.close - candle.open).abs();
+  }
+
+  static bool _isLateShortSetup({
+    required FinalTradeDecision decision,
+    required String priceDirection,
+    required String oiPriceSignal,
+    required List<CandleData> candles,
+  }) {
+    if (decision.tradeBias != 'SHORT') return false;
+    if (decision.finalScore < 75) return false;
+    if (candles.length < 6) return false;
+
+    final List<CandleData> recent = candles.length > 6
+        ? candles.sublist(candles.length - 6)
+        : candles;
+
+    final double highestHigh = recent
+        .map((c) => c.high)
+        .reduce((a, b) => a > b ? a : b);
+
+    final double lowestLow = recent
+        .map((c) => c.low)
+        .reduce((a, b) => a < b ? a : b);
+
+    if (highestHigh <= 0) return false;
+
+    final double dropPercent = ((highestHigh - lowestLow) / highestHigh) * 100;
+
+    int redCount = 0;
+    for (final candle in recent) {
+      if (candle.close < candle.open) {
+        redCount += 1;
+      }
+    }
+
+    final CandleData last = recent[recent.length - 1];
+    final CandleData prev = recent[recent.length - 2];
+    final CandleData prev2 = recent[recent.length - 3];
+
+    final double lastBody = _candleBody(last);
+    final double prevBody = _candleBody(prev);
+    final double prev2Body = _candleBody(prev2);
+
+    final bool bodyCompression =
+        lastBody <= prevBody * 0.80 && lastBody <= prev2Body * 0.80;
+
+    final bool noFreshBreakdown =
+        last.low >= prev.low || last.close >= prev.close;
+
+    final bool reboundOrFlat =
+        last.close >= last.open || last.close >= prev.close;
+
+    final bool neutralizedSignal =
+        oiPriceSignal == 'NEUTRAL' ||
+        oiPriceSignal == 'SHORT_SQUEEZE' ||
+        oiPriceSignal == 'EARLY_ACCUMULATION' ||
+        priceDirection == 'UP';
+
+    return dropPercent >= 5.0 &&
+        redCount >= 3 &&
+        bodyCompression &&
+        noFreshBreakdown &&
+        reboundOrFlat &&
+        neutralizedSignal;
+  }
+
+  static FinalTradeDecision _suppressLateShortDecision(
+    FinalTradeDecision decision,
+  ) {
+    final double reducedScore =
+        decision.finalScore >= 55 ? 48 : decision.finalScore;
+
+    final String scoreClass = _scoreClassFromScore(reducedScore);
+
+    final List<String> warnings = _mergeUniqueLists(
+      priorityItems: const <String>[
+        'Short hareketinin büyük kısmı zaten gerçekleşmiş görünüyor.',
+        'Geç kalmış setup olduğu için bildirim filtresi devreye girdi.',
+      ],
+      secondaryItems: decision.warnings,
+      maxItems: 6,
+    );
+
+    final List<String> entryNotes = _mergeUniqueLists(
+      priorityItems: const <String>[
+        'Mevcut görüntü geç kalmış short bölgesi olabilir; yeni giriş yerine izleme tercih edilir.',
+      ],
+      secondaryItems: decision.entryNotes,
+      maxItems: 6,
+    );
+
+    final String summary = _buildDecisionSummary(
+      finalScore: reducedScore,
+      scoreClass: scoreClass,
+      confidence: decision.confidence,
+      primarySignal: decision.primarySignal,
+      tradeBias: 'NEUTRAL',
+      action: 'WATCH',
+    );
+
+    return FinalTradeDecision(
+      finalScore: reducedScore,
+      scoreClass: scoreClass,
+      confidence: decision.confidence,
+      primarySignal: decision.primarySignal,
+      tradeBias: 'NEUTRAL',
+      action: 'WATCH',
+      summary: summary,
+      oiScore: decision.oiScore,
+      priceScore: decision.priceScore,
+      orderFlowScore: decision.orderFlowScore,
+      volumeScore: decision.volumeScore,
+      liquidationScore: decision.liquidationScore,
+      momentumScore: decision.momentumScore,
+      marketReadBullets: decision.marketReadBullets,
+      entryNotes: entryNotes,
+      warnings: warnings,
+      triggerConditions: decision.triggerConditions,
+    );
+  }
+
   static Future<UnifiedCoinAnalysisResult> analyze({
     required CoinRadarData coin,
     required String oiDirection,
@@ -1900,10 +1994,19 @@ class UnifiedCoinAnalysisService {
       visibleCandles: bundle.visibleCandles,
     );
 
-    final FinalTradeDecision displayDecision = _resolveDecisionForDisplay(
+    FinalTradeDecision displayDecision = _resolveDecisionForDisplay(
       coin.name,
       rawDecision,
     );
+
+    if (_isLateShortSetup(
+      decision: displayDecision,
+      priceDirection: priceDirection,
+      oiPriceSignal: oiPriceSignal,
+      candles: bundle.visibleCandles,
+    )) {
+      displayDecision = _suppressLateShortDecision(displayDecision);
+    }
 
     return UnifiedCoinAnalysisResult(
       coin: bundle.selectedCoin,
