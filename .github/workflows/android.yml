@@ -75,6 +75,33 @@ jobs:
                   )
               return text
 
+          def ensure_service(text):
+              service_name = 'com.pravera.flutter_foreground_task.service.ForegroundService'
+
+              if service_name in text:
+                  text = re.sub(
+                      r'<service\s+android:name="com\.pravera\.flutter_foreground_task\.service\.ForegroundService"[^>]*?/>',
+                      (
+                          '<service\n'
+                          '            android:name="com.pravera.flutter_foreground_task.service.ForegroundService"\n'
+                          '            android:exported="false"\n'
+                          '            android:foregroundServiceType="dataSync" />'
+                      ),
+                      text,
+                      flags=re.DOTALL,
+                  )
+                  return text
+
+              service_block = (
+                  '        <service\n'
+                  '            android:name="com.pravera.flutter_foreground_task.service.ForegroundService"\n'
+                  '            android:exported="false"\n'
+                  '            android:foregroundServiceType="dataSync" />\n'
+              )
+
+              text = text.replace('</application>', f'{service_block}    </application>', 1)
+              return text
+
           # settings.gradle
           replace_if_exists(
               "android/settings.gradle",
@@ -154,6 +181,7 @@ jobs:
               text = ensure_permission(text, "android.permission.INTERNET")
               text = ensure_permission(text, "android.permission.POST_NOTIFICATIONS")
               text = ensure_permission(text, "android.permission.FOREGROUND_SERVICE")
+              text = ensure_permission(text, "android.permission.FOREGROUND_SERVICE_DATA_SYNC")
               text = ensure_permission(text, "android.permission.WAKE_LOCK")
               text = ensure_permission(text, "android.permission.RECEIVE_BOOT_COMPLETED")
 
@@ -162,6 +190,9 @@ jobs:
                   'android:label="short_radar_flutter"',
                   'android:label="Short Radar Pro"'
               )
+
+              # flutter_foreground_task servisi
+              text = ensure_service(text)
 
               manifest.write_text(text, encoding="utf-8")
           PY
