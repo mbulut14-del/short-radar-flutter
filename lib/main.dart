@@ -102,7 +102,7 @@ class BackgroundSignalSnapshot {
 class ShortRadarTaskHandler extends TaskHandler {
   late FlutterLocalNotificationsPlugin _localNotifications;
 
-  final Map<String, DateTime> _lastNotificationTimes = {};
+  final Map<String, DateTime> _lastNotifyTimes = {};
   final Map<String, FinalTradeDecision> _centralDecisionMap = {};
 
   final Map<String, List<double>> _oiHistory = {};
@@ -126,19 +126,20 @@ class ShortRadarTaskHandler extends TaskHandler {
   final Map<String, DateTime?> _lastDecisionTimes = {};
   final Map<String, FinalTradeDecision?> _lastDisplayDecisions = {};
 
-  final Set<String> _desiredBookTickerSymbols = <String>{};
-  final Set<String> _subscribedBookTickerSymbols = <String>{};
-
   WebSocket? _bookTickerSocket;
   StreamSubscription<dynamic>? _bookTickerSubscription;
   Timer? _bookTickerReconnectTimer;
   bool _isConnectingBookTicker = false;
   bool _manuallyClosedBookTicker = false;
+
+  final Set<String> _desiredBookTickerSymbols = <String>{};
+  final Set<String> _subscribedBookTickerSymbols = <String>{};
+
   bool _isCheckingMarket = false;
 
   static const int _historyLimit = 360;
   static const String _gateUsdtWsUrl = 'wss://fx-ws.gateio.ws/v4/ws/usdt';
-  static const int _alertScoreThreshold = 85;
+  static const int _alertScoreThreshold = 75;
   static const Duration _alertCooldown = Duration(minutes: 15);
   static const int _stableSignalRequiredRepeats = 2;
   static const Duration _dataRefreshInterval = Duration(seconds: 5);
@@ -169,81 +170,6 @@ class ShortRadarTaskHandler extends TaskHandler {
     _bookTickerSubscription?.cancel();
     _manuallyClosedBookTicker = true;
     _bookTickerSocket?.close();
-  }
-
-  Future<void> _checkMarket() async {
-    if (_isCheckingMarket) return;
-    _isCheckingMarket = true;
-
-    try {
-      final response = await http.get(
-        Uri.parse('https://fx-api.gateio.ws/api/v4/futures/usdt/tickers'),
-        headers: {'Accept': 'application/json'},
-      );
-
-      if (response.statusCode != 200) return;
-
-      final List<dynamic> parsed = json.decode(response.body);
-
-      final List<CoinRadarData> rawCoins = parsed
-          .whereType<Map<String, dynamic>>()
-          .where((e) => (e['contract'] ?? '').toString().isNotEmpty)
-          .map(CoinRadarData.fromJson)
-          .toList();
-
-      if (rawCoins.isEmpty) return;
-
-      final Map<String, BackgroundSignalSnapshot> snapshots = {};
-      final List<CoinRadarData> preparedCoins = rawCoins.map((coin) {
-        _updateOiHistory(coin.name, coin.openInterest);
-        _updatePriceHistory(coin.name, coin.lastPrice);
-
-        _updateOrderFlowForSymbol(coin.name);
-
-        final BackgroundSignalSnapshot snapshot =
-            _buildSignalSnapshot(coin.name);
-        snapshots[coin.name] = snapshot;
-
-        return _withOiDirection(coin, snapshot.oiDirection);
-      }).toList();
-
-      final List<CoinRadarData> sortedByChange = [...preparedCoins]
-        ..sort((a, b) => b.changePercent.compareTo(a.changePercent));
-
-      final List<CoinRadarData> preliminaryTopCoins =
-          sortedByChange.take(10).toList();
-
-      final List<CoinRadarData> topCoins = await Future.wait(
-        preliminaryTopCoins.map(
-          (coin) => _enrichCoinWithCentralDecision(
-            coin,
-            snapshots[coin.name]!,
-          ),
-        ),
-      );
-
-      final List<CoinRadarData> sortedByScore = [...topCoins]
-        ..sort((a, b) {
-          final int scoreCompare = b.score.compareTo(a.score);
-          if (scoreCompare != 0) return scoreCompare;
-          return b.changePercent.compareTo(a.changePercent);
-        });
-
-      final List<CoinRadarData> alertCandidates =
-          sortedByScore.take(10).toList();
-
-      _desiredBookTickerSymbols
-        ..clear()
-        ..addAll(topCoins.map((e) => e.name));
-
-      _syncBookTickerSubscriptions();
-
-      await _checkAndSendAlerts(alertCandidates);
-    } catch (e) {
-      debugPrint('BACKGROUND ERROR: $e');
-    } finally {
-      _isCheckingMarket = false;
-    }
   }
 
   void _updateOiHistory(String symbol, double oi) {
@@ -617,8 +543,9 @@ class ShortRadarTaskHandler extends TaskHandler {
         'Karar 3 dakikalık filtrelenmiş veri penceresine göre üretildi.',
         ...latest.marketReadBullets,
       ],
-      secondaryItems:
-          decisions.length > 2 ? decisions[decisions.length - 2].marketReadBullets : const [],
+      secondaryItems: decisions.length > 2
+          ? decisions[decisions.length - 2].marketReadBullets
+          : const [],
       maxItems: 7,
     );
 
@@ -645,10 +572,9 @@ class ShortRadarTaskHandler extends TaskHandler {
 
     final List<String> triggerConditions = _mergeUniqueLists(
       priorityItems: latest.triggerConditions,
-      secondaryItems:
-          decisions.length > 2
-              ? decisions[decisions.length - 2].triggerConditions
-              : const [],
+      secondaryItems: decisions.length > 2
+          ? decisions[decisions.length - 2].triggerConditions
+          : const [],
       maxItems: 5,
     );
 
@@ -728,9 +654,8 @@ class ShortRadarTaskHandler extends TaskHandler {
         orderFlowDirection: snapshot.orderFlowDirection,
       );
 
-      final FinalTradeDecision rawDecision = result.displayDecision;
       final FinalTradeDecision displayDecision =
-          _resolveDecisionForDisplay(coin.name, rawDecision);
+          _resolveDecisionForDisplay(coin.name, result.displayDecision);
 
       _centralDecisionMap[coin.name] = displayDecision;
 
@@ -748,9 +673,7 @@ class ShortRadarTaskHandler extends TaskHandler {
         biasLabel: displayDecision.scoreClass,
         note: displayDecision.summary,
       );
-    } catch (e) {
-      debugPrint('BACKGROUND DECISION ERROR [${coin.name}]: $e');
-
+    } catch (_) {
       return CoinRadarData(
         name: coin.name,
         changePercent: coin.changePercent,
@@ -768,86 +691,137 @@ class ShortRadarTaskHandler extends TaskHandler {
     }
   }
 
-  bool _canSendNotification(String symbol) {
-    final now = DateTime.now();
-    final lastTime = _lastNotificationTimes[symbol];
-
-    if (lastTime == null) {
-      _lastNotificationTimes[symbol] = now;
-      return true;
-    }
-
-    if (now.difference(lastTime) >= _alertCooldown) {
-      _lastNotificationTimes[symbol] = now;
-      return true;
-    }
-
-    return false;
-  }
-
   bool _shouldAlertCoin(CoinRadarData coin) {
     final String stableCombinedSignal =
         _stableCombinedSignalMap[coin.name] ?? 'NEUTRAL';
     final String orderFlowDirection = _orderFlowMap[coin.name] ?? 'NEUTRAL';
-    final FinalTradeDecision? decision = _centralDecisionMap[coin.name];
+    final DateTime now = DateTime.now();
+    final DateTime? lastTime = _lastNotifyTimes[coin.name];
 
     if (coin.score < _alertScoreThreshold) return false;
     if (coin.fundingRate <= 0) return false;
     if (orderFlowDirection == 'BUY_PRESSURE') return false;
     if (stableCombinedSignal == 'SHORT_SQUEEZE') return false;
     if (stableCombinedSignal == 'NEUTRAL') return false;
-    if (decision == null) return false;
-    if (decision.tradeBias != 'SHORT') return false;
-    if (decision.action != 'PREPARE SHORT' &&
-        decision.action != 'ENTER SHORT') {
+
+    if (lastTime != null && now.difference(lastTime) < _alertCooldown) {
       return false;
     }
 
-    return _canSendNotification(coin.name);
+    return true;
   }
 
-  Future<void> _sendNotification(
-    CoinRadarData coin,
-    FinalTradeDecision decision,
-  ) async {
-    try {
-      const androidDetails = AndroidNotificationDetails(
-        'short_alert_channel',
-        'Short Alerts',
-        channelDescription: 'Short radar fırsat bildirimleri',
-        importance: Importance.max,
-        priority: Priority.high,
-        enableVibration: true,
-        playSound: true,
-        ticker: 'short-alert',
-      );
+  Future<void> _notifyForCoin(CoinRadarData coin) async {
+    final String stableCombinedSignal =
+        _stableCombinedSignalMap[coin.name] ?? 'NEUTRAL';
+    final String orderFlowDirection = _orderFlowMap[coin.name] ?? 'NEUTRAL';
 
-      const details = NotificationDetails(android: androidDetails);
+    _lastNotifyTimes[coin.name] = DateTime.now();
 
-      final String body =
-          '${coin.name} • Score ${coin.score} • ${decision.action} • ${decision.primarySignal}';
+    const AndroidNotificationDetails androidDetails =
+        AndroidNotificationDetails(
+      'short_channel',
+      'Short Alerts',
+      channelDescription: 'Short radar fırsat bildirimleri',
+      importance: Importance.max,
+      priority: Priority.high,
+      enableVibration: true,
+      playSound: true,
+      ticker: 'short-alert',
+    );
 
-      await _localNotifications.show(
-        coin.name.hashCode,
-        decision.action == 'ENTER SHORT'
-            ? '🔥 SHORT GİRİŞ FIRSATI'
-            : '⚠️ SHORT HAZIRLIK',
-        body,
-        details,
-      );
-    } catch (e) {
-      debugPrint('NOTIFICATION ERROR: $e');
-    }
+    const NotificationDetails details =
+        NotificationDetails(android: androidDetails);
+
+    final String body =
+        '${coin.name} • skor ${coin.score} • $stableCombinedSignal • $orderFlowDirection';
+
+    await _localNotifications.show(
+      coin.name.hashCode,
+      'Short setup hazır olabilir 🚨',
+      body,
+      details,
+    );
   }
 
   Future<void> _checkAndSendAlerts(List<CoinRadarData> candidates) async {
     for (final coin in candidates) {
-      final FinalTradeDecision? decision = _centralDecisionMap[coin.name];
-      if (decision == null) continue;
-
       if (_shouldAlertCoin(coin)) {
-        await _sendNotification(coin, decision);
+        await _notifyForCoin(coin);
       }
+    }
+  }
+
+  Future<void> _checkMarket() async {
+    if (_isCheckingMarket) return;
+    _isCheckingMarket = true;
+
+    try {
+      final response = await http.get(
+        Uri.parse('https://fx-api.gateio.ws/api/v4/futures/usdt/tickers'),
+        headers: {'Accept': 'application/json'},
+      );
+
+      if (response.statusCode != 200) return;
+
+      final List<dynamic> parsed = json.decode(response.body);
+
+      final List<CoinRadarData> rawCoins = parsed
+          .whereType<Map<String, dynamic>>()
+          .where((e) => (e['contract'] ?? '').toString().isNotEmpty)
+          .map(CoinRadarData.fromJson)
+          .toList();
+
+      if (rawCoins.isEmpty) return;
+
+      final Map<String, BackgroundSignalSnapshot> snapshots = {};
+      final List<CoinRadarData> preparedCoins = rawCoins.map((coin) {
+        _updateOiHistory(coin.name, coin.openInterest);
+        _updatePriceHistory(coin.name, coin.lastPrice);
+
+        _updateOrderFlowForSymbol(coin.name);
+        final BackgroundSignalSnapshot snapshot =
+            _buildSignalSnapshot(coin.name);
+        snapshots[coin.name] = snapshot;
+
+        return _withOiDirection(coin, snapshot.oiDirection);
+      }).toList();
+
+      final List<CoinRadarData> sortedByChange = [...preparedCoins]
+        ..sort((a, b) => b.changePercent.compareTo(a.changePercent));
+
+      final List<CoinRadarData> preliminaryTopCoins =
+          sortedByChange.take(10).toList();
+
+      final List<CoinRadarData> topCoins = await Future.wait(
+        preliminaryTopCoins.map(
+          (coin) => _enrichCoinWithCentralDecision(
+            coin,
+            snapshots[coin.name]!,
+          ),
+        ),
+      );
+
+      final List<CoinRadarData> sortedByScore = [...topCoins]
+        ..sort((a, b) {
+          final int scoreCompare = b.score.compareTo(a.score);
+          if (scoreCompare != 0) return scoreCompare;
+          return b.changePercent.compareTo(a.changePercent);
+        });
+
+      final List<CoinRadarData> alertCandidates = sortedByScore.take(10).toList();
+
+      _desiredBookTickerSymbols
+        ..clear()
+        ..addAll(topCoins.map((e) => e.name));
+
+      _syncBookTickerSubscriptions();
+
+      await _checkAndSendAlerts(alertCandidates);
+    } catch (e) {
+      debugPrint('BACKGROUND ERROR: $e');
+    } finally {
+      _isCheckingMarket = false;
     }
   }
 
@@ -878,8 +852,7 @@ class ShortRadarTaskHandler extends TaskHandler {
       );
 
       _syncBookTickerSubscriptions();
-    } catch (e) {
-      debugPrint('BOOK TICKER CONNECT ERROR: $e');
+    } catch (_) {
       _scheduleBookTickerReconnect();
     } finally {
       _isConnectingBookTicker = false;
