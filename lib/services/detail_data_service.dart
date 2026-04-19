@@ -32,6 +32,10 @@ class DetailDataBundle {
 
 class DetailDataService {
   static final Map<String, DetailDataBundle> _lastValidDataMap = {};
+  static const Duration _requestTimeout = Duration(seconds: 10);
+  static const Map<String, String> _headers = <String, String>{
+    'Accept': 'application/json',
+  };
 
   static String apiInterval(String value) {
     switch (value) {
@@ -308,30 +312,24 @@ class DetailDataService {
     );
 
     try {
-      final tickerUri = Uri.parse(
+      final Uri tickerUri = Uri.parse(
         'https://fx-api.gateio.ws/api/v4/futures/usdt/tickers',
       );
 
-      final candlesUri = Uri.parse(
+      final Uri candlesUri = Uri.parse(
         'https://fx-api.gateio.ws/api/v4/futures/usdt/candlesticks'
         '?contract=${Uri.encodeQueryComponent(contractName)}'
         '&interval=${Uri.encodeQueryComponent(apiInterval(selectedInterval))}'
         '&limit=120',
       );
 
-      final responses = await Future.wait([
-        http.get(
-          tickerUri,
-          headers: {'Accept': 'application/json'},
-        ).timeout(const Duration(seconds: 10)),
-        http.get(
-          candlesUri,
-          headers: {'Accept': 'application/json'},
-        ).timeout(const Duration(seconds: 10)),
+      final List<http.Response> responses = await Future.wait([
+        http.get(tickerUri, headers: _headers).timeout(_requestTimeout),
+        http.get(candlesUri, headers: _headers).timeout(_requestTimeout),
       ]);
 
-      final tickerResponse = responses[0];
-      final candleResponse = responses[1];
+      final http.Response tickerResponse = responses[0];
+      final http.Response candleResponse = responses[1];
 
       if (tickerResponse.statusCode != 200 || candleResponse.statusCode != 200) {
         throw Exception('Detay verisi alınamadı');
@@ -351,7 +349,7 @@ class DetailDataService {
           .toList();
 
       CoinRadarData? detailItem;
-      for (final coin in allCoins) {
+      for (final CoinRadarData coin in allCoins) {
         if (coin.name == contractName) {
           detailItem = coin;
           break;
@@ -360,8 +358,8 @@ class DetailDataService {
 
       detailItem ??= fallbackCoin;
 
-      final List<CandleData> newCandles = [];
-      for (final raw in parsedCandles) {
+      final List<CandleData> newCandles = <CandleData>[];
+      for (final dynamic raw in parsedCandles) {
         try {
           newCandles.add(CandleData.fromApi(raw));
         } catch (_) {}
