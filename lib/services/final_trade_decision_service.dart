@@ -489,11 +489,23 @@ class FinalTradeDecisionService {
   static String decideAction({
     required double finalScore,
     required String oiPriceSignal,
+    required String priceDirection,
+    required String orderFlowDirection,
     required EntryEngineSnapshot entrySnapshot,
   }) {
     if (finalScore < 40) return 'IGNORE';
 
+    if (priceDirection == 'UP' && orderFlowDirection == 'BUY_PRESSURE') {
+      return 'WATCH';
+    }
+
     if (oiPriceSignal == 'SHORT_SQUEEZE' &&
+        !entrySnapshot.breakStarted &&
+        entrySnapshot.weaknessScore < 75) {
+      return 'WATCH';
+    }
+
+    if (oiPriceSignal == 'NEUTRAL' &&
         !entrySnapshot.breakStarted &&
         entrySnapshot.weaknessScore < 75) {
       return 'WATCH';
@@ -521,6 +533,9 @@ class FinalTradeDecisionService {
           entrySnapshot.fakePumpDetected &&
           entrySnapshot.weaknessScore >= 70 &&
           finalScore >= 70) {
+        if (priceDirection == 'UP' || orderFlowDirection == 'BUY_PRESSURE') {
+          return 'PREPARE_SHORT';
+        }
         return 'ENTER_SHORT';
       }
 
@@ -912,6 +927,8 @@ class FinalTradeDecisionService {
     final String action = decideAction(
       finalScore: finalScore,
       oiPriceSignal: oiPriceSignal,
+      priceDirection: priceDirection,
+      orderFlowDirection: orderFlowDirection,
       entrySnapshot: entrySnapshot,
     );
 
@@ -953,7 +970,7 @@ class FinalTradeDecisionService {
       scoreClass: scoreClass,
       confidence: confidence,
       primarySignal: oiPriceSignal,
-      tradeBias: 'SHORT',
+      tradeBias: action == 'WATCH' || action == 'IGNORE' ? 'NEUTRAL' : 'SHORT',
       action: action,
       summary: summary,
       oiScore: oiScore,
