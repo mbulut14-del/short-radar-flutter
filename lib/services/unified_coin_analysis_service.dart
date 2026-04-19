@@ -133,6 +133,37 @@ class UnifiedCoinAnalysisService {
     return '$scoreClass • Score $scoreText • Confidence $confidenceText% • Signal: $primarySignal • Bias: $tradeBias • Action: $action';
   }
 
+
+
+  static bool _isBreakStarting(List<CandleData> candles) {
+    if (candles.length < 3) return false;
+
+    final CandleData last = candles[candles.length - 1];
+    final CandleData prev = candles[candles.length - 2];
+
+    return last.close < prev.low;
+  }
+
+  static bool _isLateMove(List<CandleData> candles) {
+    if (candles.length < 6) return false;
+
+    final List<CandleData> recent = candles.sublist(candles.length - 6);
+
+    double dropPercent = 0;
+    int redCount = 0;
+
+    for (final CandleData candle in recent) {
+      if (candle.close < candle.open) {
+        redCount += 1;
+        if (candle.open > 0) {
+          dropPercent += ((candle.open - candle.close) / candle.open) * 100;
+        }
+      }
+    }
+
+    return dropPercent > 5 && redCount >= 4;
+  }
+
   static String _extractDynamicLabel(dynamic source) {
     try {
       final dynamic label = source.label;
@@ -2007,6 +2038,16 @@ class UnifiedCoinAnalysisService {
     )) {
       displayDecision = _suppressLateShortDecision(displayDecision);
     }
+
+    final bool isLate = _isLateMove(bundle.visibleCandles);
+    final bool isBreak = _isBreakStarting(bundle.visibleCandles);
+
+    final String finalAction = (!isLate && isBreak) ? 'ENTER' : 'WAIT';
+
+    displayDecision = displayDecision.copyWith(
+      action: finalAction,
+      tradeBias: finalAction == 'ENTER' ? 'SHORT' : 'NEUTRAL',
+    );
 
     return UnifiedCoinAnalysisResult(
       coin: bundle.selectedCoin,
