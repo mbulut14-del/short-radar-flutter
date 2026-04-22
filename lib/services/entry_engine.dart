@@ -29,30 +29,73 @@ class EntryEngine {
   }) {
     final reasons = <String>[];
 
-    if (_detectPumpNow(candles)) {
+    if (candles.length < 3) {
+      return EntryEngineSnapshot(
+        phase: "IDLE",
+        breakdownConfirmations: 0,
+        reasons: reasons,
+      );
+    }
+
+    final bool pumpNow = _detectPumpNow(candles);
+    final bool weaknessNow = _detectWeaknessNow(candles);
+    final bool breakdownNow = _detectBreakdownNow(candles);
+    final bool invalidationNow = _detectRecoveryInvalidation(candles);
+
+    if (pumpNow) {
+      if (!state.pumpDetected) {
+        reasons.add("Pump detected");
+      }
       state.pumpDetected = true;
       state.pumpTime = DateTime.now();
-      state.invalidated = false;
-      reasons.add("Pump detected");
+
+      if (state.invalidated) {
+        state.invalidated = false;
+        reasons.add("Pump restarted after invalidation");
+      }
     }
 
-    if (state.pumpDetected && _detectWeaknessNow(candles)) {
+    if (state.pumpDetected && weaknessNow) {
+      if (!state.weaknessDetected) {
+        reasons.add("Weakness detected (wick + momentum loss)");
+      }
       state.weaknessDetected = true;
       state.weaknessTime = DateTime.now();
-      reasons.add("Weakness detected (wick + momentum loss)");
     }
 
-    if (state.weaknessDetected && _detectBreakdownNow(candles)) {
+    if (state.weaknessDetected && breakdownNow) {
       state.breakdownDetected = true;
       state.breakdownConfirmations += 1;
-      reasons.add("Real breakdown (low broken)");
+
+      if (state.breakdownConfirmations == 1) {
+        reasons.add("Real breakdown (support broken)");
+      } else {
+        reasons.add(
+          "Breakdown confirmation +${state.breakdownConfirmations}",
+        );
+      }
     }
 
-    if (_detectRecoveryInvalidation(candles)) {
+    if (invalidationNow) {
+      final bool hadSetup =
+          state.pumpDetected ||
+          state.weaknessDetected ||
+          state.breakdownDetected ||
+          state.breakdownConfirmations > 0;
+
+      if (hadSetup) {
+        reasons.add("Strong recovery → invalidation");
+      }
+
       state.invalidated = true;
       state.breakdownDetected = false;
       state.breakdownConfirmations = 0;
-      reasons.add("Strong recovery → invalidation");
+      state.weaknessDetected = false;
+    }
+
+    if (_shouldResetState(candles, state)) {
+      reasons.add("Setup expired → reset");
+      _resetState(state);
     }
 
     String phase = "IDLE";
@@ -76,41 +119,56 @@ class EntryEngine {
     );
   }
 
-  // 🔥 1. PUMP
   bool _detectPumpNow(List<dynamic> candles) {
     if (candles.length < 3) return false;
 
     final last = candles.last;
     final prev = candles[candles.length - 2];
+    final prev2 = candles[candles.length - 3];
 
-    final change = (last.close - prev.close) / prev.close * 100;
+    if (prev.close == 0 || prev2.close == 0) return false;
 
-    return change > 3;
+    final double lastChange =
+        ((last.close - prev.close) / prev.close) * 100;
+    final double twoCandleChange =
+        ((last.close - prev2.close) / prev2.close) * 100;
+
+    final double lastRange = (last.high - last.low).abs();
+    if (lastRange == 0) return false;
+
+    final double bodyRatio =
+        (last.close - last.open).abs() / lastRange;
+    final bool strongGreen = last.close > last.open && bodyRatio >= 0.55;
+    final bool priceExpansion = last.close > prev.close && prev.close >= prev2.close;
+
+    return priceExpansion &&
+        (lastChange >= 2.2 || twoCandleChange >= 4.0) &&
+        strongGreen;
   }
 
-  // 🔥 2. GERÇEK ZAYIFLAMA
   bool _detectWeaknessNow(List<dynamic> candles) {
     if (candles.length < 3) return false;
 
     final last = candles.last;
     final prev = candles[candles.length - 2];
 
-    final body = (last.close - last.open).abs();
-    final range = (last.high - last.low);
-
+    final double range = (last.high - last.low).abs();
     if (range == 0) return false;
 
-    final upperWick = last.high - last.close;
+    final double body = (last.close - last.open).abs();
+    final double upperWick = last.high - (last.close > last.open ? last.close : last.open);
 
-    final smallBody = body / range < 0.4;
-    final bigUpperWick = upperWick / range > 0.4;
+    final bool smallBody = body / range < 0.45;
+    final bool bigUpperWick = upperWick / range > 0.35;
+    final bool momentumLoss = last.close <= prev.close;
+    final bool lowerHigh = last.high < prev.high;
+    final bool bearishShift = last.close < last.open;
 
-    final momentumLoss = last.close <= prev.close;
-
-    return smallBody && bigUpperWick && momentumLoss;
+    return (smallBody && bigUpperWick && momentumLoss) ||
+        (lowerHigh && momentumLoss) ||
+        (bigUpperWick && bearishShift);
   }
 
-  // 🔥 3. GERÇEK BREAKDOWN
   bool _detectBreakdownNow(List<dynamic> candles) {
     if (candles.length < 4) return false;
 
@@ -118,29 +176,75 @@ class EntryEngine {
     final prev = candles[candles.length - 2];
     final prev2 = candles[candles.length - 3];
 
-    final previousLow = prev2.low;
+    final double range = (last.high - last.low).abs();
+    if (range == 0) return false;
 
-    final strongRed =
-        last.close < last.open &&
-        ((last.open - last.close) / (last.high - last.low)) > 0.6;
+    final double bodyRatio =
+        (last.open - last.close).abs() / range;
 
-    final lowBroken = last.close < previousLow;
+    final bool strongRed =
+        last.close < last.open && bodyRatio >= 0.45;
 
-    return strongRed && lowBroken;
+    final bool closeBelowPrevLow = last.close < prev.low;
+    final bool closeBelowPrev2Low = last.close < prev2.low;
+    final bool lowerClose = last.close < prev.close;
+
+    return strongRed &&
+        lowerClose &&
+        (closeBelowPrevLow || closeBelowPrev2Low);
   }
 
-  // 🔥 4. INVALIDATION (SQUEEZE)
   bool _detectRecoveryInvalidation(List<dynamic> candles) {
     if (candles.length < 3) return false;
 
     final last = candles.last;
     final prev = candles[candles.length - 2];
 
-    final change = (last.close - prev.close) / prev.close * 100;
+    if (prev.close == 0) return false;
 
-    final strongGreen = last.close > last.open &&
-        ((last.close - last.open) / (last.high - last.low)) > 0.6;
+    final double range = (last.high - last.low).abs();
+    if (range == 0) return false;
 
-    return change > 2 && strongGreen;
+    final double change =
+        ((last.close - prev.close) / prev.close) * 100;
+
+    final bool strongGreen = last.close > last.open &&
+        ((last.close - last.open).abs() / range) >= 0.55;
+
+    final bool breakoutAbovePrevHigh = last.close > prev.high;
+
+    return strongGreen && change > 1.8 && breakoutAbovePrevHigh;
+  }
+
+  bool _shouldResetState(List<dynamic> candles, EntryEngineState state) {
+    if (candles.length < 4) return false;
+
+    if (!state.pumpDetected && !state.weaknessDetected && !state.breakdownDetected) {
+      return false;
+    }
+
+    final last = candles.last;
+    final prev = candles[candles.length - 2];
+    final prev2 = candles[candles.length - 3];
+
+    final bool flatRecovery =
+        last.close >= prev.close &&
+        prev.close >= prev2.close &&
+        last.close > last.open;
+
+    final bool noMoreWeakness =
+        last.high >= prev.high && last.close >= prev.close;
+
+    return state.invalidated || (flatRecovery && noMoreWeakness);
+  }
+
+  void _resetState(EntryEngineState state) {
+    state.pumpDetected = false;
+    state.weaknessDetected = false;
+    state.breakdownDetected = false;
+    state.invalidated = false;
+    state.breakdownConfirmations = 0;
+    state.pumpTime = null;
+    state.weaknessTime = null;
   }
 }
