@@ -42,7 +42,7 @@ class StructureDetector {
     return last.volume >= avgPrevVolume * 1.15;
   }
 
-  Map<String, dynamic> _detectPriceStructure(List<CandleData> candles) {
+  Map<String, dynamic> detectPriceStructure(List<CandleData> candles) {
     if (candles.length < 6) {
       return {
         'detected': false,
@@ -123,10 +123,20 @@ class StructureDetector {
       reasons.add('Dönüş mumu gövde olarak güçleniyor.');
     }
 
+    if (last.close < prev.close &&
+        last.high < prev.high &&
+        _hasWeakClose(last, maxCloseRatio: 0.55)) {
+      score += 16;
+      reasons.add('Erken breakdown yapısı oluşuyor.');
+    }
+
     final double triggerLow = prev2.low < prev3.low ? prev2.low : prev3.low;
     if (triggerLow > 0 && lastClose < triggerLow) {
       score += 14;
       reasons.add('Önceki destek altına sarkma var.');
+    } else if (last.close < prev.close && last.high < prev.high) {
+      score += 10;
+      reasons.add('Breakdown öncesi zayıflama devam ediyor.');
     }
 
     score = score.clamp(0, 100).toDouble();
@@ -148,7 +158,7 @@ class StructureDetector {
     };
   }
 
-  Map<String, dynamic> _detectFirstBreak(List<CandleData> candles) {
+  Map<String, dynamic> detectFirstBreak(List<CandleData> candles) {
     if (candles.length < 5) {
       return {
         'detected': false,
@@ -220,6 +230,13 @@ class StructureDetector {
       reasons.add('Satıcı gövdesi zayıflamıyor.');
     }
 
+    if (last.close < prev.close &&
+        last.high < prev.high &&
+        _hasWeakClose(last, maxCloseRatio: 0.58)) {
+      score += 12;
+      reasons.add('Breakdown öncesi baskı devam ediyor.');
+    }
+
     score = score.clamp(0, 100).toDouble();
 
     String label = 'NONE';
@@ -238,5 +255,4 @@ class StructureDetector {
       'reasons': reasons,
     };
   }
-
 }
