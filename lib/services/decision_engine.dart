@@ -7,6 +7,13 @@ import '../models/short_setup_result.dart';
 class DecisionEngine {
   const DecisionEngine();
 
+  static const String actionWait = 'Bekle';
+  static const String actionPrepareShort = 'Short hazırlığı';
+  static const String actionEnterShort = 'Short giriş';
+
+  static const String biasShort = 'Short yönlü';
+  static const String biasNeutral = 'Nötr';
+
   double _clampScore(double value) {
     if (value < 0) return 0;
     if (value > 100) return 100;
@@ -287,6 +294,44 @@ class DecisionEngine {
     return staircaseUp && (moveFromPrev >= 1.5 || moveFromPrev2 >= 4.0);
   }
 
+  bool _hasBigRedStart(List<CandleData> candleList) {
+    if (candleList.length < 2) return false;
+
+    final CandleData last = candleList.last;
+    final CandleData prev = candleList[candleList.length - 2];
+
+    final bool lastRed = last.close < last.open;
+    if (!lastRed) return false;
+
+    final double lastRange = (last.high - last.low).abs();
+    final double lastBody = (last.open - last.close).abs();
+    final double bodyRatio = lastRange > 0 ? lastBody / lastRange : 0;
+
+    final bool meaningfulRedBody = bodyRatio >= 0.28;
+    final bool lowerClose = last.close < prev.close;
+    final bool lowerHigh = last.high < prev.high;
+    final bool rejectedFromTop = last.upperWick > lastBody * 0.35;
+
+    return meaningfulRedBody && (lowerClose || lowerHigh || rejectedFromTop);
+  }
+
+  bool _isBreakdownConfirmed(List<CandleData> candleList) {
+    if (candleList.length < 2) return false;
+
+    final CandleData last = candleList.last;
+    final CandleData prev = candleList[candleList.length - 2];
+
+    final bool closeBelowPreviousLow = last.close < prev.low;
+    final bool bearishClose = last.close < last.open;
+
+    final double candleRange = (last.high - last.low).abs();
+    final double candleBody = (last.open - last.close).abs();
+    final double bodyRatio = candleRange > 0 ? candleBody / candleRange : 0;
+    final bool meaningfulBearBody = bodyRatio >= 0.35;
+
+    return closeBelowPreviousLow && bearishClose && meaningfulBearBody;
+  }
+
   double _componentMomentumScore(
     EntryTimingResult? entryTiming,
     List<CandleData> candleList,
@@ -338,17 +383,9 @@ class DecisionEngine {
       final bool lowerHigh = last.high < prev.high;
       final bool lowerClose = last.close < prev.close;
 
-      if (lowerHigh && lastRed) {
-        score += 8;
-      }
-
-      if (prevGreen && lastRed) {
-        score += 6;
-      }
-
-      if (prevRed && lastRed && lowerClose) {
-        score += 6;
-      }
+      if (lowerHigh && lastRed) score += 8;
+      if (prevGreen && lastRed) score += 6;
+      if (prevRed && lastRed && lowerClose) score += 6;
 
       final double prevBody = (prev.close - prev.open).abs();
       final double lastBody = (last.close - last.open).abs();
@@ -365,9 +402,8 @@ class DecisionEngine {
         }
       }
 
-      if (_hasWeakBearishShift(candleList)) {
-        score += 8;
-      }
+      if (_hasWeakBearishShift(candleList)) score += 8;
+      if (_hasBigRedStart(candleList)) score += 10;
     }
 
     return _clampScore(score);
@@ -403,22 +439,25 @@ class DecisionEngine {
     final bool signalSuggestsDistribution =
         oiPriceSignal == 'FAKE_PUMP' || oiPriceSignal == 'EARLY_DISTRIBUTION';
 
-    final bool blowOffTopLike =
-        priceScore >= 75 &&
-        momentumScore >= 72 &&
-        (_isParabolicExtension(visibleCandles) || signalSuggestsDistribution);
-
-    final bool oiUnwinding = oiDirection == 'DOWN';
+    final bool strongPumpOrTopWeakness =
+        _isParabolicExtension(visibleCandles) ||
+        signalSuggestsDistribution ||
+        _hasLowerHigh(visibleCandles) ||
+        _hasMomentumLoss(visibleCandles);
 
     final bool weaknessHints =
         _hasLowerHigh(visibleCandles) ||
         _hasMomentumLoss(visibleCandles) ||
+        _hasBigRedStart(visibleCandles) ||
         _reasonContains(pumpAnalysis, 'lower-high') ||
         _reasonContains(pumpAnalysis, 'lower high') ||
         _reasonContains(pumpAnalysis, 'zayıflama') ||
         _reasonContains(pumpAnalysis, 'weakness');
 
-    return blowOffTopLike && oiUnwinding && weaknessHints;
+    final bool oiSupportsFakePump =
+        oiDirection == 'DOWN' || oiDirection == 'FLAT' || oiDirection.isEmpty;
+
+    return strongPumpOrTopWeakness && weaknessHints && oiSupportsFakePump;
   }
 
   double _distributionOverride({
@@ -448,37 +487,20 @@ class DecisionEngine {
     final bool lowerHigh = _hasLowerHigh(visibleCandles);
     final bool lowerClose = _hasLowerClose(visibleCandles);
     final bool momentumLoss = _hasMomentumLoss(visibleCandles);
+    final bool bigRedStart = _hasBigRedStart(visibleCandles);
 
-    if (oiPriceSignal == 'EARLY_DISTRIBUTION') {
+    if (oiPriceSignal == 'EARLY_DISTRIBUTION') bonus += 8;
+    if (fakePumpZone) bonus += 10;
+    if (fakePumpZone && orderFlowDirection == 'BUY_PRESSURE') bonus += 4;
+    if (priceDirection == 'DOWN' && oiDirection == 'DOWN') bonus += 6;
+    if (priceScore >= 80 && momentumScore >= 80 && oiScore <= 40) bonus += 8;
+    if (lowerHigh) bonus += 8;
+    if (lowerClose) bonus += 6;
+    if (momentumLoss) bonus += 5;
+    if (bigRedStart) bonus += 10;
+
+    if (orderFlowDirection == 'SELL_PRESSURE' && (lowerHigh || momentumLoss)) {
       bonus += 8;
-    }
-
-    if (fakePumpZone) {
-      bonus += 10;
-    }
-
-    if (fakePumpZone && orderFlowDirection == 'BUY_PRESSURE') {
-      bonus += 6;
-    }
-
-    if (priceDirection == 'DOWN' && oiDirection == 'DOWN') {
-      bonus += 6;
-    }
-
-    if (priceScore >= 80 && momentumScore >= 80 && oiScore <= 40) {
-      bonus += 8;
-    }
-
-    if (lowerHigh) {
-      bonus += 6;
-    }
-
-    if (lowerClose) {
-      bonus += 5;
-    }
-
-    if (momentumLoss) {
-      bonus += 4;
     }
 
     if (entryTiming != null) {
@@ -505,10 +527,6 @@ class DecisionEngine {
           _reasonContains(pumpAnalysis, 'weakness')) {
         bonus += 4;
       }
-    }
-
-    if (rawFinalScore < 70 && fakePumpZone && (lowerHigh || momentumLoss)) {
-      bonus += 6;
     }
 
     return bonus;
@@ -545,12 +563,12 @@ class DecisionEngine {
         tradeBias == 'SHORT' &&
         (priceDirection == 'DOWN' ||
             oiPriceSignal == 'FAKE_PUMP' ||
-            oiPriceSignal == 'EARLY_DISTRIBUTION') &&
+            oiPriceSignal == 'EARLY_DISTRIBUTION' ||
+            _hasLowerHigh(visibleCandles) ||
+            _hasBigRedStart(visibleCandles)) &&
         (orderFlowDirection == 'SELL_PRESSURE' || fakePumpZone);
 
-    if (shortAligned) {
-      confidence += 16;
-    }
+    if (shortAligned) confidence += 16;
 
     if (oiPriceSignal == 'SHORT_SQUEEZE') confidence -= 20;
 
@@ -568,6 +586,7 @@ class DecisionEngine {
 
     if (_hasLowerHigh(visibleCandles)) confidence += 6;
     if (_hasMomentumLoss(visibleCandles)) confidence += 4;
+    if (_hasBigRedStart(visibleCandles)) confidence += 8;
 
     if (_reasonContains(entryTiming, 'breakdown') ||
         _reasonContains(entryTiming, 'kırılma')) {
@@ -589,6 +608,9 @@ class DecisionEngine {
     required String oiDirection,
     required String priceDirection,
     required String orderFlowDirection,
+    required List<CandleData> visibleCandles,
+    PumpAnalysisResult? pumpAnalysis,
+    EntryTimingResult? entryTiming,
   }) {
     if (oiPriceSignal == 'STRONG_SHORT' ||
         oiPriceSignal == 'FAKE_PUMP' ||
@@ -609,69 +631,173 @@ class DecisionEngine {
     if (priceDirection == 'DOWN') {
       shortVotes += 2;
     } else if (priceDirection == 'UP') {
-      neutralPenalty += 2;
+      neutralPenalty += 1;
     }
 
     if (orderFlowDirection == 'SELL_PRESSURE') {
-      shortVotes += 2;
+      shortVotes += 3;
     } else if (orderFlowDirection == 'BUY_PRESSURE') {
       neutralPenalty += 2;
+    }
+
+    if (_hasLowerHigh(visibleCandles)) shortVotes += 2;
+    if (_hasMomentumLoss(visibleCandles)) shortVotes += 1;
+    if (_hasBigRedStart(visibleCandles)) shortVotes += 3;
+
+    if (_reasonContains(pumpAnalysis, 'lower-high') ||
+        _reasonContains(pumpAnalysis, 'lower high') ||
+        _reasonContains(pumpAnalysis, 'zayıflama') ||
+        _reasonContains(pumpAnalysis, 'weakness')) {
+      shortVotes += 2;
+    }
+
+    if (_reasonContains(entryTiming, 'lower-high') ||
+        _reasonContains(entryTiming, 'lower high') ||
+        _reasonContains(entryTiming, 'zayıf') ||
+        _reasonContains(entryTiming, 'weakness')) {
+      shortVotes += 2;
     }
 
     if (oiPriceSignal == 'SHORT_SQUEEZE') neutralPenalty += 3;
     if (oiPriceSignal == 'EARLY_ACCUMULATION') neutralPenalty += 3;
 
-    if (shortVotes >= 3 && shortVotes > neutralPenalty) {
+    if (shortVotes >= 3 && shortVotes >= neutralPenalty) {
       return 'SHORT';
     }
 
     return 'NEUTRAL';
   }
 
-  bool _isBreakdownConfirmed(List<CandleData> candleList) {
-    if (candleList.length < 2) return false;
-
-    final CandleData last = candleList.last;
-    final CandleData prev = candleList[candleList.length - 2];
-
-    final bool closeBelowPreviousLow = last.close < prev.low;
-    final bool bearishClose = last.close < last.open;
-
-    final double candleRange = (last.high - last.low).abs();
-    final double candleBody = (last.open - last.close).abs();
-    final double bodyRatio = candleRange > 0 ? candleBody / candleRange : 0;
-    final bool meaningfulBearBody = bodyRatio >= 0.35;
-
-    return closeBelowPreviousLow && bearishClose && meaningfulBearBody;
-  }
-
-  String _actionFromDecision({
-    required double finalScore,
-    required double confidence,
+  bool _hasEarlyShortSetup({
     required String tradeBias,
     required String oiPriceSignal,
+    required String orderFlowDirection,
+    required double adjustedScore,
+    required double momentumScore,
     required List<CandleData> visibleCandles,
+    PumpAnalysisResult? pumpAnalysis,
+    EntryTimingResult? entryTiming,
   }) {
-    if (finalScore < 40) return 'WATCH';
-    if (tradeBias != 'SHORT') return 'WATCH';
+    final bool dangerousLongSide =
+        oiPriceSignal == 'SHORT_SQUEEZE' ||
+        oiPriceSignal == 'EARLY_ACCUMULATION';
 
-    if (oiPriceSignal == 'SHORT_SQUEEZE' ||
-        oiPriceSignal == 'EARLY_ACCUMULATION') {
-      return 'WATCH';
-    }
+    if (dangerousLongSide) return false;
+
+    final bool structuralWeakness =
+        _hasLowerHigh(visibleCandles) ||
+        _hasMomentumLoss(visibleCandles) ||
+        _hasWeakBearishShift(visibleCandles) ||
+        _hasBigRedStart(visibleCandles);
+
+    final bool textWeakness =
+        _reasonContains(pumpAnalysis, 'lower-high') ||
+        _reasonContains(pumpAnalysis, 'lower high') ||
+        _reasonContains(pumpAnalysis, 'zayıflama') ||
+        _reasonContains(pumpAnalysis, 'weakness') ||
+        _reasonContains(entryTiming, 'lower-high') ||
+        _reasonContains(entryTiming, 'lower high') ||
+        _reasonContains(entryTiming, 'zayıf') ||
+        _reasonContains(entryTiming, 'weakness');
+
+    final bool flowSupports =
+        orderFlowDirection == 'SELL_PRESSURE' ||
+        oiPriceSignal == 'FAKE_PUMP' ||
+        oiPriceSignal == 'EARLY_DISTRIBUTION' ||
+        tradeBias == 'SHORT';
+
+    final bool scoreOnlyInfo = adjustedScore >= 40 || momentumScore >= 55;
+
+    return flowSupports && (structuralWeakness || textWeakness || scoreOnlyInfo);
+  }
+
+  bool _hasShortEntryMoment({
+    required String tradeBias,
+    required String oiPriceSignal,
+    required String orderFlowDirection,
+    required List<CandleData> visibleCandles,
+    EntryTimingResult? entryTiming,
+  }) {
+    final bool dangerousLongSide =
+        oiPriceSignal == 'SHORT_SQUEEZE' ||
+        oiPriceSignal == 'EARLY_ACCUMULATION';
+
+    if (dangerousLongSide) return false;
 
     final bool breakdownConfirmed = _isBreakdownConfirmed(visibleCandles);
+    final bool bigRedStart = _hasBigRedStart(visibleCandles);
 
-    if (!breakdownConfirmed && finalScore >= 80) {
-      return 'PREPARE SHORT';
+    final bool entryText =
+        _reasonContains(entryTiming, 'breakdown') ||
+        _reasonContains(entryTiming, 'kırılma') ||
+        _reasonContains(entryTiming, 'giriş') ||
+        _reasonContains(entryTiming, 'entry');
+
+    final bool shortSideActive =
+        tradeBias == 'SHORT' || orderFlowDirection == 'SELL_PRESSURE';
+
+    return shortSideActive && (breakdownConfirmed || bigRedStart || entryText);
+  }
+
+  String _actionFromMarketState({
+    required String tradeBias,
+    required String oiPriceSignal,
+    required String orderFlowDirection,
+    required double adjustedScore,
+    required double momentumScore,
+    required List<CandleData> visibleCandles,
+    PumpAnalysisResult? pumpAnalysis,
+    EntryTimingResult? entryTiming,
+  }) {
+    final bool entryMoment = _hasShortEntryMoment(
+      tradeBias: tradeBias,
+      oiPriceSignal: oiPriceSignal,
+      orderFlowDirection: orderFlowDirection,
+      visibleCandles: visibleCandles,
+      entryTiming: entryTiming,
+    );
+
+    if (entryMoment) return actionEnterShort;
+
+    final bool earlySetup = _hasEarlyShortSetup(
+      tradeBias: tradeBias,
+      oiPriceSignal: oiPriceSignal,
+      orderFlowDirection: orderFlowDirection,
+      adjustedScore: adjustedScore,
+      momentumScore: momentumScore,
+      visibleCandles: visibleCandles,
+      pumpAnalysis: pumpAnalysis,
+      entryTiming: entryTiming,
+    );
+
+    if (earlySetup) return actionPrepareShort;
+
+    return actionWait;
+  }
+
+  String _signalToTurkish(String signal) {
+    switch (signal) {
+      case 'STRONG_SHORT':
+        return 'Güçlü short';
+      case 'FAKE_PUMP':
+        return 'Fake pump';
+      case 'SHORT_SQUEEZE':
+        return 'Short sıkıştırma riski';
+      case 'WEAK_DROP':
+        return 'Zayıf düşüş';
+      case 'EARLY_ACCUMULATION':
+        return 'Erken toplama';
+      case 'EARLY_DISTRIBUTION':
+        return 'Erken dağıtım';
+      case 'NEUTRAL':
+        return 'Nötr';
+      default:
+        return signal.isEmpty ? 'Nötr' : signal;
     }
+  }
 
-    if (finalScore >= 85 && confidence >= 68) {
-      return breakdownConfirmed ? 'ENTER SHORT' : 'PREPARE SHORT';
-    }
-
-    if (finalScore >= 70) return 'PREPARE SHORT';
-    return 'WATCH';
+  String _displayBias(String internalBias) {
+    return internalBias == 'SHORT' ? biasShort : biasNeutral;
   }
 
   String _buildDecisionSummary({
@@ -685,8 +811,8 @@ class DecisionEngine {
     final String scoreText = finalScore.toStringAsFixed(0);
     final String confidenceText = confidence.toStringAsFixed(0);
 
-    return '$scoreClass • Score $scoreText • Confidence $confidenceText% • '
-        'Signal: $primarySignal • Bias: $tradeBias • Action: $action';
+    return '$scoreClass • Skor $scoreText • Güven $confidenceText% • '
+        'Sinyal: $primarySignal • Yön: $tradeBias • Durum: $action';
   }
 
   FinalTradeDecision build({
@@ -711,11 +837,14 @@ class DecisionEngine {
     final double momentumScore =
         _componentMomentumScore(entryTiming, visibleCandles);
 
-    final String tradeBias = _determineTradeBias(
+    final String internalTradeBias = _determineTradeBias(
       oiPriceSignal: oiPriceSignal,
       oiDirection: oiDirection,
       priceDirection: priceDirection,
       orderFlowDirection: orderFlowDirection,
+      visibleCandles: visibleCandles,
+      pumpAnalysis: pumpAnalysis,
+      entryTiming: entryTiming,
     );
 
     final double rawFinalScore = _weightedFinalScore(
@@ -757,7 +886,7 @@ class DecisionEngine {
       volumeScore: volumeScore,
       liquidationScore: liquidationScore,
       momentumScore: momentumScore,
-      tradeBias: tradeBias,
+      tradeBias: internalTradeBias,
       oiDirection: oiDirection,
       priceDirection: priceDirection,
       orderFlowDirection: orderFlowDirection,
@@ -768,24 +897,25 @@ class DecisionEngine {
     );
 
     final bool breakdownConfirmed = _isBreakdownConfirmed(visibleCandles);
+    final bool bigRedStart = _hasBigRedStart(visibleCandles);
 
     double adjustedScore = rawFinalScore + distributionBonus;
-
-    if (tradeBias == 'SHORT' && !breakdownConfirmed) {
-      final double cap = fakePumpZone ? 82 : 75;
-      adjustedScore = adjustedScore > cap ? cap : adjustedScore;
-    }
-
     adjustedScore = _clampScore(adjustedScore);
 
-    final String scoreClass = _scoreClassFromScore(adjustedScore);
-    final String action = _actionFromDecision(
-      finalScore: adjustedScore,
-      confidence: confidence,
-      tradeBias: tradeBias,
+    final String action = _actionFromMarketState(
+      tradeBias: internalTradeBias,
       oiPriceSignal: oiPriceSignal,
+      orderFlowDirection: orderFlowDirection,
+      adjustedScore: adjustedScore,
+      momentumScore: momentumScore,
       visibleCandles: visibleCandles,
+      pumpAnalysis: pumpAnalysis,
+      entryTiming: entryTiming,
     );
+
+    final String scoreClass = _scoreClassFromScore(adjustedScore);
+    final String primarySignal = _signalToTurkish(oiPriceSignal);
+    final String tradeBias = _displayBias(internalTradeBias);
 
     final List<String> marketReadBullets = <String>[
       if (oiDirection == 'UP')
@@ -797,71 +927,64 @@ class DecisionEngine {
       if (priceDirection == 'DOWN')
         'Fiyat aşağı yönlü baskı gösteriyor.'
       else if (priceDirection == 'UP')
-        'Fiyat yukarı gidiyor, short tarafı için risk oluşturabilir.'
+        'Fiyat yukarı gidiyor ama tepe zayıflaması varsa short fırsatı oluşabilir.'
       else
         'Fiyat yatay seyirde, net kırılım henüz gelmemiş olabilir.',
       if (orderFlowDirection == 'SELL_PRESSURE')
-        'Order flow satış baskısını destekliyor.'
+        'Emir akışı satış baskısını destekliyor.'
       else if (orderFlowDirection == 'BUY_PRESSURE' && fakePumpZone)
-        'Order flow alıcı baskısı gösterse de bu, blow-off top sonrası geç kalan alıcıları temsil ediyor olabilir.'
+        'Emir akışı alıcı baskısı gösterse de bu, pump sonu geç kalan alıcıları temsil ediyor olabilir.'
       else if (orderFlowDirection == 'BUY_PRESSURE')
-        'Order flow alıcı baskısını gösteriyor; short için ters rüzgar var.'
+        'Emir akışı alıcı tarafını gösteriyor; short için dikkat gerekiyor.'
       else
-        'Order flow tarafında belirgin üstünlük yok.',
+        'Emir akışı tarafında belirgin üstünlük yok.',
       if (fakePumpZone)
-        'Parabolik yükseliş + düşen OI + zayıflama işaretleri fake pump / distribution bölgesine işaret ediyor.',
+        'Pump sonrası tepe zayıflaması görülüyor; dağıtım ihtimali takip edilmeli.',
       if (_hasLowerHigh(visibleCandles))
-        'Son yapıda lower-high oluşumu var; tepe gücü zayıflıyor.',
-      if (tradeBias == 'SHORT' && breakdownConfirmed)
-        'Yapı kırılımı teyidi alındı; son kapanış önceki mumun dip bölgesinin altına sarktı.'
-      else if (tradeBias == 'SHORT')
-        'Kurulum kısa pozisyon lehine olsa da yapı kırılımı henüz teyit vermedi.',
+        'Son yapıda daha düşük tepe oluşumu var; tepe gücü zayıflıyor.',
+      if (bigRedStart)
+        'Büyük kırmızı mum başlangıcı yakalanıyor; satış momentumu devreye girmiş olabilir.',
+      if (internalTradeBias == 'SHORT' && breakdownConfirmed)
+        'Kırılım teyidi geldi; son kapanış önceki mumun dip bölgesinin altına sarktı.'
+      else if (internalTradeBias == 'SHORT')
+        'Short yönlü yapı var; sistem bunu engellemez, sadece durumu bildirir.',
     ];
 
     final List<String> warnings = <String>[
-      if (oiPriceSignal == 'SHORT_SQUEEZE') 'Short squeeze riski var.',
+      if (oiPriceSignal == 'SHORT_SQUEEZE') 'Short sıkıştırma riski var.',
       if (oiPriceSignal == 'EARLY_ACCUMULATION')
-        'Erken birikim sinyali short girişini zayıflatıyor.',
+        'Erken toplama sinyali short tarafını zayıflatıyor.',
       if (confidence < 60) 'Sinyal uyumu düşük.',
       if (volumeScore < 45) 'Hacim teyidi zayıf.',
       if (momentumScore < 45) 'Momentum zayıf.',
-      if (tradeBias == 'SHORT' && !breakdownConfirmed)
-        'Yapı kırılımı gelmeden agresif short tarafına geçilmedi.',
       if (orderFlowDirection == 'BUY_PRESSURE' && !fakePumpZone)
-        'Short bias ile order flow çelişiyor.',
+        'Short yönü ile emir akışı çelişiyor.',
     ];
 
     final List<String> entryNotes = <String>[
-      if (action == 'ENTER SHORT')
-        'Kurulum güçlü; yapı kırılımı da geldiği için aktif short fırsatı gösteriliyor.'
-      else if (action == 'PREPARE SHORT' &&
-          adjustedScore >= 85 &&
-          confidence >= 68 &&
-          !breakdownConfirmed)
-        'Kurulum güçlü ama yapı kırılımı teyidi gelmeden aktif girişe geçilmedi.'
-      else if (action == 'PREPARE SHORT' && fakePumpZone)
-        'Fake pump / distribution bölgesi yakalandı; küçük spike ihtimaline karşı tetik teyidi beklenmeli.'
-      else if (action == 'PREPARE SHORT')
-        'Short hazırlığı var; tetik için ek fiyat teyidi beklenmeli.'
+      if (action == actionEnterShort)
+        'Short giriş anı yakalandı. Karar kullanıcıya aittir.'
+      else if (action == actionPrepareShort && fakePumpZone)
+        'Pump sonrası zayıflama var. Short hazırlığı takip edilmeli.'
+      else if (action == actionPrepareShort)
+        'Short hazırlığı var. Büyük kırmızı mum başlangıcı veya satış devamı takip edilmeli.'
       else
-        'Şimdilik izleme modunda kalmak daha doğru.',
+        'Şimdilik net short hazırlığı yok.',
     ];
 
     final List<String> triggerConditions = <String>[
-      if (tradeBias == 'SHORT' && !breakdownConfirmed && fakePumpZone) ...<String>[
-        'İlk kırılma sonrası zayıf kapanışın devam etmesi',
-        'Lower-high yapısının bozulmaması',
-        'Satış baskısının veya breakdown teyidinin gelmesi',
-      ] else if (tradeBias == 'SHORT' && !breakdownConfirmed) ...<String>[
-        'Son kapanışın bir önceki mumun low seviyesinin altına inmesi',
-        'Ayı yönlü mum gövdesinin anlamlı kalması',
+      if (action == actionEnterShort) ...<String>[
+        'Satış momentumu başladı',
+        'Kırmızı mum veya kırılım işareti geldi',
+        'Karar kullanıcıya ait',
+      ] else if (action == actionPrepareShort) ...<String>[
+        'Büyük kırmızı mum başlangıcı',
         'Satış baskısının devam etmesi',
-      ] else if (tradeBias == 'SHORT') ...<String>[
-        'Satış baskısının devam etmesi',
-        'Breakdown sonrası zayıf toparlanma görülmesi',
+        'Daha düşük tepe yapısının bozulmaması',
       ] else ...<String>[
-        'Net short yön teyidi',
-        'Alıcı baskısının zayıflaması',
+        'Tepe zayıflaması',
+        'Alıcı baskısının azalması',
+        'Satış baskısının belirginleşmesi',
       ],
     ];
 
@@ -869,7 +992,7 @@ class DecisionEngine {
       finalScore: adjustedScore,
       scoreClass: scoreClass,
       confidence: confidence,
-      primarySignal: oiPriceSignal,
+      primarySignal: primarySignal,
       tradeBias: tradeBias,
       action: action,
     );
@@ -878,7 +1001,7 @@ class DecisionEngine {
       finalScore: adjustedScore,
       scoreClass: scoreClass,
       confidence: confidence,
-      primarySignal: oiPriceSignal,
+      primarySignal: primarySignal,
       tradeBias: tradeBias,
       action: action,
       summary: summary,
