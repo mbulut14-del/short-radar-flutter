@@ -15,17 +15,15 @@ class DetailPageContent extends StatelessWidget {
   final String contractName;
   final Widget spinner;
   final String selectedInterval;
-  final Future Function(String value) onIntervalChanged;
+  final Future<void> Function(String value) onIntervalChanged;
   final String detailError;
   final bool detailLoading;
   final bool hasData;
-
   final ShortSetupResult? setupResult;
   final PumpAnalysisResult? pumpAnalysis;
   final EntryTimingResult? entryTiming;
-  final List visibleCandles;
+  final List<CandleData> visibleCandles;
   final CoinRadarData selectedCoin;
-
   final String openInterestDisplay;
   final String oiDirection;
   final String priceDirection;
@@ -48,10 +46,10 @@ class DetailPageContent extends StatelessWidget {
   final double? liquidationComponentScore;
   final double? momentumComponentScore;
 
-  final List? marketReadBullets;
-  final List? entryNotes;
-  final List? warnings;
-  final List? triggerConditions;
+  final List<String>? marketReadBullets;
+  final List<String>? entryNotes;
+  final List<String>? warnings;
+  final List<String>? triggerConditions;
 
   const DetailPageContent({
     super.key,
@@ -132,10 +130,14 @@ class DetailPageContent extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
         decoration: BoxDecoration(
-          color: active ? Colors.white.withOpacity(0.12) : Colors.white.withOpacity(0.04),
+          color: active
+              ? Colors.white.withOpacity(0.12)
+              : Colors.white.withOpacity(0.04),
           borderRadius: BorderRadius.circular(14),
           border: Border.all(
-            color: active ? Colors.orangeAccent.withOpacity(0.85) : Colors.white.withOpacity(0.12),
+            color: active
+                ? Colors.orangeAccent.withOpacity(0.85)
+                : Colors.white.withOpacity(0.12),
           ),
         ),
         child: Text(
@@ -159,26 +161,20 @@ class DetailPageContent extends StatelessWidget {
 
   String _getFinalScoreHint(double score) {
     if (score >= 85) {
-      return 'Güçlü short fırsatı var. Sistem sadece durumu gösterir, karar kullanıcıya aittir.';
+      return 'Merkezi short karar motoru, filtrelenmiş akışta güçlü short fırsatı görüyor.';
     }
-
     if (score >= 70) {
-      return 'Short kurulumu oluşuyor. Büyük kırmızı mum başlangıcı veya satış devamı takip edilmeli.';
+      return 'Short kurulumu oluşuyor. Giriş bölgesi yakın olabilir ancak tetik teyidi hâlâ önemli.';
     }
-
     if (score >= 40) {
-      return 'Erken short işaretleri var. Tepe zayıflaması takip edilmeli.';
+      return 'Erken short işaretleri var ama karar filtresinde teyit henüz tam güçlenmedi.';
     }
-
-    return 'Net short fırsatı yok. Şimdilik bekle.';
+    return 'Merkezi short skoru zayıf. Şimdilik beklemek daha sağlıklı görünüyor.';
   }
 
   bool _shouldShowShortSetupCard() {
-    if (setupResult == null) return false;
-    if (decisionAction == null) return finalScore != null && finalScore! >= 70;
-
-    final String action = _normalizeAction(decisionAction!);
-    return action == 'Short hazırlığı' || action == 'Short giriş';
+    if (finalScore == null) return true;
+    return finalScore! >= 70;
   }
 
   bool _shouldShowWhyCard() {
@@ -189,8 +185,8 @@ class DetailPageContent extends StatelessWidget {
   }
 
   bool _shouldShowTriggerWaitCard() {
-    final String action = _normalizeAction(decisionAction ?? '');
-    return action == 'Short hazırlığı';
+    if (finalScore == null) return false;
+    return finalScore! >= 40 && finalScore! < 70;
   }
 
   bool _hasDecisionMeta() {
@@ -226,63 +222,1002 @@ class DetailPageContent extends StatelessWidget {
   }
 
   String _getAnalysisSectionTitle() {
-    return 'ALT ANALİZLER';
+    if (finalScore == null) return 'ALT ANALİZLER';
+    if (finalScore! >= 70) return 'ALT ANALİZLER';
+    if (finalScore! >= 40) return 'ERKEN SHORT SİNYAL DETAYLARI';
+    return 'GÖZLEM VERİLERİ';
   }
 
   String _getAnalysisSectionSubtitle() {
-    return 'Bu bölüm karar vermek için değil, mevcut piyasa durumunu okumak için gösterilir.';
+    if (finalScore == null) {
+      return 'Bu bölüm final short score\'u besleyen alt verileri gösterir.';
+    }
+    if (finalScore! >= 70) {
+      return 'Aşağıdaki veriler merkezi short karar skorunu destekleyen alt bileşenlerdir.';
+    }
+    if (finalScore! >= 40) {
+      return 'Short kurulumu ihtimali var, ancak aşağıdaki veriler henüz tam teyit üretmiyor.';
+    }
+    return 'Aşağıdaki kartlar bilgi amaçlıdır. Henüz aktif short kurulumu onaylanmış değil.';
   }
 
-  String _normalizeSignal(String value) {
-    switch (value) {
-      case 'STRONG_SHORT':
-        return 'Güçlü short';
-      case 'FAKE_PUMP':
-        return 'Fake pump';
-      case 'SHORT_SQUEEZE':
-        return 'Short sıkıştırma riski';
-      case 'WEAK_DROP':
-        return 'Zayıf düşüş';
-      case 'EARLY_ACCUMULATION':
-        return 'Erken toplama';
-      case 'EARLY_DISTRIBUTION':
-        return 'Erken dağıtım';
-      case 'NEUTRAL':
-        return 'Nötr';
-      default:
-        return value.trim().isEmpty ? 'Nötr' : value;
-    }
-  }
-
-  String _normalizeBias(String value) {
-    switch (value) {
-      case 'SHORT':
-        return 'Short yönlü';
-      case 'NEUTRAL':
-        return 'Nötr';
-      case 'NO SHORT EDGE':
-        return 'Short avantajı yok';
-      default:
-        return value.trim().isEmpty ? 'Nötr' : value;
-    }
-  }
-
-  String _normalizeAction(String value) {
-    switch (value) {
-      case 'ENTER SHORT':
-        return 'Short giriş';
-      case 'PREPARE SHORT':
-        return 'Short hazırlığı';
-      case 'WATCH':
-        return 'Bekle';
-      case 'NO TRADE':
-        return 'İşlem yok';
-      default:
-        return value.trim().isEmpty ? 'Bekle' : value;
-    }
+  Widget _buildDecisionBadge({
+    required String title,
+    required String value,
+    required Color color,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.10),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withOpacity(0.28)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: TextStyle(
+              color: Colors.white.withOpacity(0.66),
+              fontSize: 10,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 0.4,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            value,
+            style: TextStyle(
+              color: color,
+              fontSize: 12,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   Color _getBiasColor(String value) {
-    final String text = _normalizeBias(value);
-    if (text == 'Short yönlü') return Colors.redAccent;
-    if
+    switch (value) {
+      case 'SHORT':
+        return Colors.redAccent;
+      default:
+        return Colors.orangeAccent;
+    }
+  }
+
+  String _getBiasText(String value) {
+    if (value == 'SHORT') return 'SHORT';
+    return 'NO SHORT EDGE';
+  }
+
+  Color _getActionColor(String value) {
+    if (value.contains('ENTER SHORT')) return Colors.redAccent;
+    if (value.contains('PREPARE SHORT')) return Colors.orangeAccent;
+    if (value.contains('WATCH')) return Colors.orangeAccent;
+    if (value.contains('NO TRADE')) return Colors.white70;
+    return Colors.white70;
+  }
+
+  String _getActionText(String value) {
+    switch (value) {
+      case 'ENTER SHORT':
+        return 'ENTER SHORT';
+      case 'PREPARE SHORT':
+        return 'PREPARE SHORT';
+      case 'WATCH':
+        return 'WATCH';
+      case 'NO TRADE':
+        return 'NO TRADE';
+      default:
+        return value;
+    }
+  }
+
+  Widget _buildFinalScoreCard() {
+    if (finalScore == null) {
+      return const SizedBox();
+    }
+
+    final double safeScore = finalScore!.clamp(0, 100);
+    final Color scoreColor = _getFinalScoreColor(safeScore);
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            scoreColor.withOpacity(0.18),
+            Colors.black.withOpacity(0.92),
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+          color: scoreColor.withOpacity(0.55),
+          width: 1.2,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: scoreColor.withOpacity(0.10),
+            blurRadius: 14,
+            spreadRadius: 1,
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'FINAL SHORT SCORE',
+            style: TextStyle(
+              color: Colors.white70,
+              fontSize: 11,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 1.0,
+            ),
+          ),
+          const SizedBox(height: 10),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                safeScore.toStringAsFixed(0),
+                style: TextStyle(
+                  color: scoreColor,
+                  fontSize: 34,
+                  fontWeight: FontWeight.w900,
+                  height: 1,
+                ),
+              ),
+              const SizedBox(width: 6),
+              Padding(
+                padding: const EdgeInsets.only(bottom: 4),
+                child: Text(
+                  '/ 100',
+                  style: TextStyle(
+                    color: Colors.white.withOpacity(0.70),
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+            decoration: BoxDecoration(
+              color: scoreColor.withOpacity(0.12),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: scoreColor.withOpacity(0.35),
+              ),
+            ),
+            child: Text(
+              finalScoreLabel ?? 'İzlenmeli',
+              style: TextStyle(
+                color: scoreColor,
+                fontSize: 13,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            finalScoreSummary?.trim().isNotEmpty == true
+                ? finalScoreSummary!
+                : _getFinalScoreHint(safeScore),
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              height: 1.4,
+            ),
+          ),
+          if (_hasDecisionMeta()) ...[
+            const SizedBox(height: 10),
+            Text(
+              'Bu karar filtrelenmiş veri akışına göre üretilir; veri canlı aksa da short kararı her tikte zıplamaz.',
+              style: TextStyle(
+                color: Colors.white.withOpacity(0.72),
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                height: 1.35,
+              ),
+            ),
+            const SizedBox(height: 14),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                if (decisionConfidence != null)
+                  _buildDecisionBadge(
+                    title: 'CONFIDENCE',
+                    value: '${decisionConfidence!.toStringAsFixed(0)}%',
+                    color: Colors.lightBlueAccent,
+                  ),
+                if ((decisionPrimarySignal ?? '').trim().isNotEmpty)
+                  _buildDecisionBadge(
+                    title: 'PRIMARY SIGNAL',
+                    value: decisionPrimarySignal!,
+                    color: Colors.orangeAccent,
+                  ),
+                if ((decisionTradeBias ?? '').trim().isNotEmpty)
+                  _buildDecisionBadge(
+                    title: 'TRADE BIAS',
+                    value: _getBiasText(decisionTradeBias!),
+                    color: _getBiasColor(decisionTradeBias!),
+                  ),
+                if ((decisionAction ?? '').trim().isNotEmpty)
+                  _buildDecisionBadge(
+                    title: 'ACTION',
+                    value: _getActionText(decisionAction!),
+                    color: _getActionColor(decisionAction!),
+                  ),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildWhyCard() {
+    final List<String> reasons = setupResult!.reasons.take(4).toList();
+
+    return _cardShell(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            finalScore != null && finalScore! < 70 ? 'İLK İŞARETLER' : 'NEDEN?',
+            style: const TextStyle(
+              color: Colors.white70,
+              fontSize: 12,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: 12),
+          ...reasons.map(
+            (reason) => Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    '• ',
+                    style: TextStyle(
+                      color: Colors.orangeAccent,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  Expanded(
+                    child: Text(
+                      reason,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMiniBar({
+    required String label,
+    required double value,
+    required Color color,
+  }) {
+    final double safe = value.clamp(0, 100);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                label,
+                style: const TextStyle(
+                  color: Colors.white70,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+            Text(
+              safe.toStringAsFixed(0),
+              style: TextStyle(
+                color: color,
+                fontSize: 12,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 6),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(999),
+          child: LinearProgressIndicator(
+            value: safe / 100,
+            minHeight: 8,
+            valueColor: AlwaysStoppedAnimation<Color>(color),
+            backgroundColor: Colors.white.withOpacity(0.08),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildComponentScoresCard() {
+    return _cardShell(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'COMPONENT SCORES',
+            style: TextStyle(
+              color: Colors.white70,
+              fontSize: 12,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 0.5,
+            ),
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'Bunlar alt bileşen skorlarıdır; nihai short aksiyonu filtrelenmiş merkezi karar motorundan çıkar.',
+            style: TextStyle(
+              color: Colors.white54,
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              height: 1.35,
+            ),
+          ),
+          const SizedBox(height: 12),
+          if (oiComponentScore != null) ...[
+            _buildMiniBar(
+              label: 'OI',
+              value: oiComponentScore!,
+              color: Colors.lightBlueAccent,
+            ),
+            const SizedBox(height: 10),
+          ],
+          if (priceComponentScore != null) ...[
+            _buildMiniBar(
+              label: 'Price',
+              value: priceComponentScore!,
+              color: Colors.greenAccent,
+            ),
+            const SizedBox(height: 10),
+          ],
+          if (orderFlowComponentScore != null) ...[
+            _buildMiniBar(
+              label: 'Order Flow',
+              value: orderFlowComponentScore!,
+              color: Colors.orangeAccent,
+            ),
+            const SizedBox(height: 10),
+          ],
+          if (volumeComponentScore != null) ...[
+            _buildMiniBar(
+              label: 'Volume',
+              value: volumeComponentScore!,
+              color: Colors.purpleAccent,
+            ),
+            const SizedBox(height: 10),
+          ],
+          if (liquidationComponentScore != null) ...[
+            _buildMiniBar(
+              label: 'Liquidation',
+              value: liquidationComponentScore!,
+              color: Colors.redAccent,
+            ),
+            const SizedBox(height: 10),
+          ],
+          if (momentumComponentScore != null)
+            _buildMiniBar(
+              label: 'Momentum',
+              value: momentumComponentScore!,
+              color: Colors.tealAccent,
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBulletCard({
+    required String title,
+    required List<String> items,
+    required Color accent,
+  }) {
+    return _cardShell(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: const TextStyle(
+              color: Colors.white70,
+              fontSize: 12,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 0.5,
+            ),
+          ),
+          const SizedBox(height: 12),
+          ...items.map(
+            (item) => Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '• ',
+                    style: TextStyle(
+                      color: accent,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  Expanded(
+                    child: Text(
+                      item,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        height: 1.35,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  List<String> _buildFallbackTriggerConditions() {
+    final List<String> triggers = [];
+
+    if (orderFlowDirection == 'SELL_PRESSURE') {
+      triggers.add('Satış baskısının bir sonraki mumda da devam etmesi');
+    } else {
+      triggers.add('Order flow tarafında satış baskısının netleşmesi');
+    }
+
+    if (priceDirection == 'FLAT') {
+      triggers.add('Yatay yapı bozulup aşağı yönlü zayıf kapanış gelmesi');
+    } else if (priceDirection == 'UP') {
+      triggers.add('Yukarı hareketin zayıflayıp başarısız kapanış üretmesi');
+    } else {
+      triggers.add('Aşağı yönün ikinci mumla teyit edilmesi');
+    }
+
+    if (oiDirection == 'UP') {
+      triggers.add('OI artarken fiyatın yeni high taşıyamaması');
+    } else if (oiDirection == 'FLAT') {
+      triggers.add('OI tarafında aşağı ya da satış lehine ayrışma görülmesi');
+    } else {
+      triggers.add('OI düşüşüyle birlikte fiyatın da zayıf kalmaya devam etmesi');
+    }
+
+    if (pumpAnalysis != null) {
+      final dynamic pump = pumpAnalysis!;
+      try {
+        final dynamic score = pump.score;
+        if (score is num && score >= 55) {
+          triggers.add('Pump sonrası gövde küçülmesinin yeni mumda da sürmesi');
+        }
+      } catch (_) {}
+    }
+
+    if (visibleCandles.length >= 2) {
+      final CandleData last = visibleCandles.last;
+      final CandleData prev = visibleCandles[visibleCandles.length - 2];
+
+      if (last.high >= prev.high) {
+        triggers.add('Yeni high denemesi sonrası zayıf kapanış gelmesi');
+      }
+
+      if (last.close >= prev.low) {
+        triggers.add('Bir önceki mum dibinin altına saatlik kapanış gelmesi');
+      }
+    }
+
+    final List<String> unique = [];
+    for (final item in triggers) {
+      if (!unique.contains(item)) {
+        unique.add(item);
+      }
+    }
+
+    return unique.take(4).toList();
+  }
+
+  Widget _buildTriggerWaitCard() {
+    final List<String> triggers = _hasTriggerConditions()
+        ? triggerConditions!.take(4).toList()
+        : _buildFallbackTriggerConditions();
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.orange.withOpacity(0.10),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: Colors.orangeAccent.withOpacity(0.45),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'TETİK İÇİN BEKLENENLER',
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 13,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 0.4,
+            ),
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'Kurulum var ama aktif short girişi için aşağıdaki teyitlerden en az birkaçı gelmeli:',
+            style: TextStyle(
+              color: Colors.white70,
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              height: 1.4,
+            ),
+          ),
+          const SizedBox(height: 12),
+          ...triggers.map(
+            (item) => Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    '• ',
+                    style: TextStyle(
+                      color: Colors.orangeAccent,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  Expanded(
+                    child: Text(
+                      item,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        height: 1.35,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPassiveSetupBox() {
+    final double safeScore = (finalScore ?? 0).clamp(0, 100);
+
+    final String title;
+    final String text;
+    final Color borderColor;
+    final Color bgColor;
+
+    if (safeScore < 40) {
+      title = 'AKTİF SHORT SETUP YOK';
+      text =
+          'Final short score şu an aktif short kurulumu desteklemiyor. Giriş, stop ve hedef alanları bilinçli olarak gizlendi.';
+      borderColor = Colors.redAccent.withOpacity(0.45);
+      bgColor = Colors.red.withOpacity(0.12);
+    } else {
+      title = 'SETUP HENÜZ TAM OLUŞMADI';
+      text =
+          'Erken short işaretleri var ama merkezi skor henüz tam giriş kalitesine ulaşmadı. Karar filtresi nedeniyle giriş planı beklemede tutuluyor.';
+      borderColor = Colors.orangeAccent.withOpacity(0.45);
+      bgColor = Colors.orange.withOpacity(0.12);
+    }
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: borderColor),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 13,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 0.4,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            text,
+            style: const TextStyle(
+              color: Colors.white70,
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              height: 1.4,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildErrorBox(String text) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.red.withOpacity(0.18),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: Colors.redAccent.withOpacity(0.5),
+        ),
+      ),
+      child: Text(
+        text,
+        textAlign: TextAlign.center,
+        style: const TextStyle(
+          color: Colors.white,
+          fontSize: 13,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildWaitingBox() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.orange.withOpacity(0.14),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: Colors.orangeAccent.withOpacity(0.45),
+        ),
+      ),
+      child: const Text(
+        'Detay verisi bekleniyor...',
+        textAlign: TextAlign.center,
+        style: TextStyle(
+          color: Colors.white,
+          fontSize: 13,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildOpenInterestBox() {
+    final Color valueColor = DetailPageAnalysisHelpers.getOiColor(
+      oiDirection: oiDirection,
+      openInterestDisplay: openInterestDisplay,
+    );
+
+    final String arrow = DetailPageAnalysisHelpers.getOiArrow(
+      oiDirection: oiDirection,
+      openInterestDisplay: openInterestDisplay,
+    );
+
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.black,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.white12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text.rich(
+            TextSpan(
+              children: [
+                const TextSpan(
+                  text: 'OI (Son 30dk - canlı) ',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                TextSpan(
+                  text: arrow,
+                  style: TextStyle(
+                    color: valueColor,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            DetailPageAnalysisHelpers.getOiValue(openInterestDisplay),
+            style: TextStyle(
+              color: valueColor,
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSectionTitle(String title) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Text(
+        title,
+        style: const TextStyle(
+          color: Colors.white70,
+          fontSize: 12,
+          fontWeight: FontWeight.w800,
+          letterSpacing: 0.6,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSectionSubtitle(String text) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Text(
+        text,
+        style: const TextStyle(
+          color: Colors.white54,
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
+          height: 1.35,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildHeaderPriceBlock() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        const Text(
+          'Fiyat',
+          style: TextStyle(
+            color: Colors.white54,
+            fontSize: 10,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 0.3,
+          ),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          selectedCoin.lastPriceText,
+          textAlign: TextAlign.right,
+          style: const TextStyle(
+            color: Colors.greenAccent,
+            fontSize: 18,
+            fontWeight: FontWeight.w900,
+          ),
+        ),
+      ],
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final combinedSignal = DetailPageAnalysisHelpers.getCombinedSignal(
+      oiDirection: oiDirection,
+      priceDirection: priceDirection,
+      orderFlow: orderFlowDirection,
+    );
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(16, 18, 16, 24),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  contractName,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 22,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              _buildHeaderPriceBlock(),
+              const SizedBox(width: 10),
+              spinner,
+            ],
+          ),
+          const SizedBox(height: 18),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: _timeframeChip('1h'),
+          ),
+          const SizedBox(height: 14),
+          if (detailError.isNotEmpty && !hasData)
+            _buildCenterState(
+              child: _buildErrorBox(detailError),
+            )
+          else if (detailLoading && !hasData)
+            _buildCenterState(
+              child: const CircularProgressIndicator(
+                strokeWidth: 2.2,
+                valueColor:
+                    AlwaysStoppedAnimation<Color>(Colors.orangeAccent),
+              ),
+            )
+          else if (hasData) ...[
+            if (detailError.isNotEmpty) ...[
+              _buildErrorBox(detailError),
+              const SizedBox(height: 14),
+            ],
+            if (finalScore != null) ...[
+              _buildFinalScoreCard(),
+              const SizedBox(height: 12),
+            ],
+            if (_hasComponentScores()) ...[
+              _buildComponentScoresCard(),
+              const SizedBox(height: 12),
+            ],
+            if (_hasMarketRead()) ...[
+              _buildBulletCard(
+                title: 'MARKET READ',
+                items: marketReadBullets!.take(6).toList(),
+                accent: Colors.lightBlueAccent,
+              ),
+              const SizedBox(height: 12),
+            ],
+            if (_hasEntryNotes()) ...[
+              _buildBulletCard(
+                title: 'ENTRY NOTES',
+                items: entryNotes!.take(5).toList(),
+                accent: Colors.orangeAccent,
+              ),
+              const SizedBox(height: 12),
+            ],
+            if (_hasWarnings()) ...[
+              _buildBulletCard(
+                title: 'WARNINGS',
+                items: warnings!.take(5).toList(),
+                accent: Colors.redAccent,
+              ),
+              const SizedBox(height: 12),
+            ],
+            _buildSectionTitle(_getAnalysisSectionTitle()),
+            _buildSectionSubtitle(_getAnalysisSectionSubtitle()),
+            OiPriceAnalysisCard(
+              oiDirection: oiDirection,
+              priceDirection: priceDirection,
+              oiPriceSignal: combinedSignal,
+              orderFlowDirection: orderFlowDirection,
+              openInterestDisplay: openInterestDisplay,
+              finalScore: finalScore,
+            ),
+            const SizedBox(height: 12),
+            if (pumpAnalysis != null) ...[
+              PumpAnalysisCard(
+                result: pumpAnalysis!,
+                finalScore: finalScore,
+              ),
+              const SizedBox(height: 12),
+            ],
+            if (_shouldShowShortSetupCard()) ...[
+              ShortSetupCard(
+                entry: _formatPrice(setupResult!.entry),
+                stopLoss: _formatPrice(setupResult!.stopLoss),
+                target1: _formatPrice(setupResult!.target1),
+                target2: _formatPrice(setupResult!.target2),
+                rr: setupResult!.rr.toStringAsFixed(2),
+                riskPercent:
+                    '${(((setupResult!.stopLoss - setupResult!.entry) / setupResult!.entry) * 100).toStringAsFixed(2)}%',
+              ),
+              const SizedBox(height: 12),
+            ] else ...[
+              _buildPassiveSetupBox(),
+              const SizedBox(height: 12),
+            ],
+            if (_shouldShowTriggerWaitCard()) ...[
+              _buildTriggerWaitCard(),
+              const SizedBox(height: 12),
+            ],
+            if (_shouldShowWhyCard()) ...[
+              _buildWhyCard(),
+              const SizedBox(height: 18),
+            ] else
+              const SizedBox(height: 6),
+            Row(
+              children: [
+                Expanded(
+                  child: PriceBox(
+                    title: 'Son fiyat',
+                    value: selectedCoin.lastPriceText,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: PriceBox(
+                    title: 'Mark price',
+                    value: selectedCoin.markPriceText,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: PriceBox(
+                    title: 'Index price',
+                    value: selectedCoin.indexPriceText,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: PriceBox(
+                    title: 'Funding rate',
+                    value: selectedCoin.fundingText,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: _buildOpenInterestBox(),
+                ),
+                const SizedBox(width: 8),
+                const Expanded(
+                  child: SizedBox(),
+                ),
+              ],
+            ),
+          ] else
+            _buildCenterState(
+              child: _buildWaitingBox(),
+            ),
+        ],
+      ),
+    );
+  }
+}
