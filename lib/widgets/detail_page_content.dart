@@ -161,20 +161,19 @@ class DetailPageContent extends StatelessWidget {
 
   String _getFinalScoreHint(double score) {
     if (score >= 85) {
-      return 'Merkezi short karar motoru, filtrelenmiş akışta güçlü short fırsatı görüyor.';
+      return 'Sistem güçlü short anı görüyor. Karar kullanıcıya aittir.';
     }
     if (score >= 70) {
-      return 'Short kurulumu oluşuyor. Giriş bölgesi yakın olabilir ancak tetik teyidi hâlâ önemli.';
+      return 'Short hazırlığı oluşuyor. Büyük kırmızı mum başlangıcı takip edilir.';
     }
     if (score >= 40) {
-      return 'Erken short işaretleri var ama karar filtresinde teyit henüz tam güçlenmedi.';
+      return 'Erken short işaretleri var. Sistem engellemez, sadece durumu gösterir.';
     }
-    return 'Merkezi short skoru zayıf. Şimdilik beklemek daha sağlıklı görünüyor.';
+    return 'Net short anı yok. İzleme modu.';
   }
 
   bool _shouldShowShortSetupCard() {
-    if (finalScore == null) return true;
-    return finalScore! >= 70;
+    return setupResult != null;
   }
 
   bool _shouldShowWhyCard() {
@@ -185,8 +184,7 @@ class DetailPageContent extends StatelessWidget {
   }
 
   bool _shouldShowTriggerWaitCard() {
-    if (finalScore == null) return false;
-    return finalScore! >= 40 && finalScore! < 70;
+    return _hasTriggerConditions();
   }
 
   bool _hasDecisionMeta() {
@@ -222,23 +220,11 @@ class DetailPageContent extends StatelessWidget {
   }
 
   String _getAnalysisSectionTitle() {
-    if (finalScore == null) return 'ALT ANALİZLER';
-    if (finalScore! >= 70) return 'ALT ANALİZLER';
-    if (finalScore! >= 40) return 'ERKEN SHORT SİNYAL DETAYLARI';
-    return 'GÖZLEM VERİLERİ';
+    return 'ALT ANALİZLER';
   }
 
   String _getAnalysisSectionSubtitle() {
-    if (finalScore == null) {
-      return 'Bu bölüm final short score\'u besleyen alt verileri gösterir.';
-    }
-    if (finalScore! >= 70) {
-      return 'Aşağıdaki veriler merkezi short karar skorunu destekleyen alt bileşenlerdir.';
-    }
-    if (finalScore! >= 40) {
-      return 'Short kurulumu ihtimali var, ancak aşağıdaki veriler henüz tam teyit üretmiyor.';
-    }
-    return 'Aşağıdaki kartlar bilgi amaçlıdır. Henüz aktif short kurulumu onaylanmış değil.';
+    return 'Bu bölüm destekleyici verileri gösterir. Karar kullanıcıya aittir.';
   }
 
   Widget _buildDecisionBadge({
@@ -280,40 +266,23 @@ class DetailPageContent extends StatelessWidget {
   }
 
   Color _getBiasColor(String value) {
-    switch (value) {
-      case 'SHORT':
-        return Colors.redAccent;
-      default:
-        return Colors.orangeAccent;
-    }
+    if (value.contains('Short')) return Colors.redAccent;
+    return Colors.orangeAccent;
   }
 
   String _getBiasText(String value) {
-    if (value == 'SHORT') return 'SHORT';
-    return 'NO SHORT EDGE';
+    return value;
   }
 
   Color _getActionColor(String value) {
-    if (value.contains('ENTER SHORT')) return Colors.redAccent;
-    if (value.contains('PREPARE SHORT')) return Colors.orangeAccent;
-    if (value.contains('WATCH')) return Colors.orangeAccent;
-    if (value.contains('NO TRADE')) return Colors.white70;
+    if (value.contains('Short giriş')) return Colors.redAccent;
+    if (value.contains('Short hazırlığı')) return Colors.orangeAccent;
+    if (value.contains('Bekle')) return Colors.white70;
     return Colors.white70;
   }
 
   String _getActionText(String value) {
-    switch (value) {
-      case 'ENTER SHORT':
-        return 'ENTER SHORT';
-      case 'PREPARE SHORT':
-        return 'PREPARE SHORT';
-      case 'WATCH':
-        return 'WATCH';
-      case 'NO TRADE':
-        return 'NO TRADE';
-      default:
-        return value;
-    }
+    return value;
   }
 
   Widget _buildFinalScoreCard() {
@@ -353,7 +322,7 @@ class DetailPageContent extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text(
-            'FINAL SHORT SCORE',
+            'KARAR DURUMU',
             style: TextStyle(
               color: Colors.white70,
               fontSize: 11,
@@ -422,7 +391,7 @@ class DetailPageContent extends StatelessWidget {
           if (_hasDecisionMeta()) ...[
             const SizedBox(height: 10),
             Text(
-              'Bu karar filtrelenmiş veri akışına göre üretilir; veri canlı aksa da short kararı her tikte zıplamaz.',
+              'Bu ekran giriş izni vermez veya engellemez; sadece anlık piyasa durumunu gösterir.',
               style: TextStyle(
                 color: Colors.white.withOpacity(0.72),
                 fontSize: 11,
@@ -437,25 +406,25 @@ class DetailPageContent extends StatelessWidget {
               children: [
                 if (decisionConfidence != null)
                   _buildDecisionBadge(
-                    title: 'CONFIDENCE',
+                    title: 'GÜVEN',
                     value: '${decisionConfidence!.toStringAsFixed(0)}%',
                     color: Colors.lightBlueAccent,
                   ),
                 if ((decisionPrimarySignal ?? '').trim().isNotEmpty)
                   _buildDecisionBadge(
-                    title: 'PRIMARY SIGNAL',
+                    title: 'ANA SİNYAL',
                     value: decisionPrimarySignal!,
                     color: Colors.orangeAccent,
                   ),
                 if ((decisionTradeBias ?? '').trim().isNotEmpty)
                   _buildDecisionBadge(
-                    title: 'TRADE BIAS',
+                    title: 'YÖN',
                     value: _getBiasText(decisionTradeBias!),
                     color: _getBiasColor(decisionTradeBias!),
                   ),
                 if ((decisionAction ?? '').trim().isNotEmpty)
                   _buildDecisionBadge(
-                    title: 'ACTION',
+                    title: 'DURUM',
                     value: _getActionText(decisionAction!),
                     color: _getActionColor(decisionAction!),
                   ),
@@ -568,7 +537,7 @@ class DetailPageContent extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text(
-            'COMPONENT SCORES',
+            'ALT SKORLAR',
             style: TextStyle(
               color: Colors.white70,
               fontSize: 12,
@@ -578,7 +547,7 @@ class DetailPageContent extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           const Text(
-            'Bunlar alt bileşen skorlarıdır; nihai short aksiyonu filtrelenmiş merkezi karar motorundan çıkar.',
+            'Bunlar sadece destekleyici alt verilerdir; ana durum yukarıdaki karar kartında gösterilir.',
             style: TextStyle(
               color: Colors.white54,
               fontSize: 11,
@@ -778,7 +747,7 @@ class DetailPageContent extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           const Text(
-            'Kurulum var ama aktif short girişi için aşağıdaki teyitlerden en az birkaçı gelmeli:',
+            'aşağıdaki gelişmeler takip edilmeli:',
             style: TextStyle(
               color: Colors.white70,
               fontSize: 13,
@@ -832,13 +801,13 @@ class DetailPageContent extends StatelessWidget {
     if (safeScore < 40) {
       title = 'AKTİF SHORT SETUP YOK';
       text =
-          'Final short score şu an aktif short kurulumu desteklemiyor. Giriş, stop ve hedef alanları bilinçli olarak gizlendi.';
+          'Şu an net short anı yok. Sistem izleme modunda.';
       borderColor = Colors.redAccent.withOpacity(0.45);
       bgColor = Colors.red.withOpacity(0.12);
     } else {
       title = 'SETUP HENÜZ TAM OLUŞMADI';
       text =
-          'Erken short işaretleri var ama merkezi skor henüz tam giriş kalitesine ulaşmadı. Karar filtresi nedeniyle giriş planı beklemede tutuluyor.';
+          'Short hazırlığı oluşuyor. Sistem bunu engellemez; kararı kullanıcı verir.';
       borderColor = Colors.orangeAccent.withOpacity(0.45);
       bgColor = Colors.orange.withOpacity(0.12);
     }
@@ -1101,7 +1070,7 @@ class DetailPageContent extends StatelessWidget {
             ],
             if (_hasMarketRead()) ...[
               _buildBulletCard(
-                title: 'MARKET READ',
+                title: 'PİYASA OKUMASI',
                 items: marketReadBullets!.take(6).toList(),
                 accent: Colors.lightBlueAccent,
               ),
@@ -1109,7 +1078,7 @@ class DetailPageContent extends StatelessWidget {
             ],
             if (_hasEntryNotes()) ...[
               _buildBulletCard(
-                title: 'ENTRY NOTES',
+                title: 'GİRİŞ NOTLARI',
                 items: entryNotes!.take(5).toList(),
                 accent: Colors.orangeAccent,
               ),
@@ -1117,7 +1086,7 @@ class DetailPageContent extends StatelessWidget {
             ],
             if (_hasWarnings()) ...[
               _buildBulletCard(
-                title: 'WARNINGS',
+                title: 'UYARILAR',
                 items: warnings!.take(5).toList(),
                 accent: Colors.redAccent,
               ),
