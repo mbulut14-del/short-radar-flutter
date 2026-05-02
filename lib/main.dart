@@ -103,6 +103,7 @@ class ShortRadarTaskHandler extends TaskHandler {
   late FlutterLocalNotificationsPlugin _localNotifications;
 
   final Map<String, DateTime> _lastNotifyTimes = {};
+  final Map<String, bool> _enterShortAlertLockMap = {};
   final Map<String, FinalTradeDecision> _centralDecisionMap = {};
 
   final Map<String, List<double>> _oiHistory = {};
@@ -694,19 +695,28 @@ class ShortRadarTaskHandler extends TaskHandler {
   }
 
   bool _shouldAlertCoin(CoinRadarData coin) {
-    final String stableCombinedSignal =
-        _stableCombinedSignalMap[coin.name] ?? 'NEUTRAL';
-    final String orderFlowDirection = _orderFlowMap[coin.name] ?? 'NEUTRAL';
-    final DateTime now = DateTime.now();
-    final DateTime? lastTime = _lastNotifyTimes[coin.name];
+    final FinalTradeDecision? decision = _centralDecisionMap[coin.name];
 
-    if (coin.score < _alertScoreThreshold) return false;
-    if (coin.fundingRate <= 0) return false;
-    if (orderFlowDirection == 'BUY_PRESSURE') return false;
-    if (stableCombinedSignal == 'SHORT_SQUEEZE') return false;
-    if (stableCombinedSignal == 'NEUTRAL') return false;
+    if (decision == null) {
+      _enterShortAlertLockMap.remove(coin.name);
+      _lastNotifyTimes.remove(coin.name);
+      return false;
+    }
 
-    if (lastTime != null && now.difference(lastTime) < _alertCooldown) {
+    final String action = decision.action.trim().toUpperCase();
+    final bool isEnterShort =
+        action == 'ENTER_SHORT' || action == 'ENTER SHORT';
+
+    if (!isEnterShort) {
+      _enterShortAlertLockMap.remove(coin.name);
+      _lastNotifyTimes.remove(coin.name);
+      return false;
+    }
+
+    final bool alreadyNotified =
+        _enterShortAlertLockMap[coin.name] ?? false;
+
+    if (alreadyNotified) {
       return false;
     }
 
@@ -719,17 +729,18 @@ class ShortRadarTaskHandler extends TaskHandler {
     final String orderFlowDirection = _orderFlowMap[coin.name] ?? 'NEUTRAL';
 
     _lastNotifyTimes[coin.name] = DateTime.now();
+    _enterShortAlertLockMap[coin.name] = true;
 
     const AndroidNotificationDetails androidDetails =
         AndroidNotificationDetails(
       'short_channel',
       'Short Alerts',
-      channelDescription: 'Short radar fırsat bildirimleri',
+      channelDescription: 'ENTER_SHORT fırsat bildirimleri',
       importance: Importance.max,
       priority: Priority.high,
       enableVibration: true,
       playSound: true,
-      ticker: 'short-alert',
+      ticker: 'enter-short-alert',
     );
 
     const NotificationDetails details =
@@ -740,7 +751,7 @@ class ShortRadarTaskHandler extends TaskHandler {
 
     await _localNotifications.show(
       coin.name.hashCode,
-      'Short setup hazır olabilir 🚨',
+      'ENTER SHORT başladı 🚨',
       body,
       details,
     );
